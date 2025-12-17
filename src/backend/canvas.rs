@@ -289,33 +289,65 @@ impl CanvasBackend {
                 }
                 let color = actual_fg_color(cell);
 
+                // Calculate blink opacity if needed
+                let opacity = if cell.modifier.contains(Modifier::SLOW_BLINK) {
+                    let now = web_sys::window()
+                        .and_then(|w| w.performance())
+                        .map(|p| p.now())
+                        .unwrap_or(0.0);
+                    let cycle = (now / 1000.0) % 1.0; // 1 second cycle
+                    if cycle < 0.5 {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                } else if cell.modifier.contains(Modifier::RAPID_BLINK) {
+                    let now = web_sys::window()
+                        .and_then(|w| w.performance())
+                        .map(|p| p.now())
+                        .unwrap_or(0.0);
+                    let cycle = (now / 500.0) % 1.0; // 0.5 second cycle
+                    if cycle < 0.25 {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                } else {
+                    1.0
+                };
+
                 // We need to reset the canvas context state in two scenarios:
                 // 1. When we need to create a clipping path (for potentially problematic glyphs)
                 // 2. When the text color changes
-                if self.always_clip_cells || !cell.symbol().is_ascii() {
+                // 3. When opacity changes (for blinking)
+                let needs_restore = self.always_clip_cells
+                    || !cell.symbol().is_ascii()
+                    || last_color != Some(color)
+                    || opacity < 1.0;
+
+                if needs_restore {
                     self.canvas.context.restore();
                     self.canvas.context.save();
 
-                    self.canvas.context.begin_path();
-                    self.canvas.context.rect(
-                        x as f64 * CELL_WIDTH,
-                        y as f64 * CELL_HEIGHT,
-                        CELL_WIDTH,
-                        CELL_HEIGHT,
-                    );
-                    self.canvas.context.clip();
-
-                    last_color = None; // reset last color to avoid clipping
-                    let color = get_canvas_color(color, Color::White);
-                    self.canvas.context.set_fill_style_str(&color);
-                } else if last_color != Some(color) {
-                    self.canvas.context.restore();
-                    self.canvas.context.save();
-
-                    last_color = Some(color);
+                    if self.always_clip_cells || !cell.symbol().is_ascii() {
+                        self.canvas.context.begin_path();
+                        self.canvas.context.rect(
+                            x as f64 * CELL_WIDTH,
+                            y as f64 * CELL_HEIGHT,
+                            CELL_WIDTH,
+                            CELL_HEIGHT,
+                        );
+                        self.canvas.context.clip();
+                        last_color = None; // reset last color to avoid clipping
+                    } else {
+                        last_color = Some(color);
+                    }
 
                     let color = get_canvas_color(color, Color::White);
                     self.canvas.context.set_fill_style_str(&color);
+                    if opacity < 1.0 {
+                        self.canvas.context.set_global_alpha(opacity);
+                    }
                 }
 
                 self.canvas.context.fill_text(

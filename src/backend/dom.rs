@@ -103,6 +103,7 @@ impl DomBackend {
     pub fn new_with_options(options: DomBackendOptions) -> Result<Self, Error> {
         let window = window().ok_or(Error::UnableToRetrieveWindow)?;
         let document = window.document().ok_or(Error::UnableToRetrieveDocument)?;
+        inject_blink_animations(&document)?;
         let mut backend = Self {
             initialized: Rc::new(RefCell::new(false)),
             buffer: vec![],
@@ -196,7 +197,9 @@ impl DomBackend {
                 if cell.modifier.contains(HYPERLINK_MODIFIER) {
                     continue;
                 }
-                if cell != &self.prev_buffer[y][x] {
+                let prev_cell = &self.prev_buffer[y][x];
+                // Update if content changed, or if modifiers changed (for blinking animations)
+                if cell != prev_cell || cell.modifier != prev_cell.modifier {
                     let elem = self.cells[y * self.buffer[0].len() + x].clone();
                     elem.set_inner_html(cell.symbol());
                     elem.set_attribute("style", &get_cell_style_as_css(cell))?;

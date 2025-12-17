@@ -83,6 +83,12 @@ pub(crate) fn get_cell_style_as_css(cell: &Cell) -> String {
     if cell.modifier.contains(Modifier::CROSSED_OUT) {
         modifier_style.push_str("text-decoration: line-through; ");
     }
+    if cell.modifier.contains(Modifier::SLOW_BLINK) {
+        modifier_style.push_str("animation: ratzilla-slow-blink 1s step-end infinite; ");
+    }
+    if cell.modifier.contains(Modifier::RAPID_BLINK) {
+        modifier_style.push_str("animation: ratzilla-rapid-blink 0.5s step-end infinite; ");
+    }
 
     // ensure consistent width for braille characters
     let braille_style = if contains_braille(cell) {
@@ -200,4 +206,38 @@ fn contains_braille(cell: &Cell) -> bool {
         .chars()
         .next()
         .is_some_and(|c| ('\u{2800}'..='\u{28FF}').contains(&c))
+}
+
+/// Injects CSS keyframe animations for blinking into the document.
+/// This should be called once during backend initialization.
+pub(crate) fn inject_blink_animations(document: &Document) -> Result<(), Error> {
+    // Check if styles already exist to avoid duplicates
+    if document
+        .get_element_by_id("ratzilla-blink-styles")
+        .is_some()
+    {
+        return Ok(());
+    }
+
+    let style = document.create_element("style")?;
+    style.set_attribute("id", "ratzilla-blink-styles")?;
+    style.set_text_content(Some(
+        r#"
+        @keyframes ratzilla-slow-blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        @keyframes ratzilla-rapid-blink {
+            0%, 25% { opacity: 1; }
+            26%, 100% { opacity: 0; }
+        }
+        "#,
+    ));
+
+    let head = document
+        .query_selector("head")?
+        .ok_or(Error::UnableToRetrieveComponent("head"))?;
+    head.append_child(&style)?;
+
+    Ok(())
 }

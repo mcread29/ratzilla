@@ -1,3 +1,23 @@
+[workspace]
+members = [
+    "examples/animations",
+    "examples/canvas_stress_test",
+    "examples/canvas_waves",
+    "examples/clipboard",
+    "examples/colors_rgb",
+    "examples/demo",
+    "examples/demo2",
+    "examples/minimal",
+    "examples/pong",
+    "examples/shared",
+    "examples/tauri/src-tauri",
+    "examples/text_area",
+    "examples/user_input",
+    "examples/website",
+    "examples/world_map",
+]
+resolver = "2"
+
 [package]
 name = "ratzilla"
 version = "0.2.0"
@@ -18,6 +38,7 @@ web-sys = { version = "0.3.81", features = [
     'CanvasRenderingContext2d',
     'Document',
     'Element',
+    'Headers',
     'HtmlCanvasElement',
     'HtmlElement',
     'KeyboardEvent',
@@ -26,6 +47,9 @@ web-sys = { version = "0.3.81", features = [
     'Navigator',
     'Node',
     'Performance',
+    'Request',
+    'RequestInit',
+    'RequestMode',
     'Screen',
     'WebGl2RenderingContext',
     'WebGlBuffer',
@@ -37,6 +61,8 @@ web-sys = { version = "0.3.81", features = [
     'WebGlVertexArrayObject',
     'Window',
 ] }
+wasm-bindgen = "0.2.106"
+js-sys = "0.3"
 compact_str = "0.9.0"
 ratatui = { version = "0.29", default-features = false, features = ["all-widgets"] }
 console_error_panic_hook = "0.1.7"
