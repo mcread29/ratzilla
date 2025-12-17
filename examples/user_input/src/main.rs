@@ -1,9 +1,11 @@
 use std::{cell::RefCell, io, rc::Rc};
 
+use examples_shared::backend::{BackendType, MultiBackendBuilder};
 use ratzilla::backend::cursor::CursorShape;
+use ratzilla::backend::webgl2::WebGl2BackendOptions;
 use ratzilla::event::KeyEvent;
 use ratzilla::ratatui::layout::{Constraint, Layout, Position};
-use ratzilla::ratatui::style::{Modifier, Style, Stylize};
+use ratzilla::ratatui::style::{Style, Stylize};
 use ratzilla::ratatui::text::{Line, Span, Text};
 use ratzilla::ratatui::widgets::{List, ListItem};
 use ratzilla::ratatui::Frame;
@@ -12,20 +14,14 @@ use ratzilla::ratatui::{
     widgets::{Block, Paragraph},
 };
 use ratzilla::{event::KeyCode, WebRenderer};
-use examples_shared::backend::{BackendType, MultiBackendBuilder};
-use ratzilla::backend::dom::DomBackendOptions;
-use ratzilla::backend::webgl2::WebGl2BackendOptions;
 
 fn main() -> io::Result<()> {
-    let dom_options = DomBackendOptions::new(None, CursorShape::SteadyUnderScore);
-
     let webgl2_options = WebGl2BackendOptions::new()
         .cursor_shape(CursorShape::SteadyUnderScore)
         .enable_console_debug_api()
         .enable_mouse_selection();
 
-    let terminal = MultiBackendBuilder::with_fallback(BackendType::Dom)
-        .dom_options(dom_options)
+    let terminal = MultiBackendBuilder::with_fallback(BackendType::WebGl2)
         .webgl2_options(webgl2_options)
         .build_terminal()?;
 
@@ -168,23 +164,21 @@ impl App {
         ]);
         let [help_area, input_area, messages_area] = vertical.areas(frame.area());
 
-        let (msg, style) = match self.input_mode {
-            InputMode::Normal => (
-                vec!["Press ".into(), "e".bold(), " to start editing.".bold()],
-                Style::default().add_modifier(Modifier::RAPID_BLINK),
-            ),
-            InputMode::Editing => (
-                vec![
-                    "Press ".into(),
-                    "Esc".bold(),
-                    " to stop editing, ".into(),
-                    "Enter".bold(),
-                    " to record the message".into(),
-                ],
-                Style::default(),
-            ),
+        let msg = match self.input_mode {
+            InputMode::Normal => vec![
+                "Press ".into(),
+                "e".slow_blink().bold(),
+                " to start editing.".bold(),
+            ],
+            InputMode::Editing => vec![
+                "Press ".into(),
+                "Esc".bold(),
+                " to stop editing, ".into(),
+                "Enter".slow_blink().bold(),
+                " to record the message".into(),
+            ],
         };
-        let text = Text::from(Line::from(msg)).patch_style(style);
+        let text = Text::from(Line::from(msg));
         let help_message = Paragraph::new(text);
         frame.render_widget(help_message, help_area);
 
