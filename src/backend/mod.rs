@@ -56,3 +56,6 @@ pub mod cursor;
 
 /// Post-processing.
 pub mod postprocessing;
+
+/// Shaders.
+pub mod shaders;

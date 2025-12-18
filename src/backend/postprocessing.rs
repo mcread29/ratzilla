@@ -1,5 +1,10 @@
+use crate::backend::shaders::{FRAGMENT_SHADER_SOURCE, VERTEX_SHADER_SOURCE};
 use crate::error::Error;
-use web_sys::{WebGl2RenderingContext, WebGlFramebuffer, WebGlProgram, WebGlShader, WebGlTexture};
+use std::collections::HashMap;
+use web_sys::{
+    WebGl2RenderingContext, WebGlFramebuffer, WebGlProgram, WebGlShader, WebGlTexture,
+    WebGlUniformLocation, WebGlVertexArrayObject,
+};
 
 /// Options for the [`PostProcessingShader`].
 pub struct PostProcessingShaderOptions {
@@ -19,107 +24,177 @@ impl PostProcessingShaderOptions {
     }
 }
 
-#[derive(Clone, Default)]
-/// Post-processing shader.
-pub struct PostProcessingShader {
+#[derive(Clone, Copy, Debug)]
+/// Shader type.
+pub enum ShaderType {
     /// Vertex shader.
-    vertex_shader: Option<WebGlShader>,
+    Vertex,
     /// Fragment shader.
-    fragment_shader: Option<WebGlShader>,
+    Fragment,
 }
 
-impl PostProcessingShader {
-    /// Constructs a new [`PostProcessingShader`].
-    pub fn new(gl: &WebGl2RenderingContext) -> Self {
-        let vertex_shader = gl.create_shader(WebGl2RenderingContext::VERTEX_SHADER);
-        let fragment_shader = gl.create_shader(WebGl2RenderingContext::FRAGMENT_SHADER);
-        Self {
-            vertex_shader,
-            fragment_shader,
+impl ShaderType {
+    /// Returns the GL shader type.
+    pub fn as_gl_shader_type(&self) -> u32 {
+        match self {
+            ShaderType::Vertex => WebGl2RenderingContext::VERTEX_SHADER as u32,
+            ShaderType::Fragment => WebGl2RenderingContext::FRAGMENT_SHADER as u32,
         }
     }
+}
 
-    /// Compiles the shader.
-    pub fn compile(
-        &mut self,
-        gl: &WebGl2RenderingContext,
-        options: PostProcessingShaderOptions,
-    ) -> Result<(), Error> {
-        let vertex_shader = self.vertex_shader.as_ref().unwrap();
-        gl.shader_source(vertex_shader, options.vertex_shader_source.as_str());
-        gl.compile_shader(vertex_shader);
-        if !gl.get_shader_parameter(vertex_shader, WebGl2RenderingContext::COMPILE_STATUS) {
-            gl.delete_shader(Some(vertex_shader));
-            return Err(Error::UnableToRetrieveElementById(
-                gl.get_shader_info_log(vertex_shader)
-                    .unwrap_or_else(|| "Vertex shader compilation failed".to_string()),
-            ));
-        }
-
-        let fragment_shader = self.fragment_shader.as_ref().unwrap();
-        gl.shader_source(fragment_shader, options.fragment_shader_source.as_str());
-        gl.compile_shader(fragment_shader);
-        if !gl.get_shader_parameter(fragment_shader, WebGl2RenderingContext::COMPILE_STATUS) {
-            gl.delete_shader(Some(fragment_shader));
-            return Err(Error::UnableToRetrieveElementById(
-                gl.get_shader_info_log(fragment_shader)
-                    .unwrap_or_else(|| "Fragment shader compilation failed".to_string()),
-            ));
-        }
-        Ok(())
+/// Creates a new shader.
+fn create_shader(
+    gl: &WebGl2RenderingContext,
+    shader_type: ShaderType,
+    shader_source: &str,
+) -> Result<WebGlShader, Error> {
+    let shader = gl.create_shader(shader_type.as_gl_shader_type()).ok_or(
+        Error::UnableToRetrieveElementById("Failed to create shader".to_string()),
+    )?;
+    gl.shader_source(shader.as_ref(), shader_source);
+    gl.compile_shader(shader.as_ref());
+    if !gl.get_shader_parameter(shader.as_ref(), WebGl2RenderingContext::COMPILE_STATUS) {
+        gl.delete_shader(Some(shader.as_ref()));
+        return Err(Error::UnableToRetrieveElementById(
+            gl.get_shader_info_log(shader.as_ref())
+                .unwrap_or_else(|| "Shader compilation failed".to_string()),
+        ));
     }
+    Ok(shader)
 }
 
 /// Post-processing.
 #[derive(Default)]
 pub struct PostProcessing {
-    /// enabled
-    enabled: bool,
     /// Frame buffer.
     frame_buffer: Option<WebGlFramebuffer>,
     /// Texture.
     texture: Option<WebGlTexture>,
-    /// shader source.
-    // shader_source: String,
-    /// shader.
-    shader: Option<PostProcessingShader>,
     /// program.
     program: Option<WebGlProgram>,
+    /// vao.
+    vao: Option<WebGlVertexArrayObject>,
+    /// uniform map
+    uniform_map: HashMap<String, WebGlUniformLocation>,
+    /// width.
+    width: i32,
+    /// height.
+    height: i32,
 }
 
 impl PostProcessing {
     /// Constructs a new [`PostProcessing`].
-    pub fn new() -> Result<Self, Error> {
-        Ok(Self {
-            frame_buffer: None,
-            texture: None,
-            shader: None,
-            program: None,
-            enabled: false,
-        })
-    }
-
-    /// Enables post-processing.
-    pub fn enable(&mut self) {
-        self.enabled = true;
-    }
-
-    /// Creates a frame buffer
-    pub fn create_frame_buffer(&mut self, gl: &WebGl2RenderingContext) -> Result<&mut Self, Error> {
+    pub fn new(gl: &WebGl2RenderingContext) -> Result<Self, Error> {
         let frame_buffer = gl
             .create_framebuffer()
             .ok_or(Error::UnableToRetrieveElementById(
                 "Failed to create frame buffer".to_string(),
             ))?;
-        self.frame_buffer = Some(frame_buffer);
-        Ok(self)
+
+        let texture = Self::create_tex(gl, 0, 0)?;
+
+        let program = Self::create_program(
+            gl,
+            PostProcessingShaderOptions::new(
+                VERTEX_SHADER_SOURCE.to_string(),
+                FRAGMENT_SHADER_SOURCE.to_string(),
+            ),
+        )?;
+
+        let vao = Self::create_vao(gl)?;
+
+        let mut uniform_map: HashMap<String, WebGlUniformLocation> = HashMap::new();
+        uniform_map.insert(
+            "u_scene".to_string(),
+            gl.get_uniform_location(program.as_ref(), "u_scene").ok_or(
+                Error::UnableToRetrieveElementById("Failed to get uniform location".to_string()),
+            )?,
+        );
+        uniform_map.insert(
+            "u_time".to_string(),
+            gl.get_uniform_location(program.as_ref(), "u_time").ok_or(
+                Error::UnableToRetrieveElementById("Failed to get uniform location".to_string()),
+            )?,
+        );
+        uniform_map.insert(
+            "u_resolution".to_string(),
+            gl.get_uniform_location(program.as_ref(), "u_resolution")
+                .ok_or(Error::UnableToRetrieveElementById(
+                    "Failed to get uniform location".to_string(),
+                ))?,
+        );
+        uniform_map.insert(
+            "u_curvature".to_string(),
+            gl.get_uniform_location(program.as_ref(), "u_curvature")
+                .ok_or(Error::UnableToRetrieveElementById(
+                    "Failed to get uniform location".to_string(),
+                ))?,
+        );
+        uniform_map.insert(
+            "u_scanline_strength".to_string(),
+            gl.get_uniform_location(program.as_ref(), "u_scanline_strength")
+                .ok_or(Error::UnableToRetrieveElementById(
+                    "Failed to get uniform location".to_string(),
+                ))?,
+        );
+        uniform_map.insert(
+            "u_mask_strength".to_string(),
+            gl.get_uniform_location(program.as_ref(), "u_mask_strength")
+                .ok_or(Error::UnableToRetrieveElementById(
+                    "Failed to get uniform location".to_string(),
+                ))?,
+        );
+        uniform_map.insert(
+            "u_vignette_strength".to_string(),
+            gl.get_uniform_location(program.as_ref(), "u_vignette_strength")
+                .ok_or(Error::UnableToRetrieveElementById(
+                    "Failed to get uniform location".to_string(),
+                ))?,
+        );
+        uniform_map.insert(
+            "u_aberration".to_string(),
+            gl.get_uniform_location(program.as_ref(), "u_aberration")
+                .ok_or(Error::UnableToRetrieveElementById(
+                    "Failed to get uniform location".to_string(),
+                ))?,
+        );
+        uniform_map.insert(
+            "u_bloom".to_string(),
+            gl.get_uniform_location(program.as_ref(), "u_bloom").ok_or(
+                Error::UnableToRetrieveElementById("Failed to get uniform location".to_string()),
+            )?,
+        );
+
+        Ok(Self {
+            frame_buffer: Some(frame_buffer),
+            texture: Some(texture),
+            program: Some(program),
+            vao: Some(vao),
+            uniform_map,
+            width: 0,
+            height: 0,
+        })
     }
 
-    /// Creates a texture
-    pub fn create_texture(&mut self, gl: &WebGl2RenderingContext) -> Result<&mut Self, Error> {
-        let texture = gl.create_texture();
-        gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, texture.as_ref());
-        // set texture filtering to linear
+    /// Creates a new texture.
+    fn create_tex(
+        gl: &WebGl2RenderingContext,
+        width: i32,
+        height: i32,
+    ) -> Result<WebGlTexture, Error> {
+        let texture = gl
+            .create_texture()
+            .ok_or(Error::UnableToRetrieveElementById(
+                "Failed to create texture".to_string(),
+            ))?;
+        gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
+        // set texture filtering to linear (both min and mag, matches TypeScript reference)
+        gl.tex_parameteri(
+            WebGl2RenderingContext::TEXTURE_2D,
+            WebGl2RenderingContext::TEXTURE_MIN_FILTER,
+            WebGl2RenderingContext::LINEAR as i32,
+        );
         gl.tex_parameteri(
             WebGl2RenderingContext::TEXTURE_2D,
             WebGl2RenderingContext::TEXTURE_MAG_FILTER,
@@ -136,87 +211,211 @@ impl PostProcessing {
             WebGl2RenderingContext::TEXTURE_WRAP_T,
             WebGl2RenderingContext::CLAMP_TO_EDGE as i32,
         );
-        gl.copy_tex_image_2d(
+        // allocate texture storage - use RGBA8 as internal format (matches TypeScript reference)
+        gl.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
             WebGl2RenderingContext::TEXTURE_2D,
             0,
+            WebGl2RenderingContext::RGBA8 as i32,
+            width,
+            height,
+            0,
             WebGl2RenderingContext::RGBA,
-            0,
-            0,
-            1,
-            1,
-            0,
-        );
-        self.texture = Some(texture.ok_or(Error::UnableToRetrieveElementById(
-            "Failed to create texture".to_string(),
-        ))?);
-
-        Ok(self)
+            WebGl2RenderingContext::UNSIGNED_BYTE,
+            None,
+        )?;
+        Ok(texture)
     }
 
     /// Initializes the post-processing.
     pub fn create_program(
-        &mut self,
         gl: &WebGl2RenderingContext,
         shader_options: PostProcessingShaderOptions,
-    ) -> Result<&mut Self, Error> {
-        let program = gl.create_program();
-        let mut shader = PostProcessingShader::new(gl);
-        shader.compile(gl, shader_options)?;
-        self.shader = Some(shader);
-        if let Some(shader) = self.shader.as_mut() {
-            gl.attach_shader(
-                program.as_ref().unwrap(),
-                shader.vertex_shader.as_ref().unwrap(),
-            );
-            gl.attach_shader(
-                program.as_ref().unwrap(),
-                shader.fragment_shader.as_ref().unwrap(),
-            );
-        } else {
-            return Err(Error::UnableToRetrieveElementById(
-                "Shader not found".to_string(),
-            ));
-        }
+    ) -> Result<WebGlProgram, Error> {
+        let program = gl
+            .create_program()
+            .ok_or(Error::UnableToRetrieveElementById(
+                "Failed to create program".to_string(),
+            ))?;
+        let vertex_shader = create_shader(
+            gl,
+            ShaderType::Vertex,
+            shader_options.vertex_shader_source.as_str(),
+        )?;
+        let fragment_shader = create_shader(
+            gl,
+            ShaderType::Fragment,
+            shader_options.fragment_shader_source.as_str(),
+        )?;
+        gl.attach_shader(program.as_ref(), vertex_shader.as_ref());
+        gl.attach_shader(program.as_ref(), fragment_shader.as_ref());
 
-        gl.link_program(program.as_ref().unwrap());
-        if !gl.get_program_parameter(
-            program.as_ref().unwrap(),
-            WebGl2RenderingContext::LINK_STATUS,
-        ) {
-            gl.delete_program(Some(program.as_ref().unwrap()));
+        gl.link_program(program.as_ref());
+        if !gl.get_program_parameter(program.as_ref(), WebGl2RenderingContext::LINK_STATUS) {
+            gl.delete_program(Some(program.as_ref()));
             return Err(Error::UnableToRetrieveElementById(
-                gl.get_program_info_log(program.as_ref().unwrap())
+                gl.get_program_info_log(program.as_ref())
                     .unwrap_or_else(|| "Program linking failed".to_string()),
             ));
         }
-        self.program = program;
-        Ok(self)
+        gl.delete_shader(Some(vertex_shader.as_ref()));
+        gl.delete_shader(Some(fragment_shader.as_ref()));
+        Ok(program)
     }
 
+    /// Creates a new vertex array object.
+    fn create_vao(gl: &WebGl2RenderingContext) -> Result<WebGlVertexArrayObject, Error> {
+        let prev_vao = gl
+            .get_parameter(WebGl2RenderingContext::VERTEX_ARRAY_BINDING)
+            .ok()
+            .map(|v| WebGlVertexArrayObject::from(v));
+        let vao = gl
+            .create_vertex_array()
+            .ok_or(Error::UnableToRetrieveElementById(
+                "Failed to create vertex array".to_string(),
+            ))?;
+        gl.bind_vertex_array(Some(vao.as_ref()));
+        gl.bind_vertex_array(prev_vao.as_ref());
+        Ok(vao)
+    }
     /// Render Functions
 
-    /// Sets up the post-processing.
-    pub fn setup(&mut self, gl: &WebGl2RenderingContext) -> Result<&mut Self, Error> {
-        if let Some(frame_buffer) = &self.frame_buffer {
-            gl.bind_framebuffer(WebGl2RenderingContext::FRAMEBUFFER, Some(&frame_buffer));
-            gl.framebuffer_texture_2d(
-                WebGl2RenderingContext::FRAMEBUFFER,
-                WebGl2RenderingContext::COLOR_ATTACHMENT0,
-                WebGl2RenderingContext::TEXTURE_2D,
-                self.texture.as_ref(),
-                0,
-            );
-        } else {
-            return Err(Error::UnableToRetrieveElementById(
-                "Frame buffer not found".to_string(),
-            ));
+    pub fn resize(
+        &mut self,
+        gl: &WebGl2RenderingContext,
+        width: i32,
+        height: i32,
+    ) -> Result<&Self, Error> {
+        if width == self.width && height == self.height {
+            return Ok(self);
         }
+        self.width = width;
+        self.height = height;
+
+        if let Some(frame_buffer) = &self.frame_buffer {
+            gl.delete_framebuffer(Some(frame_buffer));
+        }
+        if let Some(texture) = &self.texture {
+            gl.delete_texture(Some(texture));
+        }
+        self.texture = Some(Self::create_tex(gl, width, height)?);
+        let fb = gl
+            .create_framebuffer()
+            .ok_or(Error::UnableToRetrieveElementById(
+                "Failed to create frame buffer".to_string(),
+            ))?;
+        // attach texture to framebuffer
+        gl.bind_framebuffer(WebGl2RenderingContext::FRAMEBUFFER, Some(&fb));
+        let texture = self
+            .texture
+            .as_ref()
+            .ok_or(Error::UnableToRetrieveElementById(
+                "Texture not created".to_string(),
+            ))?;
+        gl.framebuffer_texture_2d(
+            WebGl2RenderingContext::FRAMEBUFFER,
+            WebGl2RenderingContext::COLOR_ATTACHMENT0,
+            WebGl2RenderingContext::TEXTURE_2D,
+            Some(texture),
+            0,
+        );
+        gl.bind_framebuffer(WebGl2RenderingContext::FRAMEBUFFER, None);
+        self.frame_buffer = Some(fb);
         Ok(self)
     }
 
-    /// Cleans up the post-processing.
-    pub fn apply_post_processing(&self, gl: &WebGl2RenderingContext) -> Result<(), Error> {
-        gl.bind_buffer(WebGl2RenderingContext::FRAMEBUFFER, None);
+    /// set up post processing scene
+    pub fn setup_scene(
+        &mut self,
+        gl: &WebGl2RenderingContext,
+        width: i32,
+        height: i32,
+    ) -> Result<(), Error> {
+        self.resize(gl, width, height)?;
+        let fb = self
+            .frame_buffer
+            .as_ref()
+            .ok_or(Error::UnableToRetrieveElementById(
+                "Failed to get frame buffer".to_string(),
+            ))?;
+        gl.bind_framebuffer(WebGl2RenderingContext::FRAMEBUFFER, Some(fb));
+        gl.viewport(0, 0, self.width, self.height);
+        // clear the framebuffer before rendering
+        gl.clear_color(0.0, 0.0, 0.0, 1.0);
+        gl.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
+        Ok(())
+    }
+
+    /// present scene
+    pub fn present_scene(
+        &self,
+        gl: &WebGl2RenderingContext,
+        canvas_width: i32,
+        canvas_height: i32,
+    ) {
+        gl.bind_framebuffer(WebGl2RenderingContext::FRAMEBUFFER, None);
+        gl.viewport(0, 0, canvas_width, canvas_height);
+        // clear the canvas before drawing the post-processed texture
+        gl.clear_color(0.0, 0.0, 0.0, 1.0);
+        gl.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
+
+        gl.disable(WebGl2RenderingContext::DEPTH_TEST);
+        gl.disable(WebGl2RenderingContext::BLEND);
+
+        gl.use_program(self.program.as_ref());
+        gl.bind_vertex_array(self.vao.as_ref());
+
+        gl.active_texture(WebGl2RenderingContext::TEXTURE0);
+        gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, self.texture.as_ref());
+        gl.uniform1i(self.uniform_map.get("u_scene"), 0);
+
+        gl.uniform2f(
+            self.uniform_map.get("u_resolution"),
+            self.width as f32,
+            self.height as f32,
+        );
+        // set u_time to 0 for now (scanlines will be static)
+        gl.uniform1f(self.uniform_map.get("u_time"), 0.0);
+
+        gl.uniform1f(self.uniform_map.get("u_curvature"), 0.12);
+        gl.uniform1f(self.uniform_map.get("u_scanline_strength"), 0.55);
+        gl.uniform1f(self.uniform_map.get("u_mask_strength"), 0.35);
+        gl.uniform1f(self.uniform_map.get("u_vignette_strength"), 0.35);
+        gl.uniform1f(self.uniform_map.get("u_aberration"), 1.25);
+        gl.uniform1f(self.uniform_map.get("u_bloom"), 0.12);
+
+        gl.draw_arrays(WebGl2RenderingContext::TRIANGLES, 0, 3);
+
+        gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, None);
+        gl.bind_vertex_array(None);
+        gl.use_program(None);
+    }
+
+    /// Copies the current default framebuffer content to our texture.
+    pub fn copy_from_default_framebuffer(
+        &self,
+        gl: &WebGl2RenderingContext,
+        width: i32,
+        height: i32,
+    ) -> Result<(), Error> {
+        let texture = self
+            .texture
+            .as_ref()
+            .ok_or(Error::UnableToRetrieveElementById(
+                "Texture not found".to_string(),
+            ))?;
+        gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(texture));
+        // use copy_tex_sub_image_2d (matches TypeScript reference)
+        gl.copy_tex_sub_image_2d(
+            WebGl2RenderingContext::TEXTURE_2D,
+            0,
+            0,
+            0,
+            0,
+            0,
+            width,
+            height,
+        );
+        gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, None);
         Ok(())
     }
 }

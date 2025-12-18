@@ -29,9 +29,10 @@ fn main() -> Result<()> {
 
     let webgl2_options = WebGl2BackendOptions::new()
         .measure_performance(true)
-        .enable_console_debug_api()
+        // .enable_console_debug_api()
         .enable_mouse_selection()
-        .size((1600, 900));
+        .size((1600, 900))
+        .enable_post_processing();
 
     let terminal = MultiBackendBuilder::with_fallback(BackendType::WebGl2)
         .canvas_options(canvas_options)

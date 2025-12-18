@@ -1,5 +1,5 @@
 use crate::{
-    backend::{color::to_rgb, utils::*},
+    backend::{color::to_rgb, postprocessing::PostProcessing, utils::*},
     error::Error,
     widgets::hyperlink::HYPERLINK_MODIFIER,
     CursorShape,
@@ -17,7 +17,6 @@ use ratatui::{
     style::{Color, Modifier},
 };
 use std::{cell::RefCell, io::Result as IoResult, mem::swap, rc::Rc};
-use wasm_bindgen::JsValue;
 use web_sys::{wasm_bindgen::JsCast, window, Element};
 
 /// Re-export beamterm's atlas data type. Used by [`WebGl2BackendOptions::font_atlas`].
@@ -26,30 +25,6 @@ pub use beamterm_renderer::FontAtlasData;
 // Labels used by the Performance API
 const SYNC_TERMINAL_BUFFER_MARK: &str = "sync-terminal-buffer";
 const WEBGL_RENDER_MARK: &str = "webgl-render";
-
-// Helper to send debug logs via HTTP POST
-fn debug_log(session_id: &str, run_id: &str, hypothesis_id: &str, location: &str, message: &str, data: &str) {
-    let log_entry = format!(r#"{{"sessionId":"{}","runId":"{}","hypothesisId":"{}","location":"{}","message":"{}","data":{},"timestamp":{}}}"#,
-        session_id, run_id, hypothesis_id, location, message, data,
-        web_sys::window().and_then(|w| w.performance()).map(|p| p.now() as u64).unwrap_or(0));
-    // Send via fetch - fire and forget
-    if let Some(window) = web_sys::window() {
-        let url = "http://127.0.0.1:7245/ingest/58eabe16-8aff-4ec0-a7f7-43b3e88d34a1";
-        let opts = web_sys::RequestInit::new();
-        opts.set_method("POST");
-        opts.set_mode(web_sys::RequestMode::Cors);
-        if let Ok(headers) = web_sys::Headers::new() {
-            let _ = headers.set("Content-Type", "application/json");
-            opts.set_headers(&headers);
-        }
-        // Convert string to JsValue and send
-        let js_body = JsValue::from_str(&log_entry);
-        opts.set_body(&js_body);
-        if let Ok(req) = web_sys::Request::new_with_str_and_init(url, &opts) {
-            let _ = window.fetch_with_request(&req);
-        }
-    }
-}
 
 /// Options for the [`WebGl2Backend`].
 #[derive(Default, Debug)]
@@ -76,6 +51,8 @@ pub struct WebGl2BackendOptions {
     measure_performance: bool,
     /// Enable console debugging and introspection API.
     console_debug_api: bool,
+    /// Post-processing enabled.
+    post_processing: bool,
 }
 
 impl WebGl2BackendOptions {
@@ -172,6 +149,12 @@ impl WebGl2BackendOptions {
         self.console_debug_api = true;
         self
     }
+
+    /// Enables post-processing.
+    pub fn enable_post_processing(mut self) -> Self {
+        self.post_processing = true;
+        self
+    }
 }
 
 /// WebGl2 backend for high-performance terminal rendering.
@@ -249,8 +232,8 @@ pub struct WebGl2Backend {
     cursor_over_hyperlink: Option<Rc<RefCell<bool>>>,
     /// Hyperlink click callback.
     _hyperlink_callback: Option<HyperlinkCallback>,
-    /// Blinking cells: stores (x, y, original_cell) for cells with blink modifiers.
-    blinking_cells: Vec<(u16, u16, Cell)>,
+    /// Post-processing.
+    post_processing: Option<PostProcessing>,
 }
 
 impl WebGl2Backend {
@@ -316,6 +299,12 @@ impl WebGl2Backend {
             None
         };
 
+        let post_processing = if options.post_processing {
+            Some(PostProcessing::new(&beamterm.gl())?)
+        } else {
+            None
+        };
+
         Ok(Self {
             beamterm,
             cursor_position: None,
@@ -325,7 +314,7 @@ impl WebGl2Backend {
             performance,
             cursor_over_hyperlink,
             _hyperlink_callback: hyperlink_callback,
-            blinking_cells: Vec::new(),
+            post_processing,
         })
     }
 
@@ -404,8 +393,6 @@ impl WebGl2Backend {
         // If enabled, measures the time taken to synchronize the terminal buffer.
         self.measure_begin(SYNC_TERMINAL_BUFFER_MARK);
 
-        // Track blinking cells and prepare cell data
-        let mut new_blinking_cells = Vec::new();
         let w = self.beamterm.terminal_size().0 as usize;
 
         // If hyperlink support is enabled, we need to track which cells are hyperlinks,
@@ -420,47 +407,16 @@ impl WebGl2Backend {
                 let idx = *y as usize * w + *x as usize;
                 let is_hyperlink = c.modifier.contains(HYPERLINK_MODIFIER);
                 hyperlink_cells.set(idx, is_hyperlink);
-                
-                // Track blinking cells (but not hyperlinks, as they use SLOW_BLINK for marking)
-                if !is_hyperlink && (c.modifier.contains(Modifier::SLOW_BLINK) || c.modifier.contains(Modifier::RAPID_BLINK)) {
-                    // #region agent log
-                    debug_log("debug-session", "run1", "A", "webgl2.rs:401", "Tracking blinking cell",
-                        &format!(r#"{{"x":{},"y":{},"symbol":"{}","modifier_bits":{},"has_slow_blink":{},"has_rapid_blink":{}}}"#,
-                            x, y, c.symbol().chars().next().unwrap_or('?'), c.modifier.bits(), 
-                            c.modifier.contains(Modifier::SLOW_BLINK), c.modifier.contains(Modifier::RAPID_BLINK)));
-                    // #endregion
-                    new_blinking_cells.push((*x, *y, (*c).clone()));
-                }
             });
             let cells = cells.map(|(x, y, cell)| (x, y, cell_data(cell)));
 
             self.beamterm.update_cells_by_position(cells)
         } else {
-            let cells = content.inspect(|(x, y, c)| {
-                // Track blinking cells
-                if c.modifier.contains(Modifier::SLOW_BLINK) || c.modifier.contains(Modifier::RAPID_BLINK) {
-                    // #region agent log
-                    debug_log("debug-session", "run1", "A", "webgl2.rs:411", "Tracking blinking cell (no hyperlink)",
-                        &format!(r#"{{"x":{},"y":{},"symbol":"{}","modifier_bits":{}}}"#, 
-                            x, y, c.symbol().chars().next().unwrap_or('?'), c.modifier.bits()));
-                    // #endregion
-                    new_blinking_cells.push((*x, *y, (*c).clone()));
-                }
-            });
+            let cells = content.inspect(|(x, y, c)| {});
             let cells = cells.map(|(x, y, cell)| (x, y, cell_data(cell)));
             self.beamterm.update_cells_by_position(cells)
         }
         .map_err(Error::from)?;
-
-        // Update tracked blinking cells - only replace if we found new ones, otherwise keep existing
-        if !new_blinking_cells.is_empty() {
-            // #region agent log
-            debug_log("debug-session", "run1", "A", "webgl2.rs:420", "Blinking cells tracked",
-                &format!(r#"{{"count":{}}}"#, new_blinking_cells.len()));
-            // #endregion
-            self.blinking_cells = new_blinking_cells;
-        }
-
         self.measure_end(SYNC_TERMINAL_BUFFER_MARK);
 
         Ok(())
@@ -665,8 +621,7 @@ impl Backend for WebGl2Backend {
     {
         // we only update when we have new cell data or if the mouse selection
         // handler is enabled (otherwise, we fail to update the visualized selection).
-        // Also update if we have blinking cells, since they need to be refreshed every frame
-        if content.size_hint().1 != Some(0) || self.options.default_mouse_handler || !self.blinking_cells.is_empty() {
+        if content.size_hint().1 != Some(0) || self.options.default_mouse_handler {
             self.update_grid(content)?;
         }
 
@@ -680,64 +635,50 @@ impl Backend for WebGl2Backend {
     fn flush(&mut self) -> IoResult<()> {
         self.check_canvas_resize()?;
 
-        // Update blinking cells based on current time
-        // This must happen before render_frame() to ensure the updates are visible
-        if !self.blinking_cells.is_empty() {
-            let now = web_sys::window()
-                .and_then(|w| w.performance())
-                .map(|p| p.now())
-                .unwrap_or(0.0);
-            // #region agent log
-            debug_log("debug-session", "run1", "B", "webgl2.rs:647", "Flush: updating blinking cells",
-                &format!(r#"{{"cell_count":{},"now":{}}}"#, self.blinking_cells.len(), now));
-            // #endregion
-
-            let blinking_updates: Vec<_> = self.blinking_cells
-                .iter()
-                .map(|(x, y, cell)| {
-                    let mut fg = to_rgb(cell.fg, 0xffffff);
-                    let mut bg = to_rgb(cell.bg, 0x000000);
-
-                    if cell.modifier.contains(Modifier::REVERSED) {
-                        swap(&mut fg, &mut bg);
-                    }
-
-                    let final_fg = {
-                        let mut temp_fg = fg;
-                        if cell.modifier.contains(Modifier::SLOW_BLINK) || cell.modifier.contains(Modifier::RAPID_BLINK) {
-                            let cycle_duration = if cell.modifier.contains(Modifier::SLOW_BLINK) { 1000.0 } else { 500.0 };
-                            let cycle = (now / cycle_duration) % 1.0;
-                            let visible_portion = if cell.modifier.contains(Modifier::SLOW_BLINK) { 0.5 } else { 0.25 };
-                            if cycle >= visible_portion {
-                                temp_fg = bg;
-                            }
-                        }
-                        temp_fg
-                    };
-                    // #region agent log
-                    debug_log("debug-session", "run1", "C", "webgl2.rs:659", "Blink cell update",
-                        &format!(r#"{{"x":{},"y":{},"fg_before":{},"bg":{},"fg_after":{}}}"#, x, y, fg, bg, final_fg));
-                    // #endregion
-                    (*x, *y, cell_data_with_blink(cell, fg, bg, now))
-                })
-                .collect();
-
-            if !blinking_updates.is_empty() {
-                // #region agent log
-                debug_log("debug-session", "run1", "D", "webgl2.rs:665", "Sending updates to beamterm",
-                    &format!(r#"{{"update_count":{}}}"#, blinking_updates.len()));
-                // #endregion
-                self.beamterm.update_cells_by_position(blinking_updates.into_iter())
-                    .map_err(Error::from)?;
-            }
-        }
-
         self.measure_begin(WEBGL_RENDER_MARK);
 
         // Flushes GPU buffers and render existing content to the canvas
         self.toggle_cursor(); // show cursor before rendering
-        self.beamterm.render_frame().map_err(Error::from)?;
-        self.toggle_cursor(); // restore cell to previous state
+
+        if self.options.post_processing && self.post_processing.is_some() {
+            let (width, height) = self.beamterm.canvas_size();
+            // don't bind our framebuffer - we'll render to default and copy
+            // just ensure the texture is resized
+            self.post_processing.as_mut().unwrap().resize(
+                &self.beamterm.gl(),
+                width as i32,
+                height as i32,
+            )?;
+
+            // render to default framebuffer first, then copy to our texture
+            // beamterm likely renders to the default framebuffer (canvas)
+            self.beamterm
+                .gl()
+                .bind_framebuffer(web_sys::WebGl2RenderingContext::FRAMEBUFFER, None);
+
+            // ensure viewport matches canvas size
+            self.beamterm
+                .gl()
+                .viewport(0, 0, width as i32, height as i32);
+            self.beamterm.render_frame().map_err(Error::from)?;
+
+            // copy from default framebuffer to our texture
+            self.post_processing
+                .as_mut()
+                .unwrap()
+                .copy_from_default_framebuffer(&self.beamterm.gl(), width as i32, height as i32)?;
+
+            self.toggle_cursor(); // restore cell to previous state
+
+            self.post_processing.as_mut().unwrap().present_scene(
+                &self.beamterm.gl(),
+                width as i32,
+                height as i32,
+            );
+        } else {
+            self.beamterm.render_frame().map_err(Error::from)?;
+            self.toggle_cursor(); // restore cell to previous state
+        }
 
         self.measure_end(WEBGL_RENDER_MARK);
 
@@ -895,41 +836,6 @@ fn cell_data(cell: &Cell) -> CellData<'_> {
     CellData::new_with_style_bits(cell.symbol(), into_glyph_bits(cell.modifier), fg, bg)
 }
 
-/// Converts a [`Cell`] into a [`CellData`] with explicit time for blinking calculation.
-fn cell_data_with_blink(cell: &Cell, fg: u32, bg: u32, now: f64) -> CellData<'_> {
-    let mut final_fg = fg;
-    let final_bg = bg;
-
-    // Handle blinking by making foreground match background when blinking
-    if cell.modifier.contains(Modifier::SLOW_BLINK) || cell.modifier.contains(Modifier::RAPID_BLINK) {
-        let cycle_duration = if cell.modifier.contains(Modifier::SLOW_BLINK) {
-            1000.0
-        } else {
-            500.0
-        };
-
-        let cycle = (now / cycle_duration) % 1.0;
-        let visible_portion = if cell.modifier.contains(Modifier::SLOW_BLINK) {
-            0.5
-        } else {
-            0.25
-        };
-
-        let should_hide = cycle >= visible_portion;
-        // #region agent log
-        debug_log("debug-session", "run1", "B", "webgl2.rs:852", "Blink calculation",
-            &format!(r#"{{"now":{},"cycle_duration":{},"cycle":{},"visible_portion":{},"should_hide":{}}}"#, 
-                now, cycle_duration, cycle, visible_portion, should_hide));
-        // #endregion
-
-        if should_hide {
-            final_fg = final_bg;
-        }
-    }
-
-    CellData::new_with_style_bits(cell.symbol(), into_glyph_bits(cell.modifier), final_fg, final_bg)
-}
-
 /// Extracts glyph styling bits from cell modifiers.
 ///
 /// # Performance Optimization
@@ -1018,4 +924,3 @@ mod tests {
         .for_each(|(expected, actual)| assert_eq!(expected, actual));
     }
 }
-
