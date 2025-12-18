@@ -53,3 +53,6 @@ pub(crate) mod utils;
 
 /// Cursor shapes.
 pub mod cursor;
+
+/// Post-processing.
+pub mod postprocessing;

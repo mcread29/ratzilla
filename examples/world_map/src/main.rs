@@ -1,19 +1,12 @@
 use std::io;
 
-use ratzilla::ratatui::{
-    symbols::Marker,
-    widgets,
-    widgets::canvas,
-    style::Color,
-    Terminal,
-};
+use ratzilla::ratatui::{style::Color, symbols::Marker, widgets, widgets::canvas};
 
-use ratzilla::{WebRenderer};
 use examples_shared::backend::{BackendType, MultiBackendBuilder};
+use ratzilla::WebRenderer;
 
 fn main() -> io::Result<()> {
-    let terminal = MultiBackendBuilder::with_fallback(BackendType::Dom)
-        .build_terminal()?;
+    let terminal = MultiBackendBuilder::with_fallback(BackendType::Dom).build_terminal()?;
 
     terminal.draw_web(move |f| {
         let canvas = canvas::Canvas::default()

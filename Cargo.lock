@@ -91,7 +91,7 @@ dependencies = [
  "console_error_panic_hook",
  "examples-shared",
  "ratzilla",
- "tachyonfx 0.19.0",
+ "tachyonfx",
 ]
 
 [[package]]
@@ -448,7 +448,7 @@ dependencies = [
  "console_error_panic_hook",
  "examples-shared",
  "ratzilla",
- "tachyonfx 0.19.0",
+ "tachyonfx",
  "web-time",
 ]
 
@@ -611,12 +611,6 @@ dependencies = [
  "tracing-core",
  "tracing-error",
 ]
-
-[[package]]
-name = "colorsys"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65036b2f761dc2d20b4634890f73bdbad811d5edb677f84fd652ae9256051fcb"
 
 [[package]]
 name = "combine"
@@ -879,7 +873,7 @@ dependencies = [
  "examples-shared",
  "rand 0.8.5",
  "ratzilla",
- "tachyonfx 0.16.0",
+ "tachyonfx",
  "web-time",
 ]
 
@@ -1097,6 +1091,7 @@ name = "examples-shared"
 version = "0.1.0"
 dependencies = [
  "ratzilla",
+ "tachyonfx",
  "wasm-bindgen",
  "web-sys",
  "web-time",
@@ -3668,12 +3663,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
-name = "simple-easing"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "832ddd7df0d98d6fd93b973c330b7c8e0742d5cb8f1afc7dea89dba4d2531aa1"
-
-[[package]]
 name = "siphasher"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3905,22 +3894,6 @@ dependencies = [
  "pkg-config",
  "toml 0.8.2",
  "version-compare",
-]
-
-[[package]]
-name = "tachyonfx"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2546665ffa82d81a5dd84c32041d417ad8f52f96e2c3d1c67cdf3f64540fe06f"
-dependencies = [
- "bon",
- "colorsys",
- "compact_str 0.9.0",
- "ratatui",
- "simple-easing",
- "thiserror 2.0.17",
- "unicode-width 0.2.0",
- "web-time",
 ]
 
 [[package]]
@@ -4620,6 +4593,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
+name = "tty0"
+version = "0.0.1"
+dependencies = [
+ "console_error_panic_hook",
+ "examples-shared",
+ "rand 0.8.5",
+ "ratzilla",
+ "tachyonfx",
+ "web-time",
+]
+
+[[package]]
 name = "tui-textarea"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5005,7 +4990,7 @@ dependencies = [
  "console_error_panic_hook",
  "examples-shared",
  "ratzilla",
- "tachyonfx 0.19.0",
+ "tachyonfx",
 ]
 
 [[package]]

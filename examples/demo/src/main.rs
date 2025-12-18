@@ -14,6 +14,8 @@ use ratzilla::event::KeyCode;
 use ratzilla::WebRenderer;
 use ratzilla::{backend::canvas::CanvasBackendOptions, backend::webgl2::WebGl2BackendOptions};
 
+// use examples_shared::wave_effect::{IntoEffect, WaveInterference};
+
 mod app;
 
 mod effects;
@@ -59,10 +61,14 @@ fn main() -> Result<()> {
         }
     });
 
+    // let mut effect = WaveInterference::new().into_effect();
+
     terminal.draw_web(move |f| {
         let mut app_state = app_state.borrow_mut();
         let elapsed = app_state.on_tick();
         ui::draw(elapsed, f, &mut app_state);
+
+        // f.render_effect(&mut effect, f.area(), elapsed.into());
     });
 
     Ok(())

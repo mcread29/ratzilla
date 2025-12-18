@@ -2,8 +2,9 @@ use ratzilla::ratatui::buffer::Buffer;
 use ratzilla::ratatui::layout::Rect;
 use std::fmt::Debug;
 use std::rc::Rc;
-use tachyonfx::{
-    color_from_hsl, default_shader_impl, CellFilter, ColorSpace, Duration, Interpolation, Shader,
+pub use tachyonfx::{
+    color_from_hsl, default_shader_impl, CellFilter, ColorSpace, Duration, Interpolation,
+    IntoEffect, Shader,
 };
 
 /// A shader that creates wave interference patterns

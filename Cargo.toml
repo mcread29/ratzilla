@@ -15,6 +15,7 @@ members = [
     "examples/user_input",
     "examples/website",
     "examples/world_map",
+    "examples/tty0",
 ]
 resolver = "2"
 
@@ -53,6 +54,7 @@ web-sys = { version = "0.3.81", features = [
     'Screen',
     'WebGl2RenderingContext',
     'WebGlBuffer',
+    'WebGlFramebuffer',
     'WebGlProgram',
     'WebGlRenderingContext',
     'WebGlShader',

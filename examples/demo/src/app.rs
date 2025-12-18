@@ -1,4 +1,5 @@
 use crate::effects;
+use rand::prelude::SliceRandom;
 use rand::{
     distributions::{Distribution, Uniform},
     rngs::SmallRng,
@@ -356,8 +357,11 @@ impl<'a> App<'a> {
         self.sparkline.on_tick();
         self.signals.on_tick();
 
-        let log = self.logs.items.pop().unwrap();
-        self.logs.items.insert(0, log);
+        // get random log
+        let mut rng = SmallRng::seed_from_u64(self.last_frame.elapsed().as_nanos() as u64);
+        let rnd_log = self.logs.items.choose(&mut rng).unwrap();
+        // let log = self.logs.items.last().cloned().unwrap();
+        self.logs.items.insert(0, (*rnd_log).clone());
 
         let event = self.barchart.pop().unwrap();
         self.barchart.insert(0, event);
