@@ -1,5 +1,4 @@
 use crate::effects;
-use rand::prelude::SliceRandom;
 use rand::{
     distributions::{Distribution, Uniform},
     rngs::SmallRng,
@@ -119,29 +118,6 @@ impl Iterator for SinSignal {
         Some(point)
     }
 }
-
-pub struct TabsState<'a> {
-    pub titles: Vec<&'a str>,
-    pub index: usize,
-}
-
-impl<'a> TabsState<'a> {
-    pub const fn new(titles: Vec<&'a str>) -> Self {
-        Self { titles, index: 0 }
-    }
-    pub fn next(&mut self) {
-        self.index = (self.index + 1) % self.titles.len();
-    }
-
-    pub fn previous(&mut self) {
-        if self.index > 0 {
-            self.index -= 1;
-        } else {
-            self.index = self.titles.len() - 1;
-        }
-    }
-}
-
 pub struct StatefulList<T> {
     pub state: ListState,
     pub items: Vec<T>,
@@ -216,17 +192,7 @@ impl Signals {
     }
 }
 
-pub struct Server<'a> {
-    pub name: &'a str,
-    pub location: &'a str,
-    pub coords: (f64, f64),
-    pub status: &'a str,
-}
-
 pub struct App<'a> {
-    pub title: &'a str,
-    pub should_quit: bool,
-    pub tabs: TabsState<'a>,
     pub show_chart: bool,
     pub progress: f64,
     pub sparkline: Signal<RandomSignal>,
@@ -234,7 +200,6 @@ pub struct App<'a> {
     pub logs: StatefulList<(&'a str, &'a str)>,
     pub signals: Signals,
     pub barchart: Vec<(&'a str, u64)>,
-    pub servers: Vec<Server<'a>>,
     pub enhanced_graphics: bool,
     pub effects: EffectManager<EffectKey>,
     pub last_frame: web_time::Instant,
@@ -247,7 +212,7 @@ pub enum EffectKey {
 }
 
 impl<'a> App<'a> {
-    pub fn new(title: &'a str, enhanced_graphics: bool) -> Self {
+    pub fn new(enhanced_graphics: bool) -> Self {
         let mut rand_signal = RandomSignal::new(0, 100);
         let sparkline_points = rand_signal.by_ref().take(300).collect();
         let mut sin_signal = SinSignal::new(0.2, 3.0, 18.0);
@@ -259,9 +224,6 @@ impl<'a> App<'a> {
         effects.add_effect(effects::startup());
         effects.add_effect(effects::pulsate_selected_tab());
         App {
-            title,
-            should_quit: false,
-            tabs: TabsState::new(vec!["Tab0", "Tab1", "Tab2"]),
             show_chart: true,
             progress: 0.0,
             sparkline: Signal {
@@ -285,32 +247,6 @@ impl<'a> App<'a> {
                 window: [0.0, 20.0],
             },
             barchart: EVENTS.to_vec(),
-            servers: vec![
-                Server {
-                    name: "NorthAmerica-1",
-                    location: "New York City",
-                    coords: (40.71, -74.00),
-                    status: "Up",
-                },
-                Server {
-                    name: "Europe-1",
-                    location: "Paris",
-                    coords: (48.85, 2.35),
-                    status: "Failure",
-                },
-                Server {
-                    name: "SouthAmerica-1",
-                    location: "São Paulo",
-                    coords: (-23.54, -46.62),
-                    status: "Up",
-                },
-                Server {
-                    name: "Asia-1",
-                    location: "Singapore",
-                    coords: (1.35, 103.86),
-                    status: "Up",
-                },
-            ],
             enhanced_graphics,
             effects,
             last_frame: web_time::Instant::now(),
@@ -326,20 +262,18 @@ impl<'a> App<'a> {
     }
 
     pub fn on_right(&mut self) {
-        self.tabs.next();
         self.add_transition_tab_effect();
     }
 
     pub fn on_left(&mut self) {
-        self.tabs.previous();
         self.add_transition_tab_effect();
     }
 
     pub fn on_key(&mut self, c: char) {
         match c {
-            'q' => {
-                self.should_quit = true;
-            }
+            // 'q' => {
+            //     self.should_quit = true;
+            // }
             't' => {
                 self.show_chart = !self.show_chart;
             }
@@ -357,16 +291,12 @@ impl<'a> App<'a> {
         self.sparkline.on_tick();
         self.signals.on_tick();
 
-        // get random log
-        let mut rng = SmallRng::seed_from_u64(self.last_frame.elapsed().as_nanos() as u64);
-        let rnd_log = self.logs.items.choose(&mut rng).unwrap();
-        // let log = self.logs.items.last().cloned().unwrap();
-        self.logs.items.insert(0, (*rnd_log).clone());
+        let log = self.logs.items.pop();
+        self.logs.items.insert(0, log.unwrap());
 
         let event = self.barchart.pop().unwrap();
         self.barchart.insert(0, event);
 
-        // calculate elapsed time since last frame
         let now = web_time::Instant::now();
         let elapsed = now.duration_since(self.last_frame).as_millis() as u32;
         self.last_frame = now;

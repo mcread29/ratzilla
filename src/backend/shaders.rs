@@ -1,3 +1,4 @@
+/// Vertex shader source for the post-processing shader.
 pub const VERTEX_SHADER_SOURCE: &str = "#version 300 es
 precision highp float;
 
@@ -16,6 +17,7 @@ void main() {
 }
 ";
 
+/// Fragment shader source for the post-processing shader.
 pub const FRAGMENT_SHADER_SOURCE: &str = "#version 300 es
 precision highp float;
 
@@ -69,8 +71,8 @@ void main() {
   c.g = sample_scene(uv).g;
   c.b = sample_scene(uv + vec2(-ab, 0.0) * px).b;
 
-  float scan = 0.5 + 0.5 * sin((frag.y + u_time * 60.0) * 3.14159265);
-  float scan_mul = mix(1.0, 0.75 + 0.25 * scan, u_scanline_strength);
+  float scan = 0.5 + 0.5 * sin((frag.y + mod(u_time * 60.0, 1000.0)) * 3.14159265 / 2.0);
+  float scan_mul = mix(1.0, 0.5 + 0.5 * scan, u_scanline_strength);
   c *= scan_mul;
 
   vec3 mask = triad_mask(frag);

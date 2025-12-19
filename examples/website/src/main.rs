@@ -1,6 +1,8 @@
 use std::io;
 
+use examples_shared::backend::{BackendType, MultiBackendBuilder};
 use layout::{Flex, Offset};
+use ratzilla::backend::webgl2::WebGl2BackendOptions;
 use ratzilla::{
     event::{KeyCode, KeyEvent},
     ratatui::{
@@ -11,12 +13,10 @@ use ratzilla::{
     widgets::Hyperlink,
     WebRenderer,
 };
-use examples_shared::backend::{BackendType, MultiBackendBuilder};
 use tachyonfx::{
     fx::{self, RepeatMode},
-    CenteredShrink, Duration, Effect, EffectRenderer, EffectTimer, Interpolation, Motion, 
+    CenteredShrink, Duration, Effect, EffectRenderer, EffectTimer, Interpolation, Motion,
 };
-use ratzilla::backend::webgl2::WebGl2BackendOptions;
 
 struct State {
     intro_effect: Effect,
@@ -55,14 +55,15 @@ impl Default for State {
 
 fn main() -> io::Result<()> {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-    
+
     let terminal = MultiBackendBuilder::with_fallback(BackendType::Dom)
-        .webgl2_options(WebGl2BackendOptions::new()
-            .enable_hyperlinks()
-            .enable_mouse_selection()
+        .webgl2_options(
+            WebGl2BackendOptions::new()
+                .enable_hyperlinks()
+                .enable_mouse_selection(),
         )
         .build_terminal()?;
-    
+
     let mut state = State::default();
     terminal.on_key_event(move |key| handle_key_event(key));
     terminal.draw_web(move |f| ui(f, &mut state));
@@ -71,11 +72,11 @@ fn main() -> io::Result<()> {
 
 fn ui(f: &mut Frame<'_>, state: &mut State) {
     render_intro(f, state);
-    // if state.intro_effect.running() {
-    //     render_intro(f, state);
-    // } else {
-    //     render_menu(f, state);
-    // }
+    if state.intro_effect.running() {
+        render_intro(f, state);
+    } else {
+        render_menu(f, state);
+    }
 }
 
 fn handle_key_event(key: KeyEvent) {

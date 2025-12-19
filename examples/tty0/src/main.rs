@@ -1,30 +1,50 @@
-use examples_shared::backend::{BackendType, MultiBackendBuilder};
+//! # [Ratatui] Original Demo example
+//!
+//! The latest version of this example is available in the [examples] folder in the upstream.
+//!
+//! [Ratatui]: https://github.com/ratatui/ratatui
+//! [examples]: https://github.com/ratatui/ratatui/blob/main/examples
+//! [examples readme]: https://github.com/ratatui/ratatui/blob/main/examples/README.md
+
+use std::{cell::RefCell, io::Result, rc::Rc};
+
+use app::App;
+use examples_shared::backend::WebGl2BackendBuilder;
+use ratzilla::backend::cursor::CursorShape;
 use ratzilla::backend::webgl2::WebGl2BackendOptions;
 use ratzilla::WebRenderer;
-use tachyonfx::EffectRenderer;
 
-use examples_shared::wave_effect::{IntoEffect, WaveInterference};
+mod app;
+mod introstate;
+mod state;
 
-fn main() -> std::io::Result<()> {
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-    let terminal = MultiBackendBuilder::with_fallback(BackendType::WebGl2)
-        .webgl2_options(
-            WebGl2BackendOptions::new()
-                .measure_performance(true)
-                .grid_id("container")
-                .enable_console_debug_api(), // .enable_post_processing(),
-        )
-        .build_terminal()?;
+fn main() -> Result<()> {
+    let app_state = Rc::new(RefCell::new(App::new()));
 
-    let mut effect = WaveInterference::new().into_effect();
-    let mut last_tick = web_time::Instant::now();
+    let webgl2_options = WebGl2BackendOptions::new()
+        .cursor_shape(CursorShape::SteadyUnderScore)
+        .enable_post_processing();
 
-    terminal.draw_web(move |frame| {
-        let now = web_time::Instant::now();
-        let elapsed = now.duration_since(last_tick);
-        last_tick = now;
+    let terminal = WebGl2BackendBuilder::with_options(webgl2_options).build_terminal()?;
 
-        frame.render_effect(&mut effect, frame.area(), elapsed.into());
+    terminal.on_key_event({
+        let app_state_cloned = app_state.clone();
+        move |event| {
+            let mut app_state = app_state_cloned.borrow_mut();
+            app_state
+                .key_press(event.code)
+                .map_err(|e| eprintln!("Error: {}", e))
+                .unwrap();
+        }
     });
+
+    terminal.draw_web(move |f| {
+        let mut app_state = app_state.borrow_mut();
+        app_state
+            .update(f)
+            .map_err(|e| eprintln!("Error: {}", e))
+            .unwrap();
+    });
+
     Ok(())
 }

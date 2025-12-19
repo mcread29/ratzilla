@@ -4,46 +4,18 @@ use ratzilla::ratatui::{
     symbols,
     text::{self, Span},
     widgets::{
-        canvas::{self, Canvas, Circle, Map, MapResolution, Rectangle},
-        Axis, BarChart, Block, Cell, Chart, Dataset, Gauge, LineGauge, List, ListItem, Paragraph,
-        Row, Sparkline, Table, Tabs, Wrap,
+        Axis, BarChart, Block, Chart, Dataset, Gauge, LineGauge, List, ListItem, Paragraph,
+        Sparkline, Wrap,
     },
     Frame,
 };
 use tachyonfx::Duration;
-// use tui_big_text::{BigText, PixelSize};
 
 use crate::app::App;
 
 pub fn draw(elapsed: Duration, frame: &mut Frame, app: &mut App) {
-    let chunks = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(frame.area());
-    let tabs = app
-        .tabs
-        .titles
-        .iter()
-        .map(|t| text::Line::from(Span::styled(*t, Style::default().fg(Color::LightGreen))))
-        .collect::<Tabs>()
-        .block(Block::bordered().title(app.title))
-        .highlight_style(Style::default().fg(Color::LightYellow))
-        .select(app.tabs.index);
-    frame.render_widget(tabs, chunks[0]);
-    match app.tabs.index {
-        0 => draw_first_tab(frame, app, chunks[1]),
-        1 => draw_second_tab(frame, app, chunks[1]),
-        2 => draw_third_tab(frame, app, chunks[1]),
-        _ => {}
-    };
-    // let big_text = BigText::builder()
-    //     .pixel_size(PixelSize::Quadrant)
-    //     .lines(vec!["RATZILLA".white().into()])
-    //     .build();
-    // frame.render_widget(
-    //     big_text,
-    //     frame.area().inner(Margin {
-    //         horizontal: frame.area().width / 2 - 15,
-    //         vertical: 0,
-    //     }),
-    // );
+    draw_first_tab(frame, app, frame.area());
+
     let area = frame.area();
     app.effects
         .process_effects(elapsed, frame.buffer_mut(), area);
@@ -51,14 +23,14 @@ pub fn draw(elapsed: Duration, frame: &mut Frame, app: &mut App) {
 
 fn draw_first_tab(frame: &mut Frame, app: &mut App, area: Rect) {
     let chunks = Layout::vertical([
-        // Constraint::Length(9),
+        Constraint::Length(9),
         Constraint::Min(8),
-        // Constraint::Length(7),
+        Constraint::Length(7),
     ])
     .split(area);
-    // draw_gauges(frame, app, chunks[0]);
-    draw_charts(frame, app, chunks[0]);
-    // draw_text(frame, chunks[1]);
+    draw_gauges(frame, app, chunks[0]);
+    draw_charts(frame, app, chunks[1]);
+    draw_text(frame, chunks[2]);
 }
 
 fn draw_gauges(frame: &mut Frame, app: &mut App, area: Rect) {
@@ -283,134 +255,4 @@ fn draw_text(frame: &mut Frame, area: Rect) {
     ));
     let paragraph = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
     frame.render_widget(paragraph, area);
-}
-
-fn draw_second_tab(frame: &mut Frame, app: &mut App, area: Rect) {
-    let chunks =
-        Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(70)]).split(area);
-    let up_style = Style::default().fg(Color::LightGreen);
-    let failure_style = Style::default()
-        .fg(Color::Red)
-        .add_modifier(Modifier::RAPID_BLINK | Modifier::CROSSED_OUT);
-    let rows = app.servers.iter().map(|s| {
-        let style = if s.status == "Up" {
-            up_style
-        } else {
-            failure_style
-        };
-        Row::new(vec![s.name, s.location, s.status]).style(style)
-    });
-    let table = Table::new(
-        rows,
-        [
-            Constraint::Length(15),
-            Constraint::Length(15),
-            Constraint::Length(10),
-        ],
-    )
-    .header(
-        Row::new(vec!["Server", "Location", "Status"])
-            .style(Style::default().fg(Color::Yellow))
-            .bottom_margin(1),
-    )
-    .block(Block::bordered().title("Servers"));
-    frame.render_widget(table, chunks[0]);
-
-    let map = Canvas::default()
-        .block(Block::bordered().title("World"))
-        .paint(|ctx| {
-            ctx.draw(&Map {
-                color: Color::White,
-                resolution: MapResolution::High,
-            });
-            ctx.layer();
-            ctx.draw(&Rectangle {
-                x: 0.0,
-                y: 30.0,
-                width: 10.0,
-                height: 10.0,
-                color: Color::Yellow,
-            });
-            ctx.draw(&Circle {
-                x: app.servers[2].coords.1,
-                y: app.servers[2].coords.0,
-                radius: 10.0,
-                color: Color::LightGreen,
-            });
-            for (i, s1) in app.servers.iter().enumerate() {
-                for s2 in &app.servers[i + 1..] {
-                    ctx.draw(&canvas::Line {
-                        x1: s1.coords.1,
-                        y1: s1.coords.0,
-                        y2: s2.coords.0,
-                        x2: s2.coords.1,
-                        color: Color::Yellow,
-                    });
-                }
-            }
-            for server in &app.servers {
-                let color = if server.status == "Up" {
-                    Color::LightGreen
-                } else {
-                    Color::Red
-                };
-                ctx.print(
-                    server.coords.1,
-                    server.coords.0,
-                    Span::styled("X", Style::default().fg(color)),
-                );
-            }
-        })
-        .marker(if app.enhanced_graphics {
-            symbols::Marker::Braille
-        } else {
-            symbols::Marker::Dot
-        })
-        .x_bounds([-180.0, 180.0])
-        .y_bounds([-90.0, 90.0]);
-    frame.render_widget(map, chunks[1]);
-}
-
-fn draw_third_tab(frame: &mut Frame, _app: &mut App, area: Rect) {
-    let chunks = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).split(area);
-    let colors = [
-        Color::Reset,
-        Color::Black,
-        Color::Red,
-        Color::Green,
-        Color::Yellow,
-        Color::Blue,
-        Color::LightMagenta,
-        Color::Cyan,
-        Color::Gray,
-        Color::DarkGray,
-        Color::LightRed,
-        Color::LightGreen,
-        Color::LightYellow,
-        Color::LightBlue,
-        Color::LightMagenta,
-        Color::LightCyan,
-        Color::White,
-    ];
-    let items: Vec<Row> = colors
-        .iter()
-        .map(|c| {
-            let cells = vec![
-                Cell::from(Span::raw(format!("{c:?}: "))),
-                Cell::from(Span::styled("Foreground", Style::default().fg(*c))),
-                Cell::from(Span::styled("Background", Style::default().bg(*c))),
-            ];
-            Row::new(cells)
-        })
-        .collect();
-    let table = Table::new(
-        items,
-        [
-            Constraint::Ratio(1, 3),
-            Constraint::Ratio(1, 3),
-            Constraint::Ratio(1, 3),
-        ],
-    )
-    .block(Block::bordered().title("Colors"));
-    frame.render_widget(table, chunks[0]);
 }

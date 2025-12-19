@@ -1,15 +1,15 @@
-use std::io;
-use std::fmt;
-use std::convert::TryFrom;
-use web_sys::{window, Url};
+use crate::fps;
+use crate::utils::inject_backend_footer;
 use ratzilla::backend::canvas::CanvasBackendOptions;
 use ratzilla::backend::dom::DomBackendOptions;
 use ratzilla::backend::webgl2::WebGl2BackendOptions;
-use ratzilla::{CanvasBackend, DomBackend, WebGl2Backend};
-use ratzilla::ratatui::{Terminal, TerminalOptions};
 use ratzilla::ratatui::backend::Backend;
-use crate::fps;
-use crate::utils::inject_backend_footer;
+use ratzilla::ratatui::{Terminal, TerminalOptions};
+use ratzilla::{CanvasBackend, DomBackend, WebGl2Backend};
+use std::convert::TryFrom;
+use std::fmt;
+use std::io;
+use web_sys::{window, Url};
 
 /// Available backend types
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -39,7 +39,9 @@ impl TryFrom<String> for BackendType {
             "dom" => Ok(BackendType::Dom),
             "canvas" => Ok(BackendType::Canvas),
             "webgl2" => Ok(BackendType::WebGl2),
-            _ => Err(format!("Invalid backend type: '{s}'. Valid options are: dom, canvas, webgl2")),
+            _ => Err(format!(
+                "Invalid backend type: '{s}'. Valid options are: dom, canvas, webgl2"
+            )),
         }
     }
 }
@@ -51,13 +53,13 @@ impl fmt::Display for BackendType {
 }
 
 /// Enum wrapper for different Ratzilla backends that implements the Ratatui Backend trait.
-/// 
+///
 /// This enum allows switching between different rendering backends at runtime while
 /// providing a unified interface. All backend operations are delegated to the wrapped
 /// backend implementation.
-/// 
+///
 /// # Backends
-/// 
+///
 /// - `Dom`: HTML DOM-based rendering with accessibility features
 /// - `Canvas`: Canvas 2D API rendering with full Unicode support  
 /// - `WebGl2`: GPU-accelerated rendering using WebGL2 and beamterm-renderer
@@ -65,6 +67,12 @@ pub enum RatzillaBackend {
     Dom(DomBackend),
     Canvas(CanvasBackend),
     WebGl2(WebGl2Backend),
+}
+
+impl From<WebGl2Backend> for RatzillaBackend {
+    fn from(backend: WebGl2Backend) -> Self {
+        RatzillaBackend::WebGl2(backend)
+    }
 }
 
 impl RatzillaBackend {
@@ -177,7 +185,7 @@ pub struct FpsTrackingBackend {
 
 impl FpsTrackingBackend {
     /// Create a new FPS tracking backend that wraps the given backend.
-    /// 
+    ///
     /// Frame timing will be recorded automatically on each successful flush operation.
     pub fn new(backend: RatzillaBackend) -> Self {
         Self { inner: backend }
@@ -245,6 +253,35 @@ impl Backend for FpsTrackingBackend {
 
     fn window_size(&mut self) -> io::Result<ratzilla::ratatui::backend::WindowSize> {
         self.inner.window_size()
+    }
+}
+
+/// Builder for the [`WebGl2Backend`].
+#[derive(Debug, Default)]
+pub struct WebGl2BackendBuilder {
+    options: WebGl2BackendOptions,
+    terminal_options: TerminalOptions,
+}
+
+impl WebGl2BackendBuilder {
+    /// Sets the options for the [`WebGl2Backend`].
+    pub fn with_options(options: WebGl2BackendOptions) -> Self {
+        Self {
+            options,
+            ..Default::default()
+        }
+    }
+
+    pub fn terminal_options(mut self, options: TerminalOptions) -> Self {
+        self.terminal_options = options;
+        self
+    }
+
+    pub fn build_terminal(self) -> io::Result<Terminal<WebGl2Backend>> {
+        Ok(Terminal::with_options(
+            WebGl2Backend::new_with_options(self.options)?,
+            self.terminal_options,
+        )?)
     }
 }
 
@@ -383,7 +420,6 @@ impl MultiBackendBuilder {
 
         Ok(terminal)
     }
-
 }
 
 impl From<BackendType> for MultiBackendBuilder {

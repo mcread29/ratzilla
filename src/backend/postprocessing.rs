@@ -81,7 +81,21 @@ pub struct PostProcessing {
     width: i32,
     /// height.
     height: i32,
+    /// time.
+    start_time: Option<web_time::Instant>,
 }
+
+const UNIFORM_NAMES: [&str; 9] = [
+    "u_scene",
+    "u_time",
+    "u_resolution",
+    "u_curvature",
+    "u_scanline_strength",
+    "u_mask_strength",
+    "u_vignette_strength",
+    "u_aberration",
+    "u_bloom",
+];
 
 impl PostProcessing {
     /// Constructs a new [`PostProcessing`].
@@ -105,66 +119,16 @@ impl PostProcessing {
         let vao = Self::create_vao(gl)?;
 
         let mut uniform_map: HashMap<String, WebGlUniformLocation> = HashMap::new();
-        uniform_map.insert(
-            "u_scene".to_string(),
-            gl.get_uniform_location(program.as_ref(), "u_scene").ok_or(
-                Error::UnableToRetrieveElementById("Failed to get uniform location".to_string()),
-            )?,
-        );
-        uniform_map.insert(
-            "u_time".to_string(),
-            gl.get_uniform_location(program.as_ref(), "u_time").ok_or(
-                Error::UnableToRetrieveElementById("Failed to get uniform location".to_string()),
-            )?,
-        );
-        uniform_map.insert(
-            "u_resolution".to_string(),
-            gl.get_uniform_location(program.as_ref(), "u_resolution")
-                .ok_or(Error::UnableToRetrieveElementById(
-                    "Failed to get uniform location".to_string(),
-                ))?,
-        );
-        uniform_map.insert(
-            "u_curvature".to_string(),
-            gl.get_uniform_location(program.as_ref(), "u_curvature")
-                .ok_or(Error::UnableToRetrieveElementById(
-                    "Failed to get uniform location".to_string(),
-                ))?,
-        );
-        uniform_map.insert(
-            "u_scanline_strength".to_string(),
-            gl.get_uniform_location(program.as_ref(), "u_scanline_strength")
-                .ok_or(Error::UnableToRetrieveElementById(
-                    "Failed to get uniform location".to_string(),
-                ))?,
-        );
-        uniform_map.insert(
-            "u_mask_strength".to_string(),
-            gl.get_uniform_location(program.as_ref(), "u_mask_strength")
-                .ok_or(Error::UnableToRetrieveElementById(
-                    "Failed to get uniform location".to_string(),
-                ))?,
-        );
-        uniform_map.insert(
-            "u_vignette_strength".to_string(),
-            gl.get_uniform_location(program.as_ref(), "u_vignette_strength")
-                .ok_or(Error::UnableToRetrieveElementById(
-                    "Failed to get uniform location".to_string(),
-                ))?,
-        );
-        uniform_map.insert(
-            "u_aberration".to_string(),
-            gl.get_uniform_location(program.as_ref(), "u_aberration")
-                .ok_or(Error::UnableToRetrieveElementById(
-                    "Failed to get uniform location".to_string(),
-                ))?,
-        );
-        uniform_map.insert(
-            "u_bloom".to_string(),
-            gl.get_uniform_location(program.as_ref(), "u_bloom").ok_or(
-                Error::UnableToRetrieveElementById("Failed to get uniform location".to_string()),
-            )?,
-        );
+        for uniform_name in UNIFORM_NAMES {
+            uniform_map.insert(
+                uniform_name.to_string(),
+                gl.get_uniform_location(program.as_ref(), uniform_name)
+                    .ok_or(Error::UnableToRetrieveElementById(format!(
+                        "Failed to get uniform location for {}",
+                        uniform_name
+                    )))?,
+            );
+        }
 
         Ok(Self {
             frame_buffer: Some(frame_buffer),
@@ -174,6 +138,7 @@ impl PostProcessing {
             uniform_map,
             width: 0,
             height: 0,
+            start_time: Some(web_time::Instant::now()),
         })
     }
 
@@ -373,49 +338,22 @@ impl PostProcessing {
             self.width as f32,
             self.height as f32,
         );
-        // set u_time to 0 for now (scanlines will be static)
-        gl.uniform1f(self.uniform_map.get("u_time"), 0.0);
 
-        gl.uniform1f(self.uniform_map.get("u_curvature"), 0.12);
-        gl.uniform1f(self.uniform_map.get("u_scanline_strength"), 0.55);
-        gl.uniform1f(self.uniform_map.get("u_mask_strength"), 0.35);
-        gl.uniform1f(self.uniform_map.get("u_vignette_strength"), 0.35);
-        gl.uniform1f(self.uniform_map.get("u_aberration"), 1.25);
-        gl.uniform1f(self.uniform_map.get("u_bloom"), 0.12);
+        let now = web_time::Instant::now();
+        let elapsed = now.duration_since(self.start_time.unwrap()).as_secs_f32();
+        gl.uniform1f(self.uniform_map.get("u_time"), elapsed);
+
+        gl.uniform1f(self.uniform_map.get("u_curvature"), 0.025);
+        gl.uniform1f(self.uniform_map.get("u_scanline_strength"), 0.9);
+        gl.uniform1f(self.uniform_map.get("u_mask_strength"), 0.9);
+        gl.uniform1f(self.uniform_map.get("u_vignette_strength"), 0.45);
+        gl.uniform1f(self.uniform_map.get("u_aberration"), 0.9);
+        gl.uniform1f(self.uniform_map.get("u_bloom"), 0.8);
 
         gl.draw_arrays(WebGl2RenderingContext::TRIANGLES, 0, 3);
 
         gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, None);
         gl.bind_vertex_array(None);
         gl.use_program(None);
-    }
-
-    /// Copies the current default framebuffer content to our texture.
-    pub fn copy_from_default_framebuffer(
-        &self,
-        gl: &WebGl2RenderingContext,
-        width: i32,
-        height: i32,
-    ) -> Result<(), Error> {
-        let texture = self
-            .texture
-            .as_ref()
-            .ok_or(Error::UnableToRetrieveElementById(
-                "Texture not found".to_string(),
-            ))?;
-        gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(texture));
-        // use copy_tex_sub_image_2d (matches TypeScript reference)
-        gl.copy_tex_sub_image_2d(
-            WebGl2RenderingContext::TEXTURE_2D,
-            0,
-            0,
-            0,
-            0,
-            0,
-            width,
-            height,
-        );
-        gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, None);
-        Ok(())
     }
 }

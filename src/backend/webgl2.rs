@@ -9,6 +9,7 @@ use beamterm_renderer::{
 };
 use bitvec::prelude::BitVec;
 use compact_str::CompactString;
+
 use ratatui::{
     backend::WindowSize,
     buffer::Cell,
@@ -393,11 +394,10 @@ impl WebGl2Backend {
         // If enabled, measures the time taken to synchronize the terminal buffer.
         self.measure_begin(SYNC_TERMINAL_BUFFER_MARK);
 
-        let w = self.beamterm.terminal_size().0 as usize;
-
         // If hyperlink support is enabled, we need to track which cells are hyperlinks,
         // before passing the content to the beamterm renderer.
         if let Some(hyperlink_cells) = self.hyperlink_cells.as_mut() {
+            let w = self.beamterm.terminal_size().0 as usize;
             let mut hyperlink_cells = hyperlink_cells.borrow_mut();
 
             // Mark any cells that have the hyperlink modifier set (don't blink!).
@@ -412,8 +412,7 @@ impl WebGl2Backend {
 
             self.beamterm.update_cells_by_position(cells)
         } else {
-            let cells = content.inspect(|(x, y, c)| {});
-            let cells = cells.map(|(x, y, cell)| (x, y, cell_data(cell)));
+            let cells = content.map(|(x, y, cell)| (x, y, cell_data(cell)));
             self.beamterm.update_cells_by_position(cells)
         }
         .map_err(Error::from)?;
@@ -642,31 +641,13 @@ impl Backend for WebGl2Backend {
 
         if self.options.post_processing && self.post_processing.is_some() {
             let (width, height) = self.beamterm.canvas_size();
-            // don't bind our framebuffer - we'll render to default and copy
-            // just ensure the texture is resized
-            self.post_processing.as_mut().unwrap().resize(
+            self.post_processing.as_mut().unwrap().setup_scene(
                 &self.beamterm.gl(),
                 width as i32,
                 height as i32,
             )?;
 
-            // render to default framebuffer first, then copy to our texture
-            // beamterm likely renders to the default framebuffer (canvas)
-            self.beamterm
-                .gl()
-                .bind_framebuffer(web_sys::WebGl2RenderingContext::FRAMEBUFFER, None);
-
-            // ensure viewport matches canvas size
-            self.beamterm
-                .gl()
-                .viewport(0, 0, width as i32, height as i32);
             self.beamterm.render_frame().map_err(Error::from)?;
-
-            // copy from default framebuffer to our texture
-            self.post_processing
-                .as_mut()
-                .unwrap()
-                .copy_from_default_framebuffer(&self.beamterm.gl(), width as i32, height as i32)?;
 
             self.toggle_cursor(); // restore cell to previous state
 
@@ -818,7 +799,6 @@ fn find_hyperlink_bounds(
 }
 
 /// Resolves foreground and background colors for a [`Cell`].
-/// Note: Blinking is handled separately in flush() for continuous updates.
 fn resolve_fg_bg_colors(cell: &Cell) -> (u32, u32) {
     let mut fg = to_rgb(cell.fg, 0xffffff);
     let mut bg = to_rgb(cell.bg, 0x000000);
