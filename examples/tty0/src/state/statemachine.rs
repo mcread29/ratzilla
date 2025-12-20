@@ -18,14 +18,30 @@ pub trait StateActions {
     // fn new(state_machine: &'a mut StateMachine) -> Self
     // where
     //     Self: Sized;
-    fn can_enter_state(&self) -> Result<bool, StateMachineError>;
-    fn enter_state(&self) -> Result<(), StateMachineError>;
-    fn should_exit_state(&self) -> Result<&str, StateMachineError>;
-    fn can_exit_state(&self) -> Result<bool, StateMachineError>;
-    fn exit_state(&self) -> Result<(), StateMachineError>;
-    fn update_state(&mut self, elapsed: Duration) -> Result<(), StateMachineError>;
-    fn render_state(&self, frame: &mut Frame);
-    fn key_press(&mut self, key: KeyCode) -> Result<(), StateMachineError>;
+    fn can_enter_state(&self) -> Result<bool, StateMachineError> {
+        Ok(true)
+    }
+    fn enter_state(&self) -> Result<(), StateMachineError> {
+        Ok(())
+    }
+    fn should_exit_state(&self) -> Result<&str, StateMachineError> {
+        Ok("")
+    }
+    fn can_exit_state(&self) -> Result<bool, StateMachineError> {
+        Ok(false)
+    }
+    fn exit_state(&self) -> Result<(), StateMachineError> {
+        Ok(())
+    }
+    fn update_state(&mut self, _elapsed: Duration) -> Result<(), StateMachineError> {
+        Ok(())
+    }
+    fn render_state(&mut self, _frame: &mut Frame) {
+        // do nothing
+    }
+    fn key_press(&mut self, _key: KeyCode) -> Result<(), StateMachineError> {
+        Ok(())
+    }
 }
 
 pub struct StateMachine {

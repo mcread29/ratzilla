@@ -16,6 +16,7 @@ use ratzilla::WebRenderer;
 
 mod app;
 mod introstate;
+mod logo_text;
 mod state;
 
 fn main() -> Result<()> {
