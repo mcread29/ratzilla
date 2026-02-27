@@ -2,6 +2,7 @@ use crate::{
     backend::{
         color::to_rgb,
         event_callback::{EventCallback, KEY_EVENT_TYPES},
+        hooks::{run_post_render_hooks, run_pre_render_hooks, BackendKind, RenderHookContext},
         utils::*,
     },
     error::Error,
@@ -14,7 +15,6 @@ use beamterm_renderer::{
     mouse::*, CellData, CursorPosition, GlyphEffect, Terminal as Beamterm, Terminal,
 };
 use compact_str::CompactString;
-use glow;
 use ratatui::{
     backend::{ClearType, WindowSize},
     buffer::Cell,
@@ -24,12 +24,13 @@ use ratatui::{
 };
 use std::{
     cell::RefCell,
-    fmt,
     io::{Error as IoError, Result as IoResult},
     mem::swap,
     rc::Rc,
 };
 use web_sys::{wasm_bindgen::JsCast, window, Element};
+
+pub use crate::backend::hooks::{RenderHook, RenderHookHandle};
 
 /// Re-export beamterm's atlas data type. Used by [`FontAtlasConfig::Static`].
 pub use beamterm_renderer::FontAtlasData;
@@ -67,53 +68,6 @@ struct PendingHyperlinkEvent {
 // Labels used by the Performance API
 const SYNC_TERMINAL_BUFFER_MARK: &str = "sync-terminal-buffer";
 const WEBGL_RENDER_MARK: &str = "webgl-render";
-
-/// Hook trait for custom rendering steps around the main WebGL frame render.
-pub trait RenderHook {
-    /// Called before [`Beamterm::render_frame`] to set up custom render state.
-    fn pre_render(
-        &mut self,
-        _gl: &glow::Context,
-        _canvas_width: i32,
-        _canvas_height: i32,
-    ) -> Result<(), Error> {
-        Ok(())
-    }
-
-    /// Called after [`Beamterm::render_frame`] to perform custom post processing.
-    fn post_render(
-        &mut self,
-        _gl: &glow::Context,
-        _canvas_width: i32,
-        _canvas_height: i32,
-    ) -> Result<(), Error> {
-        Ok(())
-    }
-}
-
-/// Shared render hook handle for [`WebGl2BackendOptions`].
-#[derive(Clone)]
-pub struct RenderHookHandle {
-    hook: Rc<RefCell<dyn RenderHook>>,
-}
-
-impl RenderHookHandle {
-    /// Wraps a render hook for use with [`WebGl2BackendOptions`].
-    pub fn new<H>(hook: H) -> Self
-    where
-        H: RenderHook + 'static,
-    {
-        Self {
-            hook: Rc::new(RefCell::new(hook)),
-        }
-    }
-}
-
-impl fmt::Debug for RenderHookHandle {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("RenderHookHandle(..)")
-    }
-}
 
 /// Options for the [`WebGl2Backend`].
 #[derive(Default, Debug)]
@@ -590,14 +544,9 @@ impl WebGl2Backend {
 
         let gl = self.beamterm.gl();
         let (canvas_width, canvas_height) = self.beamterm.canvas_size();
-
-        for hook in &self.render_hooks {
-            hook.hook
-                .borrow_mut()
-                .pre_render(&gl, canvas_width, canvas_height)?;
-        }
-
-        Ok(())
+        let context = RenderHookContext::new(BackendKind::WebGl2, canvas_width, canvas_height)
+            .with_webgl_context(&gl);
+        run_pre_render_hooks(&self.render_hooks, context)
     }
 
     fn run_post_render_hooks(&mut self) -> Result<(), Error> {
@@ -607,14 +556,9 @@ impl WebGl2Backend {
 
         let gl = self.beamterm.gl();
         let (canvas_width, canvas_height) = self.beamterm.canvas_size();
-
-        for hook in &self.render_hooks {
-            hook.hook
-                .borrow_mut()
-                .post_render(&gl, canvas_width, canvas_height)?;
-        }
-
-        Ok(())
+        let context = RenderHookContext::new(BackendKind::WebGl2, canvas_width, canvas_height)
+            .with_webgl_context(&gl);
+        run_post_render_hooks(&self.render_hooks, context)
     }
 
     /// Draws the cursor at the specified position.

@@ -47,7 +47,6 @@ thiserror = "2.0.18"
 bitvec = { version = "1.0.1", default-features = false, features = ["alloc", "std"] }
 beamterm-renderer = "0.16.0"
 glow = "0.16"
-web-time = "1.1.0"
 unicode-width = "0.2.2"
 
 [dev-dependencies]

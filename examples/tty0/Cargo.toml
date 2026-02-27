@@ -10,3 +10,4 @@ examples-shared.workspace = true
 tachyonfx.workspace = true
 web-time.workspace = true
 thiserror = "2.0.18"
+glow = "0.16"

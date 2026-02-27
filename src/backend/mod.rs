@@ -70,8 +70,8 @@ pub mod dom;
 /// WebGL2 backend.
 pub mod webgl2;
 
-/// WebGL postprocessing helpers.
-pub mod postprocessing;
+/// Shared backend render hooks.
+pub mod hooks;
 
 /// Color handling.
 mod color;
@@ -79,8 +79,6 @@ mod color;
 pub(super) mod event_callback;
 /// Backend utilities.
 pub(crate) mod utils;
-/// WebGL shader sources used by backend helpers.
-mod shaders;
 
 /// Cursor shapes.
 pub mod cursor;

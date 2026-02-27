@@ -19,6 +19,10 @@ use crate::{
         event_callback::{
             create_mouse_event, EventCallback, MouseConfig, KEY_EVENT_TYPES, MOUSE_EVENT_TYPES,
         },
+        hooks::{
+            run_post_render_hooks, run_pre_render_hooks, BackendKind, RenderHook,
+            RenderHookContext, RenderHookHandle,
+        },
         utils::*,
     },
     error::Error,
@@ -37,6 +41,8 @@ pub struct DomBackendOptions {
     grid_id: Option<String>,
     /// The cursor shape.
     cursor_shape: CursorShape,
+    /// Hooks called before and after backend flush.
+    render_hooks: Vec<RenderHookHandle>,
 }
 
 impl DomBackendOptions {
@@ -45,6 +51,7 @@ impl DomBackendOptions {
         Self {
             grid_id,
             cursor_shape,
+            render_hooks: Vec::new(),
         }
     }
 
@@ -63,6 +70,20 @@ impl DomBackendOptions {
     /// Returns the [`CursorShape`].
     pub fn cursor_shape(&self) -> &CursorShape {
         &self.cursor_shape
+    }
+
+    /// Adds a render hook executed around each backend flush.
+    pub fn add_render_hook(&mut self, hook: RenderHookHandle) {
+        self.render_hooks.push(hook);
+    }
+
+    /// Adds a render hook executed around each backend flush.
+    pub fn with_render_hook<H>(mut self, hook: H) -> Self
+    where
+        H: RenderHook + 'static,
+    {
+        self.add_render_hook(RenderHookHandle::new(hook));
+        self
     }
 }
 
@@ -99,6 +120,8 @@ pub struct DomBackend {
     mouse_callback: Option<DomMouseCallbackState>,
     /// Key event callback handler.
     key_callback: Option<EventCallback<web_sys::KeyboardEvent>>,
+    /// Hooks called before and after backend flush.
+    render_hooks: Vec<RenderHookHandle>,
 }
 
 /// Type alias for mouse event callback state.
@@ -140,7 +163,7 @@ impl DomBackend {
     }
 
     /// Constructs a new [`DomBackend`] with the given options.
-    pub fn new_with_options(options: DomBackendOptions) -> Result<Self, Error> {
+    pub fn new_with_options(mut options: DomBackendOptions) -> Result<Self, Error> {
         let window = window().ok_or(Error::UnableToRetrieveWindow)?;
         let document = window.document().ok_or(Error::UnableToRetrieveDocument)?;
         let grid_parent = get_element_by_id_or_body(options.grid_id.as_ref())?;
@@ -158,6 +181,8 @@ impl DomBackend {
             },
         )?;
 
+        let render_hooks = std::mem::take(&mut options.render_hooks);
+
         let mut backend = Self {
             initialized,
             cells: vec![],
@@ -172,6 +197,7 @@ impl DomBackend {
             _resize_callback: resize_callback,
             mouse_callback: None,
             key_callback: None,
+            render_hooks,
         };
         backend.reset_grid()?;
         Ok(backend)
@@ -332,6 +358,12 @@ impl Backend for DomBackend {
     /// This function does nothing because the content is directly
     /// displayed by the draw function.
     fn flush(&mut self) -> IoResult<()> {
+        let rect = self.grid_parent.get_bounding_client_rect();
+        let context =
+            RenderHookContext::new(BackendKind::Dom, rect.width() as i32, rect.height() as i32);
+
+        run_pre_render_hooks(&self.render_hooks, context)?;
+        run_post_render_hooks(&self.render_hooks, context)?;
         Ok(())
     }
 

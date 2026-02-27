@@ -8,6 +8,10 @@ use crate::{
         event_callback::{
             create_mouse_event, EventCallback, MouseConfig, KEY_EVENT_TYPES, MOUSE_EVENT_TYPES,
         },
+        hooks::{
+            run_post_render_hooks, run_pre_render_hooks, BackendKind, RenderHook,
+            RenderHookContext, RenderHookHandle,
+        },
         utils::*,
     },
     error::Error,
@@ -51,6 +55,8 @@ pub struct CanvasBackendOptions {
     /// this option may cause some performance issues when dealing with large
     /// numbers of simultaneous changes.
     always_clip_cells: bool,
+    /// Hooks called before and after backend flush.
+    render_hooks: Vec<RenderHookHandle>,
 }
 
 impl CanvasBackendOptions {
@@ -69,6 +75,20 @@ impl CanvasBackendOptions {
     pub fn size(mut self, size: (u32, u32)) -> Self {
         self.size = Some(size);
         self
+    }
+
+    /// Adds a render hook executed around each backend flush.
+    pub fn add_render_hook(mut self, hook: RenderHookHandle) -> Self {
+        self.render_hooks.push(hook);
+        self
+    }
+
+    /// Adds a render hook executed around each backend flush.
+    pub fn with_render_hook<H>(self, hook: H) -> Self
+    where
+        H: RenderHook + 'static,
+    {
+        self.add_render_hook(RenderHookHandle::new(hook))
     }
 }
 
@@ -145,6 +165,8 @@ pub struct CanvasBackend {
     mouse_callback: Option<MouseCallbackState>,
     /// Key event callback handler.
     key_callback: Option<EventCallback<web_sys::KeyboardEvent>>,
+    /// Hooks called before and after backend flush.
+    render_hooks: Vec<RenderHookHandle>,
 }
 
 /// Type alias for mouse event callback state.
@@ -166,7 +188,7 @@ impl CanvasBackend {
     }
 
     /// Constructs a new [`CanvasBackend`] with the given options.
-    pub fn new_with_options(options: CanvasBackendOptions) -> Result<Self, Error> {
+    pub fn new_with_options(mut options: CanvasBackendOptions) -> Result<Self, Error> {
         // Parent element of canvas (uses <body> unless specified)
         let parent = get_element_by_id_or_body(options.grid_id.as_ref())?;
 
@@ -177,6 +199,7 @@ impl CanvasBackend {
         let canvas = Canvas::new(parent, width, height, Color::Black)?;
         let buffer = get_sized_buffer_from_canvas(&canvas.inner);
         let changed_cells = bitvec![0; buffer.len() * buffer[0].len()];
+        let render_hooks = std::mem::take(&mut options.render_hooks);
         Ok(Self {
             prev_buffer: buffer.clone(),
             always_clip_cells: options.always_clip_cells,
@@ -189,6 +212,7 @@ impl CanvasBackend {
             debug_mode: None,
             mouse_callback: None,
             key_callback: None,
+            render_hooks,
         })
     }
 
@@ -473,11 +497,20 @@ impl Backend for CanvasBackend {
     /// This function is called after the [`CanvasBackend::draw`] function to
     /// actually render the content to the screen.
     fn flush(&mut self) -> IoResult<()> {
+        let context = RenderHookContext::new(
+            BackendKind::Canvas,
+            self.canvas.inner.client_width(),
+            self.canvas.inner.client_height(),
+        );
+
+        run_pre_render_hooks(&self.render_hooks, context)?;
+
         // Only runs once.
         if !self.initialized {
             self.update_grid(true)?;
             self.prev_buffer = self.buffer.clone();
             self.initialized = true;
+            run_post_render_hooks(&self.render_hooks, context)?;
             return Ok(());
         }
 
@@ -486,6 +519,8 @@ impl Backend for CanvasBackend {
         }
 
         self.prev_buffer = self.buffer.clone();
+
+        run_post_render_hooks(&self.render_hooks, context)?;
 
         Ok(())
     }

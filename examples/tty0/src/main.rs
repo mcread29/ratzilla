@@ -2,7 +2,7 @@ use std::{cell::RefCell, io, rc::Rc};
 
 use examples_shared::backend::{BackendType, MultiBackendBuilder};
 use ratzilla::{
-    backend::{postprocessing::PostProcessing, webgl2::WebGl2BackendOptions},
+    backend::webgl2::WebGl2BackendOptions,
     event::KeyCode,
     CursorShape, WebRenderer,
 };
@@ -10,9 +10,12 @@ use ratzilla::{
 mod app;
 mod introstate;
 mod logo_text;
+mod postprocessing;
+mod shaders;
 mod state;
 
 use app::App;
+use postprocessing::PostProcessing;
 
 fn main() -> io::Result<()> {
     let app_state = Rc::new(RefCell::new(App::new()));

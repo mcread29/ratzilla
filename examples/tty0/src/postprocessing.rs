@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
 use glow::{self, HasContext, PixelUnpackData};
-
-use crate::backend::{
-    shaders::{FRAGMENT_SHADER_SOURCE, VERTEX_SHADER_SOURCE},
-    webgl2::RenderHook,
+use ratzilla::{
+    backend::hooks::{RenderHook, RenderHookContext},
+    error::Error,
 };
-use crate::error::Error;
+
+use crate::shaders::{FRAGMENT_SHADER_SOURCE, VERTEX_SHADER_SOURCE};
 
 struct PostProcessingShaderOptions {
     vertex_shader_source: String,
@@ -66,7 +66,6 @@ fn create_shader(
 }
 
 #[derive(Default)]
-/// Post-processing render hook that applies a CRT shader pass.
 pub struct PostProcessing {
     frame_buffer: Option<glow::Framebuffer>,
     texture: Option<glow::Texture>,
@@ -342,22 +341,20 @@ impl PostProcessing {
 }
 
 impl RenderHook for PostProcessing {
-    fn pre_render(
-        &mut self,
-        gl: &glow::Context,
-        canvas_width: i32,
-        canvas_height: i32,
-    ) -> Result<(), Error> {
+    fn pre_render(&mut self, context: &RenderHookContext<'_>) -> Result<(), Error> {
+        let gl = context.webgl_context().ok_or_else(|| {
+            Error::UnableToRetrieveElementById("WebGL context unavailable".into())
+        })?;
+        let (canvas_width, canvas_height) = context.canvas_size();
         self.ensure_initialized(gl)?;
         self.setup_scene(gl, canvas_width, canvas_height)
     }
 
-    fn post_render(
-        &mut self,
-        gl: &glow::Context,
-        canvas_width: i32,
-        canvas_height: i32,
-    ) -> Result<(), Error> {
+    fn post_render(&mut self, context: &RenderHookContext<'_>) -> Result<(), Error> {
+        let gl = context.webgl_context().ok_or_else(|| {
+            Error::UnableToRetrieveElementById("WebGL context unavailable".into())
+        })?;
+        let (canvas_width, canvas_height) = context.canvas_size();
         self.ensure_initialized(gl)?;
         self.present_scene(gl, canvas_width, canvas_height);
         Ok(())
