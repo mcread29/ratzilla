@@ -13,6 +13,7 @@ members = [
     "shared",
     "tauri",
     "text_area",
+    "tty0",
     "user_input",
     "unicode",
     "website",
