@@ -9,7 +9,6 @@ use thiserror::Error;
 pub enum StateId {
     Intro,
     Archive,
-    Record,
     Terminal,
 }
 

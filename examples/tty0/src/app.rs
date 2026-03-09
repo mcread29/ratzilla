@@ -1,10 +1,9 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
-    archive::ARCHIVE,
+    archive::ArchiveLoader,
     archive_state::ArchiveState,
     introstate::IntroState,
-    record_state::RecordState,
     session::SessionModel,
     state::{StateId, StateMachine},
     terminal_state::TerminalState,
@@ -18,12 +17,14 @@ pub struct App {
 
 impl App {
     pub fn new() -> Self {
-        let session = Rc::new(RefCell::new(SessionModel::new(ARCHIVE.len())));
+        let archive = Rc::new(
+            ArchiveLoader::load_embedded().expect("tty0 embedded archive must load successfully"),
+        );
+        let session = Rc::new(RefCell::new(SessionModel::new(archive)));
 
         let mut states = HashMap::new();
         states.insert(StateId::Intro, IntroState::create(Rc::clone(&session)));
         states.insert(StateId::Archive, ArchiveState::create(Rc::clone(&session)));
-        states.insert(StateId::Record, RecordState::create(Rc::clone(&session)));
         states.insert(StateId::Terminal, TerminalState::create(session));
 
         let mut state_machine = StateMachine::new(states, StateId::Intro);

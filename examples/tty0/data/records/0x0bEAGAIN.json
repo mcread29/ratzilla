@@ -1,0 +1,97 @@
+{
+  "id": "0x0bEAGAIN",
+  "category_id": "collapse_vectors",
+  "kind": "analysis",
+  "title": "Resource Temporarily Unavailable",
+  "subtitle": "adaptation loop / coastal response model",
+  "timeline": "SOL-2366-P",
+  "recovered_source": "Policy simulator / municipal adaptation forecast",
+  "collapse_vector": "Perpetual deferral of necessary sacrifice",
+  "signal_integrity": "78.9%",
+  "access_level": "readable",
+  "status_label": "RECOVERED",
+  "tags": ["policy", "delay", "adaptation", "coast"],
+  "related_record_ids": ["0x10EBUSY", "0x30ELNRNG"],
+  "overview": {
+    "summary": "A collapse vector showing how every obvious corrective action was delayed because the culture assumed the window would reopen later.",
+    "thesis": "Deferral became a budget strategy, then a civilizational identity, then a death schedule.",
+    "viewer_hint": "The timeline page is the best way to watch 'later' harden into policy.",
+    "content_warning": "climate harm, policy abandonment",
+    "status_callout": "Readable analysis. Media surface corrupted."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Synopsis",
+        "body": "The simulator repeats the same answer across decades. Storage will come later. Retreat will come later. Rationing will come later. The archive marks the repetition as the real model output, not as a rhetorical flourish.",
+        "emphasis": "later as governing unit"
+      },
+      {
+        "title": "Policy behavior",
+        "body": "Each new impact justified waiting because previous delays had already raised the cost of acting. Leaders kept choosing the option that preserved present legitimacy at the expense of any future that still required legitimacy to arrive.",
+        "emphasis": "delay fed on itself"
+      },
+      {
+        "title": "Recovered excerpt",
+        "body": "Resource temporarily unavailable. Storage later. Retreat later. Rationing later. The language remained procedural enough to pass as planning, even after planning had become a way to postpone admitting that the window was gone.",
+        "emphasis": "planning became postponement"
+      },
+      {
+        "title": "Interpretation",
+        "body": "Unlike overt denial systems, this model captures cultures that accept the danger and still refuse the cost of behaving as if danger is true. The archive treats that gap as one of the most common collapse vectors it sees.",
+        "emphasis": "belief without sacrifice"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "First adaptation package",
+        "timestamp_text": "year 0",
+        "body": "Municipal planners propose staged retreat and storage buildout."
+      },
+      {
+        "label": "Budget deferment",
+        "timestamp_text": "year 4",
+        "body": "Visible risks are acknowledged but hard costs are postponed to preserve political stability."
+      },
+      {
+        "label": "Serial emergency",
+        "timestamp_text": "year 11",
+        "body": "Repeated shocks make every corrective option more expensive and therefore easier to delay again."
+      },
+      {
+        "label": "Window closure",
+        "timestamp_text": "year 19",
+        "body": "The archive marks the system as locked into permanent later."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "analysis dossier / policy deferral loop",
+    "source_chain": ["policy simulator", "adaptation forecast", "municipal budget traces"],
+    "facts": [
+      { "label": "primary failure", "value": "timing" },
+      { "label": "policy posture", "value": "acknowledge, delay, repeat" },
+      { "label": "region type", "value": "coastal urban corridor" },
+      { "label": "archive confidence", "value": "high" },
+      { "label": "dominant phrase", "value": "later" },
+      { "label": "cost logic", "value": "present legitimacy over future survivability" },
+      { "label": "model output", "value": "window closure by recursion" },
+      { "label": "terminal relevance", "value": "policy branch explorer remains sealed" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": [
+      "later was their preferred unit of time because it cost nothing.",
+      "the invoice arrived only after they could no longer pay in choice."
+    ]
+  },
+  "media_page": {
+    "audio": null,
+    "artifact_note": "No playable transport survives for the simulator output; only text and matrix notes remain.",
+    "transcript_excerpt": "Resource temporarily unavailable. Later is a synonym for never.",
+    "waveform_mode": "corrupted",
+    "corruption_reason": "analysis artifact exposes no track"
+  }
+}

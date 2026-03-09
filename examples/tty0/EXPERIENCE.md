@@ -8,31 +8,21 @@ That keeps the TUI identity while avoiding the weakest version of terminal nosta
 
 ## Interface model
 
-The UI should feel like a curated incident browser built on top of a filesystem the user cannot fully access.
+The UI should feel like a curated record browser built on top of a filesystem the user cannot fully access.
 
 Recommended pane layout:
 
-- Left pane: archive index and record groups
-- Center pane: dossier, transcript, or selected track notes
+- Left pane: one archive index of recovered records
+- Center pane: selected record header, page tabs, and active record content
 - Right pane: metadata, signal integrity, corruption, timeline ID, playback state
 - Bottom status bar: navigation help, subsystem state, and subtle warnings
-
-Example sections for the left pane:
-
-- `incidents`
-- `witnesses`
-- `transmissions`
-- `collapse_vectors`
-- `signal_residue`
-- `tty0/private`
-- `unauthorized_tools`
 
 ## Screen flow
 
 1. Boot sequence
 2. Identity mismatch and session takeover
 3. Auto-mount archive
-4. Open incident browser by default
+4. Open record browser by default
 5. Permit record navigation and playback
 6. Show terminal subsystem as present but locked
 7. Unlock deeper access later through hidden conditions
@@ -44,8 +34,7 @@ This lets the terminal exist as a promise before it becomes a feature.
 The current example already has a boot-like intro and a state machine. A clean near-term structure would be:
 
 - `IntroState`: boot logs, decrypt progress, press-any-key handoff
-- `ArchiveState`: primary browser for incidents and tracks
-- `RecordState`: focused view for one incident or song
+- `ArchiveState`: primary record-first workstation for browsing incidents and tracks
 - `TerminalState`: hidden or locked state for later easter eggs
 
 ## Interaction language

@@ -1,0 +1,97 @@
+{
+  "id": "0x10EBUSY",
+  "category_id": "incidents",
+  "kind": "incident",
+  "title": "Device Or Resource Busy",
+  "subtitle": "infrastructure triage loop / wildfire corridor",
+  "timeline": "SOL-2338-R",
+  "recovered_source": "Emergency dispatch composite / civil grid report",
+  "collapse_vector": "Critical systems saturated past human response",
+  "signal_integrity": "76.2%",
+  "access_level": "readable",
+  "status_label": "RECOVERED",
+  "tags": ["fire", "dispatch", "triage", "grid"],
+  "related_record_ids": ["0x02ENOENT", "0x0bEAGAIN"],
+  "overview": {
+    "summary": "An incident record from a timeline where every available system remained technically online while permanent saturation made the idea of response meaningless.",
+    "thesis": "The collapse looks orderly until you notice that every orderly answer is a refusal produced by overload.",
+    "viewer_hint": "Use the timeline to watch how a temporary emergency becomes a standing operating condition.",
+    "content_warning": "wildfire, emergency failure, medical overload",
+    "status_callout": "Readable dossier. Playback surface corrupted."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Synopsis",
+        "body": "The corridor experienced overlapping wildfire fronts, rolling grid collapses, and hospital congestion. Nothing failed cleanly enough to trigger a single state of disaster. Instead every system kept answering while refusing real throughput.",
+        "emphasis": "saturation without outage"
+      },
+      {
+        "title": "Dispatch behavior",
+        "body": "Shelter buses, burn crews, cooling stations, and trauma centers all emitted the same truth-value. Busy. The archive notes that this was treated as reassuring because it sounded operational. The record argues the opposite: busy was the last polite word a system could say before it stopped distinguishing priorities.",
+        "emphasis": "busy became a death sentence"
+      },
+      {
+        "title": "Recovered excerpt",
+        "body": "One dispatcher says they stopped hearing place names and started hearing queue depth, battery loss, and travel-time penalties. By the end, callers were no longer asking for help at a location. They were asking whether any location still counted as reachable.",
+        "emphasis": "metrics replaced geography"
+      },
+      {
+        "title": "Interpretation",
+        "body": "The archive classifies this world as a saturation regime collapse. Human institutions did not lose command in a dramatic break. They learned to live inside impossible load until impossibility became the normal shape of work.",
+        "emphasis": "impossibility normalized"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "Grid instability",
+        "timestamp_text": "day 0",
+        "body": "Heat and smoke push the regional grid into controlled brownouts."
+      },
+      {
+        "label": "Medical backlog",
+        "timestamp_text": "day 5",
+        "body": "Trauma centers begin using hallway triage as the baseline rather than the emergency exception."
+      },
+      {
+        "label": "Dispatch recursion",
+        "timestamp_text": "day 11",
+        "body": "Response teams are redeployed so often that routing itself consumes the remaining planning capacity."
+      },
+      {
+        "label": "Corridor loss",
+        "timestamp_text": "day 19",
+        "body": "The region remains administratively active while every route of care has become too busy to function."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "incident dossier / saturation collapse",
+    "source_chain": ["dispatch composite", "regional hospital board", "civil grid report"],
+    "facts": [
+      { "label": "primary failure", "value": "response throughput" },
+      { "label": "fire corridor", "value": "multi-county" },
+      { "label": "grid posture", "value": "degraded but active" },
+      { "label": "medical posture", "value": "continuous overflow" },
+      { "label": "operator language", "value": "busy, retry, reroute" },
+      { "label": "archive confidence", "value": "high on dispatch sequence" },
+      { "label": "social effect", "value": "resilience theater" },
+      { "label": "terminal relevance", "value": "dispatch fanout maps remain sealed" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": [
+      "you called it resilience because nothing had time to stop.",
+      "their dashboards still moved, so they believed history was still obeying them."
+    ]
+  },
+  "media_page": {
+    "audio": null,
+    "artifact_note": "The archive only preserved status-band noise from dispatch repeaters, not a playable track.",
+    "transcript_excerpt": "Shelter route unavailable. Burn crew busy. Cooling station full. Please hold. Please reroute. Please retry somewhere that still exists.",
+    "waveform_mode": "corrupted",
+    "corruption_reason": "dispatch residue is incomplete and non-playable"
+  }
+}

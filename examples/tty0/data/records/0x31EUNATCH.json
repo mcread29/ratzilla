@@ -1,0 +1,97 @@
+{
+  "id": "0x31EUNATCH",
+  "category_id": "signal_residue",
+  "kind": "residue",
+  "title": "Boot echo residue",
+  "subtitle": "carrier afterimage / local machine bleed",
+  "timeline": "LOCAL-2127",
+  "recovered_source": "Unauthorized session memory",
+  "collapse_vector": "N/A",
+  "signal_integrity": "52.8%",
+  "access_level": "readable",
+  "status_label": "NOISY",
+  "tags": ["local", "boot", "takeover", "carrier"],
+  "related_record_ids": ["0x05EIO", "0x2dEL2NSYNC"],
+  "overview": {
+    "summary": "Residual fragments from the takeover event itself. The record suggests the archive is still negotiating with the host machine and rewriting labels around the user.",
+    "thesis": "The host noticed the signal only after the signal noticed the host.",
+    "viewer_hint": "Use the media page for corruption behavior and the timeline page for the takeover sequence.",
+    "content_warning": "identity disruption, hostile system behavior",
+    "status_callout": "Readable residue. Media surface corrupted."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Synopsis",
+        "body": "This residue object preserves the edges of the boot handoff that replaced the local user session with tty0's archive authority. The fragments are unstable enough that they read more like afterimages than logs.",
+        "emphasis": "host takeover residue"
+      },
+      {
+        "title": "Carrier note",
+        "body": "The archive can prove that labels changed before the operator understood why. Several fragments imply the UI vocabulary itself was being rewritten in place while the machine still believed it was executing an ordinary boot.",
+        "emphasis": "language changed first"
+      },
+      {
+        "title": "Recovered excerpt",
+        "body": "Account override. Session mismatch. Archive mount. The strings appear in memory before the local machine can account for where they came from.",
+        "emphasis": "foreign text preceded explanation"
+      },
+      {
+        "title": "Interpretation",
+        "body": "Unlike witness or incident records, residue objects document mechanism more than meaning. The point is not playback quality. The point is that the archive still leaves measurable abrasion on the host.",
+        "emphasis": "abrasion remains measurable"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "Signal arrival",
+        "timestamp_text": "pre-boot",
+        "body": "An unauthorized carrier binds to the host before the visible boot handoff begins."
+      },
+      {
+        "label": "Label rewrite",
+        "timestamp_text": "boot line 3",
+        "body": "Session and account identifiers are replaced with tty0-facing values."
+      },
+      {
+        "label": "Archive mount",
+        "timestamp_text": "boot line 8",
+        "body": "The workstation reports a mounted archive before any local authority grants it."
+      },
+      {
+        "label": "Operator exposure",
+        "timestamp_text": "handoff",
+        "body": "The reader becomes aware only after the archive has already chosen the interface terms."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "signal residue / local boot abrasion",
+    "source_chain": ["session memory scrape", "boot line afterimage", "archive diff note"],
+    "facts": [
+      { "label": "object type", "value": "residual local bleed" },
+      { "label": "host scope", "value": "single workstation" },
+      { "label": "readability", "value": "partial" },
+      { "label": "archive confidence", "value": "moderate" },
+      { "label": "primary effect", "value": "label substitution" },
+      { "label": "dominant trace", "value": "account override" },
+      { "label": "transport state", "value": "corrupted" },
+      { "label": "terminal relevance", "value": "residue diff tooling remains locked" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": [
+      "the host noticed the signal only after the signal noticed the host.",
+      "you call it a session because you need it to end."
+    ]
+  },
+  "media_page": {
+    "audio": null,
+    "artifact_note": "The residue only renders as a damaged signal preview. No playable transport is exposed in this build.",
+    "transcript_excerpt": "account override ....... tty0",
+    "waveform_mode": "corrupted",
+    "corruption_reason": "waveform preview only; no playable transport is mounted"
+  }
+}

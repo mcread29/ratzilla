@@ -10,10 +10,10 @@ use ratzilla::{
 mod app;
 mod archive;
 mod archive_state;
+mod audio;
 mod introstate;
 mod logo_text;
 mod postprocessing;
-mod record_state;
 mod session;
 mod shaders;
 mod state;

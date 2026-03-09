@@ -1,7 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    archive::ARCHIVE,
     session::SessionModel,
     state::{StateActions, StateId, StateMachineError},
 };
@@ -73,12 +72,12 @@ impl StateActions for TerminalState {
         .split(inner);
 
         let session = self.session.borrow();
-        let record = session.current_record(ARCHIVE);
+        let record = session.current_record();
         let header = Paragraph::new(vec![
             Line::from(Span::styled(
                 "TERMINAL ACCESS DENIED",
                 Style::default()
-                    .fg(Color::LightRed)
+                    .fg(Color::Rgb(240, 104, 96))
                     .add_modifier(Modifier::BOLD),
             )),
             Line::from("subsystem id // tty0.term.lock"),
@@ -98,10 +97,10 @@ impl StateActions for TerminalState {
             Line::from("No unlock logic is implemented in this build."),
             Line::from(""),
             Line::from(Span::styled(
-                "Current record hint",
+                "Current record",
                 Style::default().fg(Color::LightCyan),
             )),
-            Line::from(record.terminal_hint),
+            Line::from(format!("{} // {}", record.id, record.title)),
             Line::from(""),
             Line::from(Span::styled(
                 "Why it is visible",

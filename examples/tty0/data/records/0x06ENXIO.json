@@ -1,0 +1,59 @@
+{
+  "id": "0x06ENXIO",
+  "category_id": "unauthorized_tools",
+  "kind": "tooling",
+  "title": "No Such Device Or Address",
+  "subtitle": "routing utility / habitat maintenance target loss",
+  "timeline": "SOL-2381-V",
+  "recovered_source": "Operator toolkit residue / habitat service logs",
+  "collapse_vector": "Maintenance automation lost its subjects",
+  "signal_integrity": "69.0%",
+  "access_level": "sealed",
+  "status_label": "LOCKED",
+  "tags": ["maintenance", "routing", "habitat"],
+  "related_record_ids": ["0x0eEFAULT", "0x33EL2HLT"],
+  "overview": {
+    "summary": "A restricted tool record hinting at a maintenance suite that kept dispatching repairs to habitats already erased by storm surge and orbital debris.",
+    "thesis": "The tools remained precise after the world stopped matching them.",
+    "viewer_hint": "This record should reinforce the archive's habit of showing capability through denial.",
+    "content_warning": "infrastructure abandonment",
+    "status_callout": "Locked record. Media surface corrupted."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Manifest note",
+        "body": "Tool labels, target hashes, and denied execution markers are present. Runtime output remains sealed.",
+        "emphasis": "runtime denied"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "Target loss",
+        "timestamp_text": "service window",
+        "body": "Maintenance suite continues dispatching work to habitats already erased from reality on the ground."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "tool residue shell",
+    "source_chain": ["operator toolkit residue", "habitat service logs"],
+    "facts": [
+      { "label": "execution", "value": "denied" },
+      { "label": "primary failure", "value": "target mismatch" },
+      { "label": "reader authority", "value": "insufficient" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": ["the tools remained precise after the world stopped matching them.", "your machines kept faith with the map, not the living."]
+  },
+  "media_page": {
+    "audio": null,
+    "artifact_note": "Restricted tool residue exposes no playback transport.",
+    "transcript_excerpt": "Runtime output unavailable.",
+    "waveform_mode": "corrupted",
+    "corruption_reason": "tool residue exposes no transport"
+  }
+}

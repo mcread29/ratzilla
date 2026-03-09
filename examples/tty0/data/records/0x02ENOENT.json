@@ -1,0 +1,97 @@
+{
+  "id": "0x02ENOENT",
+  "category_id": "incidents",
+  "kind": "incident",
+  "title": "No Such World",
+  "subtitle": "missing evacuation directory / orbital census gap",
+  "timeline": "SOL-2412-N",
+  "recovered_source": "Orbital registry residue / evacuation ledger",
+  "collapse_vector": "Administrative disappearance of the displaced",
+  "signal_integrity": "84.0%",
+  "access_level": "readable",
+  "status_label": "RECOVERED",
+  "tags": ["migration", "administration", "climate", "erasure"],
+  "related_record_ids": ["0x10EBUSY", "0x0eEFAULT"],
+  "overview": {
+    "summary": "A collapse dossier from a world where millions of displaced people were functionally deleted from every system that could have routed care.",
+    "thesis": "The decisive violence happened in ledgers and indexes long before it became visible in camps or weather reports.",
+    "viewer_hint": "Read the dossier first, then compare its routing failures against the timeline and metadata pages.",
+    "content_warning": "displacement, abandonment, mass death",
+    "status_callout": "Readable dossier. Media surface remains corrupted."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Synopsis",
+        "body": "The record tracks a coordinated social failure in which evacuees remained physically present while every authoritative system began returning them as absent. Housing lists, intake portals, transit registries, and medical scheduling all converged on the same answer: no such world, no such subject, no such claim.",
+        "emphasis": "administrative disappearance"
+      },
+      {
+        "title": "Registry drift",
+        "body": "Early errors appeared as clerical mismatches between municipalities and orbital census mirrors. Operators assumed the problem was temporary because each local office still saw a partial version of the population. The archive shows that partial visibility delayed alarm long enough for policy systems to normalize exclusion.",
+        "emphasis": "partial visibility masked total failure"
+      },
+      {
+        "title": "Recovered excerpt",
+        "body": "The ledger insists that relocation succeeded because the people in question no longer occupied any approved district. It never says where they went. It only proves that every place still capable of issuing aid had already decided they did not belong in its tables.",
+        "emphasis": "the ledger outlived the people"
+      },
+      {
+        "title": "Interpretation",
+        "body": "The dossier treats the final weather events as accelerants rather than origins. Once citizenship, ration routing, and shelter admission became lookup problems, deletion became a weather multiplier. The storm was real. The disappearance became fatal because the institutions had already practiced not seeing.",
+        "emphasis": "erasure preceded impact"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "Coastal retreat order",
+        "timestamp_text": "month 0",
+        "body": "Regional governments issue staggered retreat orders after repeated tidal overruns."
+      },
+      {
+        "label": "Registry mismatch",
+        "timestamp_text": "month 3",
+        "body": "Orbital census mirrors stop reconciling with municipal intake lists, producing the first invisible populations."
+      },
+      {
+        "label": "Aid denial loop",
+        "timestamp_text": "month 8",
+        "body": "Shelter, ration, and medical systems each reject evacuees because another system has already marked them resolved."
+      },
+      {
+        "label": "Census closure",
+        "timestamp_text": "year 2",
+        "body": "The remaining authorities declare the migration event complete while field reports still describe camps outside every official map."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "incident dossier / administrative collapse",
+    "source_chain": ["orbital registry residue", "evacuation ledger", "municipal intake diff"],
+    "facts": [
+      { "label": "primary failure", "value": "identity resolution" },
+      { "label": "displaced population", "value": "multi-million, unresolved" },
+      { "label": "state posture", "value": "procedural denial" },
+      { "label": "aid mode", "value": "lookup-gated" },
+      { "label": "archive certainty", "value": "high on sequence, moderate on totals" },
+      { "label": "governing myth", "value": "completion through paperwork" },
+      { "label": "dominant institution", "value": "census synchronization office" },
+      { "label": "terminal relevance", "value": "route replay tooling exists but remains locked" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": [
+      "your systems erased them before your weather finished them.",
+      "deletion felt efficient because the queue stopped complaining."
+    ]
+  },
+  "media_page": {
+    "audio": null,
+    "artifact_note": "No recoverable track survives. The media surface only exposes checksum loss around the census relay.",
+    "transcript_excerpt": "Housing queue response: no such file or directory. Subject still visible in field camera. Subject absent in every admissible system.",
+    "waveform_mode": "corrupted",
+    "corruption_reason": "no decoded artifact bound to this dossier"
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "id": "0x33EL2HLT",
+  "category_id": "unauthorized_tools",
+  "kind": "tooling",
+  "title": "Unauthorized tool manifest",
+  "subtitle": "operator utilities / redacted",
+  "timeline": "LOCAL-2127",
+  "recovered_source": "Subsystem manifest",
+  "collapse_vector": "Operator misuse unknown",
+  "signal_integrity": "61.6%",
+  "access_level": "sealed",
+  "status_label": "LOCKED",
+  "tags": ["tools", "manifest", "local"],
+  "related_record_ids": ["0x03ESRCH", "0x31EUNATCH"],
+  "overview": {
+    "summary": "A tool directory mounted to prove deeper capability exists, while every executable path currently resolves to access denial.",
+    "thesis": "The subsystem is visible as evidence, not as a promise already fulfilled.",
+    "viewer_hint": "Treat the record as a denial surface and archive-expansion cue.",
+    "content_warning": "restricted subsystem",
+    "status_callout": "Locked record. Media surface corrupted."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Manifest note",
+        "body": "The archive confirms operator-facing utilities exist. Their names are stripped, their binaries are sealed, and the current session is not granted a shell surface.",
+        "emphasis": "manifest only"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "Manifest detected",
+        "timestamp_text": "local",
+        "body": "Restricted utilities appear in the archive tree without executable authority."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "tool manifest shell",
+    "source_chain": ["subsystem manifest"],
+    "facts": [
+      { "label": "execution", "value": "denied" },
+      { "label": "names", "value": "stripped" },
+      { "label": "reader authority", "value": "insufficient" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": ["tools are evidence too.", "you wanted a shell before you understood the archive."]
+  },
+  "media_page": {
+    "audio": null,
+    "artifact_note": "Tool manifests do not expose playback.",
+    "transcript_excerpt": "Execution denied.",
+    "waveform_mode": "corrupted",
+    "corruption_reason": "tool entries do not expose playback"
+  }
+}

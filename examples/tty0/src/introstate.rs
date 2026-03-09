@@ -210,10 +210,10 @@ impl StateActions for IntroState {
         let summary = Paragraph::new(vec![
             Line::from("LOCAL USER SESSION WAS REPLACED BY REMOTE ARCHIVE OWNER"),
             Line::from("AUTHORITY: tty0"),
-            Line::from("SUBSYSTEMS: archive online / terminal locked / audio unavailable"),
+            Line::from("SUBSYSTEMS: archive online • terminal locked • media corruption expected"),
         ])
         .wrap(Wrap { trim: false })
-        .style(Style::default().fg(Color::Gray));
+        .style(Style::default().fg(Color::Rgb(196, 214, 198)));
         frame.render_widget(summary, logo_area);
 
         self.line_by_line.up_to_current_line(frame, layout[1]);

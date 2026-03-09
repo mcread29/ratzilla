@@ -2,7 +2,7 @@
 
 ## Summary
 
-Turn `examples/tty0` from its current boot-screen prototype into the archive browser described in the docs: boot flow first, archive workstation by default, focused record view on demand, and a visible but locked terminal subsystem.
+Turn `examples/tty0` from its current boot-screen prototype into the archive browser described in the docs: boot flow first, a record-first archive workstation by default, and a visible but locked terminal subsystem.
 
 This stays entirely inside [`examples/tty0`](\/home\/mchan\/dev\/ratzilla_real\/examples\/tty0). There are no root-crate API changes. Playback in v1 is metadata-only because the repo has no audio assets; the UI will expose a forward-compatible `audio_source` field and render an unavailable transport panel.
 
@@ -16,8 +16,8 @@ The docs in [`README.md`](\/home\/mchan\/dev\/ratzilla_real\/examples\/tty0\/REA
 
 ## Implementation
 
-1. Refactor the example-local state system to support the four documented states.
-   - Replace string state ids with an example-local `StateId` enum: `Intro`, `Archive`, `Record`, `Terminal`.
+1. Refactor the example-local state system to support the documented states.
+   - Replace string state ids with an example-local `StateId` enum: `Intro`, `Archive`, `Terminal`.
    - Simplify the example state machine API so states expose `on_enter`, `handle_key`, `update`, `render`, and `take_transition`.
    - Remove the current `can_exit_state` gating pattern; it is unnecessary for this example and is the reason `IntroState` cannot transition today.
    - Keep the state machine example-local under `examples/tty0/src`.
@@ -31,9 +31,9 @@ The docs in [`README.md`](\/home\/mchan\/dev\/ratzilla_real\/examples\/tty0\/REA
    - Store all content as Rust constants/structs. Do not parse markdown at runtime.
 
 3. Introduce a shared session model used by all states.
-   - Add a `SessionModel` containing selected category index, selected record index per category, current detail scroll offset, decryption status text, terminal lock status, and low-frequency corruption tick state.
+   - Add a `SessionModel` containing selected record index, current detail scroll offset, decryption status text, terminal lock status, and low-frequency corruption tick state.
    - Share it across states with `Rc<RefCell<SessionModel>>`.
-   - Preserve archive selection when moving `Archive -> Record -> Archive`.
+   - Preserve record selection when moving `Archive -> Terminal -> Archive`.
 
 4. Rework the intro into the documented boot handoff.
    - Keep the existing line-by-line boot effect as the base.
@@ -45,42 +45,28 @@ The docs in [`README.md`](\/home\/mchan\/dev\/ratzilla_real\/examples\/tty0\/REA
 
 5. Build `ArchiveState` as the default workstation screen.
    - Layout:
-     - Left pane split vertically into categories list and records list.
-     - Center pane shows dossier/preview for the selected record.
-     - Right pane shows metadata, signal integrity, timeline, corruption status, playback panel, and terminal lock card.
+     - Left pane is a full-height record list sorted by error code, with category shown as secondary metadata.
+     - Center pane shows the full selected record: header, page tabs, and active content.
+     - Right pane shows metadata, signal integrity, timeline, corruption status, and playback panel.
      - Bottom status bar shows key hints and subsystem status.
    - Keys:
-     - `Left/Right`: switch category
-     - `Up/Down`: move within records of the active category
-     - `Enter`: open selected record if not locked
+     - `Left/Right`: switch active page tab
+     - `Up/Down`: move within the global record list
      - `t`: open locked terminal screen
    - Empty/stub records render as “recovered index only” states rather than errors.
 
-6. Build `RecordState` as the focused evidence view.
-   - Layout:
-     - Top header with breadcrumb, error code/title, and timeline.
-     - Main body split 70/30.
-     - Left side: synopsis, recovered excerpt, context notes, tty0 annotation.
-     - Right side: metadata block using the exact template from [`TRACKS.md`](\/home\/mchan\/dev\/ratzilla_real\/examples\/tty0\/TRACKS.md), plus transport/status cards.
-     - Bottom status bar with return/help copy.
-   - Keys:
-     - `Esc` or `Backspace`: return to `Archive`
-     - `Up/Down`: scroll long content
-     - `t`: open locked terminal screen
-   - Reset detail scroll to `0` when entering a different record.
-
-7. Build `TerminalState` as a deliberate locked subsystem, not a shell.
+6. Build `TerminalState` as a deliberate locked subsystem, not a shell.
    - Render a full-screen denial panel with subsystem id, lock reason, and one hint line tied to the current record when available.
    - Copy should match the docs: visible early, clearly restricted, no fake prompt.
    - Keys: `Esc`, `Enter`, or `Backspace` return to the previous archive/record state.
    - Do not implement unlock logic in this pass.
 
-8. Remove prototype-only UI that conflicts with the new direction.
+7. Remove prototype-only UI that conflicts with the new direction.
    - Delete the temporary image test panel in [`src/app.rs`](\/home\/mchan\/dev\/ratzilla_real\/examples\/tty0\/src\/app.rs).
    - Remove `CanvasImageLayer` plumbing unless a real tty0-specific image widget remains after implementation.
    - Keep the existing WebGL post-processing hook unless it causes layout/readability issues.
 
-9. Keep the visual language stable and readable, with restrained corruption.
+8. Keep the visual language stable and readable, with restrained corruption.
    - Use crisp pane borders and archive-language labels from [`EXPERIENCE.md`](\/home\/mchan\/dev\/ratzilla_real\/examples\/tty0\/EXPERIENCE.md).
    - Corruption should be small and intermittent: checksum warnings, occasional duplicated/redacted line fragments, flickering status text.
    - Do not add constant jitter or aggressive shader distortion that harms navigation.
@@ -97,6 +83,7 @@ New example-local interfaces/types to add:
 - `ArchiveCategory`
 - `ArchiveRecord`
 - `RecordSection`
+- `FlatRecordEntry` for the global record index
 - `PlaybackAvailability` with `Unavailable` in v1 and `audio_source: Option<&'static str>` for future real playback
 
 ## Test Cases and Acceptance Criteria
@@ -108,12 +95,11 @@ Run:
 Manual scenarios:
 - Boot animates, can be skipped, and transitions into archive cleanly.
 - Archive opens by default after boot and never shows a fake shell prompt.
-- Category and record navigation update the preview and metadata panes correctly.
-- `Enter` opens detail view for real records and does nothing unsafe for locked/stub records.
-- `Esc` from detail returns to the same category/record selection.
+- Record navigation updates the main content and metadata panes immediately.
+- `Left/Right` switches page tabs for the selected record.
 - `t` always opens the locked terminal screen and returns cleanly.
 - Playback panel always renders a disabled/unavailable state and never implies working audio.
-- Empty or placeholder categories render informative copy instead of blank panels or panics.
+- Empty archives or placeholder records render informative copy instead of blank panels or panics.
 - Small viewport still shows a usable reduced layout; large viewport preserves the 3-pane structure.
 
 ## Assumptions and Defaults

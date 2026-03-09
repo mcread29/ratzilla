@@ -13,5 +13,5 @@ This folder contains the example app plus a small set of design docs for the fic
 ## Design stance
 
 - The first version should feel like an artifact browser, not a prompt-driven terminal.
-- The filesystem exists in the fiction, but the UI surface is a curated archive workstation.
+- The filesystem exists in the fiction, but the UI surface is a curated archive workstation organized around the records themselves.
 - The terminal should appear later as a restricted subsystem with easter eggs, not as the default mode.

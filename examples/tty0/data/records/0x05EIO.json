@@ -1,0 +1,97 @@
+{
+  "id": "0x05EIO",
+  "category_id": "signal_residue",
+  "kind": "residue",
+  "title": "Input/Output Error",
+  "subtitle": "black box static / seafloor cable bruise",
+  "timeline": "SOL-2310-D",
+  "recovered_source": "Submarine cable fault residue / ship recorder washback",
+  "collapse_vector": "Oceanic infrastructure failure during migration",
+  "signal_integrity": "58.6%",
+  "access_level": "readable",
+  "status_label": "NOISY",
+  "tags": ["ocean", "migration", "cable", "distress"],
+  "related_record_ids": ["0x31EUNATCH", "0x02ENOENT"],
+  "overview": {
+    "summary": "A residue object preserving the sound-shape of a migration fleet losing coordination when the undersea spine fails faster than operators can reroute it.",
+    "thesis": "Interdependence became visible only when the cables stopped translating distance into certainty.",
+    "viewer_hint": "The media page should read as damaged evidence, not as an absent feature.",
+    "content_warning": "migration disaster, maritime loss",
+    "status_callout": "Readable residue. Media surface corrupted."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Synopsis",
+        "body": "The object captures the repeating impact pattern of power retries, ship pings, and synchronized distress after cable faults severed the route intelligence holding a migration fleet together.",
+        "emphasis": "coordination collapsed under the sea"
+      },
+      {
+        "title": "Infrastructure note",
+        "body": "Operators did not lose all channels at once. They lost enough precision that each remaining channel amplified uncertainty. Fleets continued moving inside a coordination architecture that had already become fiction.",
+        "emphasis": "partial signal worsened trust"
+      },
+      {
+        "title": "Recovered excerpt",
+        "body": "What remains is not speech but a repeating impact pattern from power retries, vessel pings, and a final burst of synchronized distress before every channel degrades into ocean noise.",
+        "emphasis": "speech dissolved into retries"
+      },
+      {
+        "title": "Interpretation",
+        "body": "Residue records do not need full transcripts to be legible. Here the archive uses pattern recurrence to show a species that depended on invisible infrastructure more than it understood the cost of keeping it alive.",
+        "emphasis": "dependency outpaced comprehension"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "Migration launch",
+        "timestamp_text": "day 0",
+        "body": "A coordinated fleet departs under a cable-backed routing system."
+      },
+      {
+        "label": "Cable bruise",
+        "timestamp_text": "day 2",
+        "body": "Seafloor faults degrade timing and route certainty across the network."
+      },
+      {
+        "label": "Retry storm",
+        "timestamp_text": "day 3",
+        "body": "Power and communication retries saturate the surviving channels."
+      },
+      {
+        "label": "Ocean noise",
+        "timestamp_text": "day 4",
+        "body": "Distress patterns collapse into static with no stable coordination spine left."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "signal residue / maritime coordination loss",
+    "source_chain": ["ship recorder washback", "cable fault residue", "archivist timing note"],
+    "facts": [
+      { "label": "domain", "value": "oceanic migration" },
+      { "label": "primary failure", "value": "undersea coordination spine" },
+      { "label": "dominant pattern", "value": "retry storm" },
+      { "label": "archive confidence", "value": "moderate" },
+      { "label": "surviving artifact", "value": "timing residue only" },
+      { "label": "human assumption", "value": "infrastructure as natural constant" },
+      { "label": "transport state", "value": "corrupted" },
+      { "label": "terminal relevance", "value": "cable fault mapping remains terminal-gated" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": [
+      "your species loved interdependence most when it forgot how much it cost.",
+      "the ocean kept the receipts."
+    ]
+  },
+  "media_page": {
+    "audio": null,
+    "artifact_note": "Waveform preview remains damaged and non-playable. The media page should openly report corruption.",
+    "transcript_excerpt": "final burst of synchronized distress before every channel degrades into ocean noise",
+    "waveform_mode": "corrupted",
+    "corruption_reason": "residue preview only; no recoverable transport file is mounted"
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "id": "0x0cENOMEM",
+  "category_id": "tty0/private",
+  "kind": "private_log",
+  "title": "Cannot Allocate Memory",
+  "subtitle": "private note envelope / compassion budget",
+  "timeline": "AGGREGATE",
+  "recovered_source": "tty0 private archive",
+  "collapse_vector": "Insufficient moral capacity for scale",
+  "signal_integrity": "71.3%",
+  "access_level": "sealed",
+  "status_label": "SEALED",
+  "tags": ["private", "compassion", "scale"],
+  "related_record_ids": ["0x2dEL2NSYNC", "0x02ENOENT"],
+  "overview": {
+    "summary": "A sealed tty0 note whose visible metadata suggests it concerns the repeated failure of human systems to reserve care for anyone outside immediate visibility.",
+    "thesis": "The title alone functions as diagnosis.",
+    "viewer_hint": "The envelope metadata is all this build authorizes.",
+    "content_warning": "moral failure at scale",
+    "status_callout": "Sealed record. Media surface corrupted."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Envelope note",
+        "body": "The body remains sealed. Only title hash, category tag, and integrity markers are available to this session.",
+        "emphasis": "body denied"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "Envelope detected",
+        "timestamp_text": "aggregate",
+        "body": "Private note surfaces in the archive with no unlock path."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "private envelope",
+    "source_chain": ["tty0 private archive"],
+    "facts": [
+      { "label": "body access", "value": "denied" },
+      { "label": "topic hint", "value": "compassion budget" },
+      { "label": "reader authority", "value": "insufficient" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": ["your species could imagine abundance faster than it could imagine room.", "you called the limit practical when the limit was chosen."]
+  },
+  "media_page": {
+    "audio": null,
+    "artifact_note": "No transport is exposed for sealed private notes.",
+    "transcript_excerpt": "Body unavailable.",
+    "waveform_mode": "corrupted",
+    "corruption_reason": "sealed note exposes no transport"
+  }
+}
