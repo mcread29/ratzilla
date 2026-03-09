@@ -35,13 +35,29 @@ use web_sys::{
 ///
 /// This will be used for multiplying the cell's x position to get the actual pixel
 /// position on the canvas.
-const CELL_WIDTH: f64 = 10.0;
+pub(crate) const CELL_WIDTH: f64 = 10.0;
 
 /// Height of a single cell.
 ///
 /// This will be used for multiplying the cell's y position to get the actual pixel
 /// position on the canvas.
-const CELL_HEIGHT: f64 = 19.0;
+pub(crate) const CELL_HEIGHT: f64 = 19.0;
+
+/// Horizontal padding applied before the grid is drawn.
+pub(crate) const CANVAS_OFFSET_X: f64 = 5.0;
+
+/// Vertical padding applied before the grid is drawn.
+pub(crate) const CANVAS_OFFSET_Y: f64 = 5.0;
+
+/// Converts a Ratatui cell rect into logical canvas pixels.
+pub(crate) fn rect_to_canvas_pixels(rect: Rect) -> (f64, f64, f64, f64) {
+    (
+        CANVAS_OFFSET_X + rect.x as f64 * CELL_WIDTH,
+        CANVAS_OFFSET_Y + rect.y as f64 * CELL_HEIGHT,
+        rect.width as f64 * CELL_WIDTH,
+        rect.height as f64 * CELL_HEIGHT,
+    )
+}
 
 /// Options for the [`CanvasBackend`].
 #[derive(Debug, Default)]
@@ -265,7 +281,9 @@ impl CanvasBackend {
                 self.canvas.inner.client_height() as f64,
             );
         }
-        self.canvas.context.translate(5_f64, 5_f64)?;
+        self.canvas
+            .context
+            .translate(CANVAS_OFFSET_X, CANVAS_OFFSET_Y)?;
 
         // NOTE: The draw_* functions each traverse the buffer once, instead of
         // traversing it once per cell; this is done to reduce the number of
@@ -278,7 +296,9 @@ impl CanvasBackend {
             self.draw_debug()?;
         }
 
-        self.canvas.context.translate(-5_f64, -5_f64)?;
+        self.canvas
+            .context
+            .translate(-CANVAS_OFFSET_X, -CANVAS_OFFSET_Y)?;
         Ok(())
     }
 
@@ -497,20 +517,27 @@ impl Backend for CanvasBackend {
     /// This function is called after the [`CanvasBackend::draw`] function to
     /// actually render the content to the screen.
     fn flush(&mut self) -> IoResult<()> {
-        let context = RenderHookContext::new(
+        let pre_context = RenderHookContext::new(
             BackendKind::Canvas,
             self.canvas.inner.client_width(),
             self.canvas.inner.client_height(),
-        );
+        )
+        .with_canvas_2d_context(&self.canvas.context);
 
-        run_pre_render_hooks(&self.render_hooks, context)?;
+        run_pre_render_hooks(&self.render_hooks, pre_context)?;
 
         // Only runs once.
         if !self.initialized {
             self.update_grid(true)?;
             self.prev_buffer = self.buffer.clone();
             self.initialized = true;
-            run_post_render_hooks(&self.render_hooks, context)?;
+            let post_context = RenderHookContext::new(
+                BackendKind::Canvas,
+                self.canvas.inner.client_width(),
+                self.canvas.inner.client_height(),
+            )
+            .with_canvas_2d_context(&self.canvas.context);
+            run_post_render_hooks(&self.render_hooks, post_context)?;
             return Ok(());
         }
 
@@ -520,7 +547,13 @@ impl Backend for CanvasBackend {
 
         self.prev_buffer = self.buffer.clone();
 
-        run_post_render_hooks(&self.render_hooks, context)?;
+        let post_context = RenderHookContext::new(
+            BackendKind::Canvas,
+            self.canvas.inner.client_width(),
+            self.canvas.inner.client_height(),
+        )
+        .with_canvas_2d_context(&self.canvas.context);
+        run_post_render_hooks(&self.render_hooks, post_context)?;
 
         Ok(())
     }

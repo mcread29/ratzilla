@@ -1,6 +1,7 @@
 use std::{cell::RefCell, fmt, rc::Rc};
 
 use glow;
+use web_sys::{CanvasRenderingContext2d, WebGl2RenderingContext};
 
 use crate::error::Error;
 
@@ -16,11 +17,19 @@ pub enum BackendKind {
 }
 
 /// Context provided to render hooks during each flush.
+///
+/// Size values are backend-dependent:
+/// - WebGl2: render target/canvas buffer dimensions used for rendering.
+/// - Canvas and Dom: display (CSS/logical) dimensions at flush time.
+/// Hook implementations should account for this when doing pixel-sensitive math.
 #[derive(Clone, Copy)]
 pub struct RenderHookContext<'a> {
     backend: BackendKind,
     canvas_width: i32,
     canvas_height: i32,
+    cell_size: Option<(i32, i32)>,
+    canvas_2d_context: Option<&'a CanvasRenderingContext2d>,
+    webgl2_context: Option<&'a WebGl2RenderingContext>,
     webgl_context: Option<&'a glow::Context>,
 }
 
@@ -31,8 +40,32 @@ impl<'a> RenderHookContext<'a> {
             backend,
             canvas_width,
             canvas_height,
+            cell_size: None,
+            canvas_2d_context: None,
+            webgl2_context: None,
             webgl_context: None,
         }
+    }
+
+    /// Attaches optional physical cell size capability.
+    pub fn with_cell_size(mut self, cell_width: i32, cell_height: i32) -> Self {
+        self.cell_size = Some((cell_width, cell_height));
+        self
+    }
+
+    /// Attaches an optional Canvas 2D context capability.
+    pub fn with_canvas_2d_context(
+        mut self,
+        canvas_2d_context: &'a CanvasRenderingContext2d,
+    ) -> Self {
+        self.canvas_2d_context = Some(canvas_2d_context);
+        self
+    }
+
+    /// Attaches an optional raw WebGL2 context capability.
+    pub fn with_webgl2_context(mut self, webgl2_context: &'a WebGl2RenderingContext) -> Self {
+        self.webgl2_context = Some(webgl2_context);
+        self
     }
 
     /// Attaches an optional WebGL context capability.
@@ -46,9 +79,24 @@ impl<'a> RenderHookContext<'a> {
         self.backend
     }
 
-    /// Returns canvas pixel dimensions.
+    /// Returns backend-reported render/display dimensions.
     pub fn canvas_size(&self) -> (i32, i32) {
         (self.canvas_width, self.canvas_height)
+    }
+
+    /// Returns physical cell size when available.
+    pub fn cell_size(&self) -> Option<(i32, i32)> {
+        self.cell_size
+    }
+
+    /// Returns Canvas 2D context capability when available.
+    pub fn canvas_2d_context(&self) -> Option<&'a CanvasRenderingContext2d> {
+        self.canvas_2d_context
+    }
+
+    /// Returns raw WebGL2 context capability when available.
+    pub fn webgl2_context(&self) -> Option<&'a WebGl2RenderingContext> {
+        self.webgl2_context
     }
 
     /// Returns WebGL context capability when available.
@@ -85,6 +133,16 @@ impl RenderHookHandle {
         Self {
             hook: Rc::new(RefCell::new(hook)),
         }
+    }
+}
+
+impl RenderHook for RenderHookHandle {
+    fn pre_render(&mut self, context: &RenderHookContext<'_>) -> Result<(), Error> {
+        self.hook.borrow_mut().pre_render(context)
+    }
+
+    fn post_render(&mut self, context: &RenderHookContext<'_>) -> Result<(), Error> {
+        self.hook.borrow_mut().post_render(context)
     }
 }
 
@@ -170,5 +228,44 @@ mod tests {
         assert_eq!(calls[3], (false, BackendKind::Canvas, (120, 40)));
         assert_eq!(calls[4], (true, BackendKind::WebGl2, (160, 50)));
         assert_eq!(calls[5], (false, BackendKind::WebGl2, (160, 50)));
+    }
+
+    #[test]
+    fn returns_attached_cell_size() {
+        let context = RenderHookContext::new(BackendKind::WebGl2, 160, 50).with_cell_size(9, 18);
+        assert_eq!(context.cell_size(), Some((9, 18)));
+    }
+}
+
+#[cfg(test)]
+mod wasm_tests {
+    use super::*;
+    use wasm_bindgen_test::*;
+    use web_sys::{wasm_bindgen::JsCast, window, HtmlCanvasElement};
+
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test]
+    fn returns_attached_canvas_2d_context() {
+        let document = window()
+            .expect("window should exist")
+            .document()
+            .expect("document should exist");
+        let canvas = document
+            .create_element("canvas")
+            .expect("canvas element should be created")
+            .dyn_into::<HtmlCanvasElement>()
+            .expect("element should be canvas");
+        let context = canvas
+            .get_context("2d")
+            .expect("context lookup should succeed")
+            .expect("2d context should exist")
+            .dyn_into::<CanvasRenderingContext2d>()
+            .expect("context should be 2d");
+
+        let hook_context =
+            RenderHookContext::new(BackendKind::Canvas, 100, 40).with_canvas_2d_context(&context);
+
+        assert!(hook_context.canvas_2d_context().is_some());
     }
 }

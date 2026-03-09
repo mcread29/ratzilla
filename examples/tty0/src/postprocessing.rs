@@ -54,12 +54,11 @@ fn create_shader(
 
     let success = unsafe { gl.get_shader_compile_status(shader) };
     if !success {
+        let info = unsafe { gl.get_shader_info_log(shader) };
         unsafe {
             gl.delete_shader(shader);
         }
-        return Err(Error::UnableToRetrieveElementById(unsafe {
-            gl.get_shader_info_log(shader)
-        }));
+        return Err(Error::UnableToRetrieveElementById(info));
     }
 
     Ok(shader)

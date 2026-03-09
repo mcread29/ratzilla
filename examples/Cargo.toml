@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "animations",
+    "canvas_image",
     "canvas_stress_test",
     "canvas_waves",
     "clipboard",

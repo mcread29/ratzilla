@@ -600,6 +600,7 @@ dependencies = [
  "ratatui",
  "thiserror",
  "unicode-width",
+ "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
 ]

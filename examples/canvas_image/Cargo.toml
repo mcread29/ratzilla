@@ -1,0 +1,9 @@
+[package]
+name = "canvas-image"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+console_error_panic_hook.workspace = true
+ratzilla.workspace = true

@@ -21,6 +21,7 @@ web-sys = { version = "0.3.81", features = [
     'Element',
     'HtmlCanvasElement',
     'HtmlElement',
+    'HtmlImageElement',
     'KeyboardEvent',
     'Location',
     'MouseEvent',
@@ -48,6 +49,7 @@ bitvec = { version = "1.0.1", default-features = false, features = ["alloc", "st
 beamterm-renderer = "0.16.0"
 glow = "0.16"
 unicode-width = "0.2.2"
+wasm-bindgen-futures = "0.4.54"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.58"

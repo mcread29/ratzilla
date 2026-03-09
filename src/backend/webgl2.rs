@@ -543,8 +543,18 @@ impl WebGl2Backend {
         }
 
         let gl = self.beamterm.gl();
+        let raw_gl = self
+            .beamterm
+            .canvas()
+            .get_context("webgl2")?
+            .ok_or(Error::UnableToRetrieveComponent("WebGl2RenderingContext"))?
+            .dyn_into::<web_sys::WebGl2RenderingContext>()
+            .map_err(|error| Error::from(web_sys::wasm_bindgen::JsValue::from(error)))?;
         let (canvas_width, canvas_height) = self.beamterm.canvas_size();
+        let (cell_width, cell_height) = self.beamterm.cell_size();
         let context = RenderHookContext::new(BackendKind::WebGl2, canvas_width, canvas_height)
+            .with_cell_size(cell_width, cell_height)
+            .with_webgl2_context(&raw_gl)
             .with_webgl_context(&gl);
         run_pre_render_hooks(&self.render_hooks, context)
     }
@@ -555,8 +565,18 @@ impl WebGl2Backend {
         }
 
         let gl = self.beamterm.gl();
+        let raw_gl = self
+            .beamterm
+            .canvas()
+            .get_context("webgl2")?
+            .ok_or(Error::UnableToRetrieveComponent("WebGl2RenderingContext"))?
+            .dyn_into::<web_sys::WebGl2RenderingContext>()
+            .map_err(|error| Error::from(web_sys::wasm_bindgen::JsValue::from(error)))?;
         let (canvas_width, canvas_height) = self.beamterm.canvas_size();
+        let (cell_width, cell_height) = self.beamterm.cell_size();
         let context = RenderHookContext::new(BackendKind::WebGl2, canvas_width, canvas_height)
+            .with_cell_size(cell_width, cell_height)
+            .with_webgl2_context(&raw_gl)
             .with_webgl_context(&gl);
         run_post_render_hooks(&self.render_hooks, context)
     }
