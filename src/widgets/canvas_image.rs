@@ -6,25 +6,12 @@ use std::{
     rc::Rc,
 };
 
-use ratatui::{
-    buffer::Buffer,
-    layout::Rect,
-    style::Style,
-    widgets::Widget,
-};
+use ratatui::{buffer::Buffer, layout::Rect, style::Style, widgets::Widget};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{
-    js_sys::Float32Array,
-    wasm_bindgen::JsValue,
-    CanvasRenderingContext2d,
-    HtmlImageElement,
-    WebGl2RenderingContext,
-    WebGlBuffer,
-    WebGlProgram,
-    WebGlShader,
-    WebGlTexture,
-    WebGlUniformLocation,
-    WebGlVertexArrayObject,
+    js_sys::Float32Array, wasm_bindgen::JsValue, CanvasRenderingContext2d, HtmlImageElement,
+    WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlTexture,
+    WebGlUniformLocation, WebGlVertexArrayObject,
 };
 
 use crate::{
@@ -257,11 +244,7 @@ impl RenderHook for ImageLayerRenderHook {
                     let image = match get_cached_image(&self.shared, &command.src) {
                         Some(image) => image,
                         None => {
-                            ensure_image_in_cache(
-                                &self.shared,
-                                &command.src,
-                                command.cross_origin,
-                            );
+                            ensure_image_in_cache(&self.shared, &command.src, command.cross_origin);
                             continue;
                         }
                     };
@@ -399,12 +382,7 @@ impl WebGlImageRenderer {
         Ok(())
     }
 
-    fn ensure_texture(
-        &mut self,
-        gl: &GL,
-        src: &str,
-        image: &DecodedImage,
-    ) -> Option<WebGlTexture> {
+    fn ensure_texture(&mut self, gl: &GL, src: &str, image: &DecodedImage) -> Option<WebGlTexture> {
         match self.texture_cache.get(src) {
             Some(WebGlTextureState::Ready(texture)) => return Some(texture.clone()),
             Some(WebGlTextureState::Failed) => return None,
@@ -435,10 +413,7 @@ fn fill_area_with_spaces(buf: &mut Buffer, area: Rect, style: Style) {
     }
 }
 
-fn get_cached_image(
-    state: &Rc<RefCell<CanvasImageLayerState>>,
-    src: &str,
-) -> Option<DecodedImage> {
+fn get_cached_image(state: &Rc<RefCell<CanvasImageLayerState>>, src: &str) -> Option<DecodedImage> {
     let state = state.borrow();
     match state.cache.get(src) {
         Some(CachedImage::Ready(image)) => Some(image.clone()),
@@ -542,8 +517,8 @@ fn draw_image_on_canvas(
         context.clip();
     }
 
-    let draw_result =
-        context.draw_image_with_html_image_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
+    let draw_result = context
+        .draw_image_with_html_image_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
             &image.element,
             src_x,
             src_y,
@@ -684,8 +659,8 @@ fn quad_vertices(placement: &ImagePlacement) -> [f32; 24] {
     let v1 = placement.uv_max_y;
 
     [
-        x0, y0, u0, v0, x1, y0, u1, v0, x1, y1, u1, v1, x0, y0, u0, v0, x1, y1, u1, v1, x0, y1,
-        u0, v1,
+        x0, y0, u0, v0, x1, y0, u1, v0, x1, y1, u1, v1, x0, y0, u0, v0, x1, y1, u1, v1, x0, y1, u0,
+        v1,
     ]
 }
 
@@ -904,12 +879,7 @@ mod tests {
 mod wasm_tests {
     use super::*;
     use wasm_bindgen_test::*;
-    use web_sys::{
-        js_sys::Promise,
-        wasm_bindgen::JsCast,
-        window,
-        HtmlCanvasElement,
-    };
+    use web_sys::{js_sys::Promise, wasm_bindgen::JsCast, window, HtmlCanvasElement};
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 

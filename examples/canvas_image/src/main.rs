@@ -9,8 +9,7 @@ use ratzilla::{
         Terminal,
     },
     widgets::{CanvasImage, CanvasImageLayer, ImageFit},
-    CanvasBackend,
-    WebRenderer,
+    CanvasBackend, WebRenderer,
 };
 
 const IMAGE_DATA_URL: &str = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='120' viewBox='0 0 180 120'%3E%3Crect width='180' height='120' fill='%23171b22'/%3E%3Ccircle cx='58' cy='56' r='32' fill='%23ffb703' fill-opacity='0.92'/%3E%3Crect x='88' y='28' width='56' height='56' rx='10' fill='%23219653' fill-opacity='0.85'/%3E%3Cpath d='M18 102 L88 42 L138 82 L162 54 L162 102 Z' fill='%23f1f5f9' fill-opacity='0.88'/%3E%3C/svg%3E";

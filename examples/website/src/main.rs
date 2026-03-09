@@ -1,6 +1,8 @@
 use std::io;
 
+use examples_shared::backend::{BackendType, MultiBackendBuilder};
 use layout::{Flex, Offset};
+use ratzilla::backend::webgl2::{SelectionMode, WebGl2BackendOptions};
 use ratzilla::{
     event::{KeyCode, KeyEvent},
     ratatui::{
@@ -11,12 +13,10 @@ use ratzilla::{
     widgets::Hyperlink,
     WebRenderer,
 };
-use examples_shared::backend::{BackendType, MultiBackendBuilder};
 use tachyonfx::{
     fx::{self, RepeatMode},
-    CenteredShrink, Duration, Effect, EffectRenderer, EffectTimer, Interpolation, Motion, 
+    CenteredShrink, Duration, Effect, EffectRenderer, EffectTimer, Interpolation, Motion,
 };
-use ratzilla::backend::webgl2::{SelectionMode, WebGl2BackendOptions};
 
 struct State {
     intro_effect: Effect,
@@ -55,11 +55,12 @@ impl Default for State {
 
 fn main() -> io::Result<()> {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-    
+
     let mut terminal = MultiBackendBuilder::with_fallback(BackendType::Dom)
-        .webgl2_options(WebGl2BackendOptions::new()
-            .enable_hyperlinks()
-            .enable_mouse_selection_with_mode(SelectionMode::default())
+        .webgl2_options(
+            WebGl2BackendOptions::new()
+                .enable_hyperlinks()
+                .enable_mouse_selection_with_mode(SelectionMode::default()),
         )
         .build_terminal()?;
 

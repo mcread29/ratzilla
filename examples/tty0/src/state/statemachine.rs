@@ -5,54 +5,50 @@ use ratzilla::ratatui::Frame;
 use tachyonfx::Duration;
 use thiserror::Error;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum StateId {
+    Intro,
+    Archive,
+    Record,
+    Terminal,
+}
+
 #[derive(Error, Debug)]
 pub enum StateMachineError {
-    #[error("State {0} not found")]
-    StateNotFound(String),
-    #[error("Statemachine is not running")]
+    #[error("state {0:?} not found")]
+    StateNotFound(StateId),
+    #[error("state machine is not running")]
     StatemachineNotRunning,
 }
 
 pub trait StateActions {
-    fn can_enter_state(&self) -> Result<bool, StateMachineError> {
-        Ok(true)
-    }
-
-    fn enter_state(&self) -> Result<(), StateMachineError> {
+    fn on_enter(&mut self) -> Result<(), StateMachineError> {
         Ok(())
     }
 
-    fn should_exit_state(&self) -> Result<&str, StateMachineError> {
-        Ok("")
-    }
-
-    fn can_exit_state(&self) -> Result<bool, StateMachineError> {
-        Ok(false)
-    }
-
-    fn exit_state(&self) -> Result<(), StateMachineError> {
+    fn handle_key(&mut self, _key: KeyCode) -> Result<(), StateMachineError> {
         Ok(())
     }
 
-    fn update_state(&mut self, _elapsed: Duration) -> Result<(), StateMachineError> {
+    fn update(&mut self, _elapsed: Duration) -> Result<(), StateMachineError> {
         Ok(())
     }
 
-    fn render_state(&mut self, _frame: &mut Frame) {}
+    fn render(&mut self, _frame: &mut Frame) {}
 
-    fn key_press(&mut self, _key: KeyCode) -> Result<(), StateMachineError> {
-        Ok(())
+    fn take_transition(&mut self) -> Option<StateId> {
+        None
     }
 }
 
 pub struct StateMachine {
-    pub states: HashMap<String, Box<dyn StateActions>>,
-    pub current_state: String,
+    pub states: HashMap<StateId, Box<dyn StateActions>>,
+    pub current_state: StateId,
     pub running: bool,
 }
 
 impl StateMachine {
-    pub fn new(states: HashMap<String, Box<dyn StateActions>>, default_state: String) -> Self {
+    pub fn new(states: HashMap<StateId, Box<dyn StateActions>>, default_state: StateId) -> Self {
         Self {
             states,
             current_state: default_state,
@@ -60,36 +56,23 @@ impl StateMachine {
         }
     }
 
-    pub fn current_state(&self) -> Result<&Box<dyn StateActions>, StateMachineError> {
-        self.states
-            .get(&self.current_state)
-            .ok_or(StateMachineError::StateNotFound(self.current_state.clone()))
-    }
-
     pub fn current_state_mut(&mut self) -> Result<&mut Box<dyn StateActions>, StateMachineError> {
         self.states
             .get_mut(&self.current_state)
-            .ok_or(StateMachineError::StateNotFound(self.current_state.clone()))
-    }
-
-    pub fn key_press(&mut self, key: KeyCode) -> Result<(), StateMachineError> {
-        self.current_state_mut()?.key_press(key)?;
-        Ok(())
-    }
-
-    pub fn get_state(&self, state: &str) -> Result<&Box<dyn StateActions>, StateMachineError> {
-        self.states
-            .get(state)
-            .ok_or(StateMachineError::StateNotFound(state.to_string()))
+            .ok_or(StateMachineError::StateNotFound(self.current_state))
     }
 
     pub fn init(&mut self) -> Result<(), StateMachineError> {
         self.running = true;
-        self.current_state()?.enter_state()?;
+        self.current_state_mut()?.on_enter()?;
         Ok(())
     }
 
-    pub fn try_change_state(&mut self, state: &str) -> Result<bool, StateMachineError> {
+    pub fn key_press(&mut self, key: KeyCode) -> Result<(), StateMachineError> {
+        self.current_state_mut()?.handle_key(key)
+    }
+
+    fn try_change_state(&mut self, state: StateId) -> Result<bool, StateMachineError> {
         if !self.running {
             return Err(StateMachineError::StatemachineNotRunning);
         }
@@ -98,20 +81,17 @@ impl StateMachine {
             return Ok(false);
         }
 
-        let current_state = self.current_state()?;
-        if !current_state.can_exit_state()? {
-            return Ok(false);
-        }
-
-        let next_state = self.get_state(state)?;
-        if !next_state.can_enter_state()? {
-            return Ok(false);
-        }
-
-        current_state.exit_state()?;
-        next_state.enter_state()?;
-        self.current_state = state.to_string();
+        self.current_state = state;
+        self.current_state_mut()?.on_enter()?;
         Ok(true)
+    }
+
+    fn flush_transition(&mut self) -> Result<(), StateMachineError> {
+        let next_state = self.current_state_mut()?.take_transition();
+        if let Some(next_state) = next_state {
+            self.try_change_state(next_state)?;
+        }
+        Ok(())
     }
 
     pub fn update_statemachine(
@@ -123,24 +103,10 @@ impl StateMachine {
             return Err(StateMachineError::StatemachineNotRunning);
         }
 
-        let exit_state = {
-            let current_state = self.current_state()?;
-            let exit_state = current_state.should_exit_state()?;
-            if !exit_state.is_empty() && current_state.can_exit_state()? {
-                Some(exit_state.to_string())
-            } else {
-                None
-            }
-        };
-
-        if let Some(exit_state) = exit_state {
-            self.try_change_state(&exit_state)?;
-            return Ok(());
-        }
-
-        let current_state = self.current_state_mut()?;
-        current_state.update_state(elapsed)?;
-        current_state.render_state(frame);
+        self.flush_transition()?;
+        self.current_state_mut()?.update(elapsed)?;
+        self.flush_transition()?;
+        self.current_state_mut()?.render(frame);
         Ok(())
     }
 }

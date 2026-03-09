@@ -8,14 +8,17 @@
 //! There are four different text rendering strategies, declared in descending
 //! order of performance.
 
-use ratzilla::{ratatui::{
-    layout::Size,
-    style::{Color, Styled},
-    text::{Line, Span},
-    widgets::{Paragraph, Wrap},
-}, WebRenderer};
 use examples_shared::backend::{BackendType, MultiBackendBuilder};
 use ratzilla::backend::webgl2::WebGl2BackendOptions;
+use ratzilla::{
+    ratatui::{
+        layout::Size,
+        style::{Color, Styled},
+        text::{Line, Span},
+        widgets::{Paragraph, Wrap},
+    },
+    WebRenderer,
+};
 use std::{cell::RefCell, rc::Rc};
 
 fn main() -> std::io::Result<()> {
@@ -108,7 +111,7 @@ impl WidgetCache {
 
         fn prepare_walls_of_text(
             cells: u32,
-            f: fn(&'static str, Span<'static>) -> Span<'static>
+            f: fn(&'static str, Span<'static>) -> Span<'static>,
         ) -> Vec<Paragraph<'static>> {
             (0..WidgetCache::CACHED_SCREENS)
                 .into_iter()

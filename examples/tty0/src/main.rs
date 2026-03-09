@@ -2,33 +2,34 @@ use std::{cell::RefCell, io, rc::Rc};
 
 use examples_shared::backend::{BackendType, MultiBackendBuilder};
 use ratzilla::{
-    backend::canvas::CanvasBackendOptions,
-    backend::webgl2::WebGl2BackendOptions,
+    backend::{canvas::CanvasBackendOptions, webgl2::WebGl2BackendOptions},
     event::KeyCode,
-    widgets::CanvasImageLayer,
     CursorShape, WebRenderer,
 };
 
 mod app;
+mod archive;
+mod archive_state;
 mod introstate;
 mod logo_text;
 mod postprocessing;
+mod record_state;
+mod session;
 mod shaders;
 mod state;
+mod terminal_state;
 
 use app::App;
 use postprocessing::PostProcessing;
 
 fn main() -> io::Result<()> {
-    let image_layer = CanvasImageLayer::new();
-    let app_state = Rc::new(RefCell::new(App::new(image_layer.clone())));
+    let app_state = Rc::new(RefCell::new(App::new()));
 
     let mut terminal = MultiBackendBuilder::with_fallback(BackendType::WebGl2)
-        .canvas_options(CanvasBackendOptions::new().with_render_hook(image_layer.render_hook()))
+        .canvas_options(CanvasBackendOptions::new())
         .webgl2_options(
             WebGl2BackendOptions::new()
                 .cursor_shape(CursorShape::SteadyUnderScore)
-                .with_render_hook(image_layer.render_hook())
                 .with_render_hook(PostProcessing::default()),
         )
         .build_terminal()?;

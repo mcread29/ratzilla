@@ -1,5 +1,5 @@
-use wasm_bindgen::JsValue;
 use crate::backend::BackendType;
+use wasm_bindgen::JsValue;
 
 /// Inject HTML footer with backend switching links
 pub(crate) fn inject_backend_footer(current_backend: BackendType) -> Result<(), JsValue> {
@@ -41,10 +41,7 @@ pub(crate) fn inject_backend_footer(current_backend: BackendType) -> Result<(), 
         };
 
         let link = if is_current {
-            format!(
-                "<span style=\"{}\">● {backend}</span>",
-                style,
-            )
+            format!("<span style=\"{}\">● {backend}</span>", style,)
         } else {
             format!(
                 "<a href=\"{}?backend={}\" style=\"{}\">{backend}</a>",
@@ -72,4 +69,3 @@ pub(crate) fn inject_backend_footer(current_backend: BackendType) -> Result<(), 
 
     Ok(())
 }
-

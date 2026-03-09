@@ -1,3 +1,3 @@
 mod statemachine;
 
-pub use statemachine::{StateActions, StateMachine, StateMachineError};
+pub use statemachine::{StateActions, StateId, StateMachine, StateMachineError};

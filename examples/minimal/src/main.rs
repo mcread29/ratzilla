@@ -6,7 +6,9 @@ use ratzilla::ratatui::{
     widgets::{Block, Paragraph},
 };
 
-use ratzilla::{event::KeyCode, event::MouseButton, event::MouseEventKind, SelectionMode, WebRenderer};
+use ratzilla::{
+    event::KeyCode, event::MouseButton, event::MouseEventKind, SelectionMode, WebRenderer,
+};
 
 use examples_shared::backend::{BackendType, MultiBackendBuilder};
 use ratzilla::backend::webgl2::WebGl2BackendOptions;
@@ -18,9 +20,10 @@ fn main() -> io::Result<()> {
     let mouse_event_kind = Rc::new(RefCell::new(None::<MouseEventKind>));
 
     let mut terminal = MultiBackendBuilder::with_fallback(BackendType::Dom)
-        .webgl2_options(WebGl2BackendOptions::new()
-            .enable_console_debug_api()
-            .enable_mouse_selection_with_mode(SelectionMode::Block)
+        .webgl2_options(
+            WebGl2BackendOptions::new()
+                .enable_console_debug_api()
+                .enable_mouse_selection_with_mode(SelectionMode::Block),
         )
         .build_terminal()?;
 
@@ -43,9 +46,8 @@ fn main() -> io::Result<()> {
                 MouseEventKind::Moved => None,
                 MouseEventKind::ButtonDown(btn) => Some(btn),
                 MouseEventKind::ButtonUp(btn) => Some(btn),
-                _ => return
+                _ => return,
             };
-
 
             let mut mouse_position = mouse_position_cloned.borrow_mut();
             *mouse_position = (mouse_event.col, mouse_event.row);

@@ -1,6 +1,9 @@
 use std::{cell::RefCell, io, rc::Rc};
 
+use examples_shared::backend::{BackendType, MultiBackendBuilder};
 use ratzilla::backend::cursor::CursorShape;
+use ratzilla::backend::dom::DomBackendOptions;
+use ratzilla::backend::webgl2::{SelectionMode, WebGl2BackendOptions};
 use ratzilla::event::KeyEvent;
 use ratzilla::ratatui::layout::{Constraint, Layout, Position};
 use ratzilla::ratatui::style::{Modifier, Style, Stylize};
@@ -12,9 +15,6 @@ use ratzilla::ratatui::{
     widgets::{Block, Paragraph},
 };
 use ratzilla::{event::KeyCode, WebRenderer};
-use examples_shared::backend::{BackendType, MultiBackendBuilder};
-use ratzilla::backend::dom::DomBackendOptions;
-use ratzilla::backend::webgl2::{SelectionMode, WebGl2BackendOptions};
 
 fn main() -> io::Result<()> {
     let dom_options = DomBackendOptions::new(None, CursorShape::SteadyUnderScore);
