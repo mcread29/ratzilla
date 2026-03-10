@@ -32,6 +32,7 @@ const MAGENTA: Color = Color::Rgb(188, 144, 228);
 pub struct ArchiveState {
     session: Rc<RefCell<SessionModel>>,
     visual_layer: GraphicsCanvasLayer,
+    panel_shader_visualizer: PanelShaderVisualizerLayer,
     visual_runtime: Rc<RefCell<track_visualizer::TrackVisualizerRuntime>>,
     pending_transition: Option<StateId>,
 }
@@ -40,11 +41,12 @@ impl ArchiveState {
     pub fn new(
         session: Rc<RefCell<SessionModel>>,
         visual_layer: GraphicsCanvasLayer,
-        _panel_shader_visualizer: PanelShaderVisualizerLayer,
+        panel_shader_visualizer: PanelShaderVisualizerLayer,
     ) -> Self {
         Self {
             session,
             visual_layer,
+            panel_shader_visualizer,
             visual_runtime: Rc::new(RefCell::new(
                 track_visualizer::TrackVisualizerRuntime::default(),
             )),
@@ -458,6 +460,7 @@ impl ArchiveState {
                 frame,
                 visual_inner,
                 self.visual_layer.clone(),
+                self.panel_shader_visualizer.clone(),
                 Rc::clone(&self.visual_runtime),
                 &record.id,
                 config,

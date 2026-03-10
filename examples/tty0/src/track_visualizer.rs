@@ -1,11 +1,15 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::archive::{TrackVisualizerConfig, TrackVisualizerMode, TrackVisualizerParams};
+use crate::{
+    archive::{TrackVisualizerConfig, TrackVisualizerMode, TrackVisualizerParams},
+    panel_shader_visualizer::{PanelShaderRequest, PanelShaderVisualizerLayer},
+};
 use ratzilla::{
     error::Error,
     ratatui::{
         layout::Rect,
         style::{Color, Style},
+        widgets::Paragraph,
         Frame,
     },
     widgets::{GraphicsCanvas, GraphicsCanvasContext, GraphicsCanvasLayer},
@@ -96,12 +100,29 @@ pub fn render_visualizer(
     frame: &mut Frame,
     area: Rect,
     layer: GraphicsCanvasLayer,
+    panel_shader_visualizer: PanelShaderVisualizerLayer,
     runtime: Rc<RefCell<TrackVisualizerRuntime>>,
     record_id: &str,
     config: &TrackVisualizerConfig,
     analysis: Option<AudioAnalysisSnapshot>,
     viewer_tick: u64,
 ) {
+    if is_shader_backed_mode(config.mode) {
+        frame.render_widget(
+            Paragraph::new("").style(Style::default().bg(Color::Black)),
+            area,
+        );
+        panel_shader_visualizer.queue(PanelShaderRequest {
+            area,
+            mode: config.mode,
+            record_id: record_id.to_string(),
+            analysis: analysis.unwrap_or_else(|| AudioAnalysisSnapshot::idle(0.0)),
+            viewer_tick,
+            params: config.params.clone(),
+        });
+        return;
+    }
+
     let scene = resolve_scene_state(config, analysis, viewer_tick);
     let record_key = record_id.to_string();
     let config = config.clone();
@@ -141,6 +162,10 @@ pub fn decay_snapshot_toward_idle(
 enum VisualizerScene {
     DiplomaticSignalBloom(DiplomaticSignalBloomState),
     HexWalkerRelay(HexWalkerRelayFrame),
+}
+
+fn is_shader_backed_mode(mode: TrackVisualizerMode) -> bool {
+    matches!(mode, TrackVisualizerMode::ChromaticBulgeGrid)
 }
 
 impl TrackVisualizerRuntime {
@@ -369,6 +394,9 @@ fn resolve_scene_state(
                 params,
             })
         }
+        TrackVisualizerMode::ChromaticBulgeGrid => {
+            unreachable!("shader-backed visualizer modes should not resolve to canvas scenes")
+        }
     }
 }
 
@@ -576,8 +604,8 @@ impl RgbChannelExt for Color {
 #[cfg(test)]
 mod tests {
     use super::{
-        clamp_params, decay_snapshot_toward_idle, resolve_scene_state, AudioAnalysisSnapshot,
-        ClampedVisualizerParams, VisualizerScene,
+        clamp_params, decay_snapshot_toward_idle, is_shader_backed_mode, resolve_scene_state,
+        AudioAnalysisSnapshot, ClampedVisualizerParams, VisualizerScene,
     };
     use crate::archive::{TrackVisualizerConfig, TrackVisualizerMode, TrackVisualizerParams};
 
@@ -637,6 +665,24 @@ mod tests {
             1_200,
         );
         assert!(matches!(scene, VisualizerScene::HexWalkerRelay(_)));
+    }
+
+    #[test]
+    fn chromatic_bulge_grid_is_shader_backed() {
+        assert!(is_shader_backed_mode(
+            TrackVisualizerMode::ChromaticBulgeGrid
+        ));
+    }
+
+    #[test]
+    fn existing_modes_remain_canvas_backed() {
+        assert!(!is_shader_backed_mode(
+            TrackVisualizerMode::DiplomaticSignalBloom
+        ));
+        assert!(!is_shader_backed_mode(
+            TrackVisualizerMode::ContainmentLattice
+        ));
+        assert!(!is_shader_backed_mode(TrackVisualizerMode::HexWalkerRelay));
     }
 
     #[test]

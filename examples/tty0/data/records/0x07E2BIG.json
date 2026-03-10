@@ -97,7 +97,7 @@
     "transcript_excerpt": "Their envoys said our factories were elegant in isolation and catastrophic in aggregate. They asked for one century of restraint.",
     "waveform_mode": "spectrum",
     "visualizer": {
-      "mode": "containment_lattice",
+      "mode": "chromatic_bulge_grid",
       "params": {
         "motion_rate": 0.72,
         "energy_gain": 1.2,

@@ -137,6 +137,7 @@ pub enum TrackVisualizerMode {
     DiplomaticSignalBloom,
     HexWalkerRelay,
     ContainmentLattice,
+    ChromaticBulgeGrid,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -432,6 +433,7 @@ impl TrackVisualizerMode {
             Self::DiplomaticSignalBloom => "diplomatic signal bloom",
             Self::HexWalkerRelay => "hex walker relay",
             Self::ContainmentLattice => "containment lattice",
+            Self::ChromaticBulgeGrid => "chromatic bulge grid",
         }
     }
 }
@@ -776,6 +778,29 @@ mod tests {
     }
 
     #[test]
+    fn chromatic_bulge_grid_visualizer_config_parses_when_present() {
+        let record = readable_record_json_with_visualizer(
+            "one",
+            Some("a.mp3"),
+            &[],
+            Some(
+                r#"{"mode":"chromatic_bulge_grid","params":{"motion_rate":0.9,"lattice_density":10}}"#,
+            ),
+        );
+        let store = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
+            .expect("archive store");
+        let visualizer = store
+            .record_by_id("one")
+            .expect("record")
+            .visualizer()
+            .expect("visualizer");
+
+        assert_eq!(visualizer.mode, TrackVisualizerMode::ChromaticBulgeGrid);
+        assert_eq!(visualizer.params.motion_rate, 0.9);
+        assert_eq!(visualizer.params.lattice_density, 10);
+    }
+
+    #[test]
     fn missing_visualizer_defaults_to_none() {
         let record = readable_record_json("one", Some("a.mp3"), &[]);
         let store = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
@@ -817,6 +842,14 @@ mod tests {
         assert_eq!(
             TrackVisualizerMode::ContainmentLattice.label(),
             "containment lattice"
+        );
+    }
+
+    #[test]
+    fn chromatic_bulge_grid_label_matches_expected_copy() {
+        assert_eq!(
+            TrackVisualizerMode::ChromaticBulgeGrid.label(),
+            "chromatic bulge grid"
         );
     }
 }

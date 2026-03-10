@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    archive::TrackVisualizerParams,
+    archive::{TrackVisualizerMode, TrackVisualizerParams},
     track_visualizer::AudioAnalysisSnapshot,
 };
 use glow::{self, HasContext, PixelUnpackData};
@@ -29,7 +29,7 @@ void main() {
 }
 "#;
 
-const CONTAINMENT_SCENE_FRAGMENT_SHADER: &str = r#"#version 300 es
+const CHROMATIC_BULGE_GRID_FRAGMENT_SHADER: &str = r#"#version 300 es
 precision highp float;
 
 in vec2 v_uv;
@@ -43,78 +43,52 @@ uniform float u_treble;
 uniform float u_peak;
 uniform float u_progress;
 uniform float u_motion_rate;
-uniform float u_ring_count;
 uniform float u_lattice_density;
-uniform sampler2D u_prev_frame;
 
 out vec4 out_color;
 
-mat2 rot2(float a) {
-  float s = sin(a);
-  float c = cos(a);
-  return mat2(c, -s, s, c);
-}
-
-float hash12(vec2 p) {
-  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.x + p3.y) * p3.z);
-}
-
-vec2 aspect_uv(vec2 uv) {
-  vec2 p = uv * 2.0 - 1.0;
-  p.x *= u_resolution.x / max(u_resolution.y, 1.0);
-  return p;
-}
-
-vec2 to_tex_uv(vec2 p) {
-  p.x /= u_resolution.x / max(u_resolution.y, 1.0);
-  return p * 0.5 + 0.5;
+float dot_mask(vec2 sample_px, float spacing_px, float radius_px, float edge_px) {
+  vec2 local = mod(sample_px + 0.5 * spacing_px, spacing_px) - 0.5 * spacing_px;
+  float distance_to_center = length(local);
+  return 1.0 - smoothstep(radius_px, radius_px + edge_px, distance_to_center);
 }
 
 void main() {
-  vec2 base = aspect_uv(v_uv);
-  float radius = length(base);
+  vec2 frag_px = v_uv * u_resolution;
+  vec2 center = 0.5 * u_resolution;
+  vec2 lens_delta = frag_px - center;
+  float lens_radius = 0.24 * min(u_resolution.x, u_resolution.y);
+  float lens_distance = length(lens_delta);
+  float normalized_radius = lens_distance / max(lens_radius, 1.0);
+  float falloff = 1.0 - smoothstep(0.78, 1.0, normalized_radius);
+  float hemisphere = sqrt(max(0.0, 1.0 - normalized_radius * normalized_radius));
+  vec2 split_axis = lens_distance > 0.0001 ? lens_delta / lens_distance : vec2(1.0, 0.0);
 
-  float ring_count = max(u_ring_count, 1.0);
-  float pulse = u_bass * 0.08 * sin(u_time * (2.8 + u_motion_rate * 1.7) + radius * 16.0);
-  float ring_coord = radius + pulse;
-  float ring_lines = abs(fract(ring_coord * (ring_count * 2.2 + 1.0)) - 0.5);
-  float ring_width = 0.02 + (8.0 - ring_count) * 0.0015 + u_peak * 0.01;
-  float rings = 1.0 - smoothstep(ring_width, ring_width + 0.018, ring_lines);
-  rings *= smoothstep(1.0, 0.12, radius);
+  float density = clamp((u_lattice_density - 2.0) / 10.0, 0.0, 1.0);
+  float spacing_px = mix(22.0, 12.0, density);
+  float base_radius_px = spacing_px * 0.16;
+  float scroll_px = u_time * (28.0 + 42.0 * clamp(u_motion_rate - 0.2, 0.0, 2.8));
 
-  float shock = 1.0 - smoothstep(0.01, 0.035, abs(radius - (0.26 + u_bass * 0.12 + u_peak * 0.06)));
-  shock *= 0.35 + 0.65 * u_peak;
+  vec2 sample_px = frag_px;
+  sample_px.x += scroll_px;
+  sample_px += split_axis * (falloff * hemisphere * (10.0 + 18.0 * u_bass));
 
-  vec2 prev_uv = to_tex_uv(base * (1.0 - (0.008 + 0.016 * u_bass)));
-  prev_uv = clamp(prev_uv, vec2(0.001), vec2(0.999));
-  vec3 prev = texture(u_prev_frame, prev_uv).rgb;
+  float radius_scale = 1.0 + falloff * hemisphere * (0.85 + 0.55 * u_bass + 0.15 * u_mid);
+  float dot_radius_px = base_radius_px * radius_scale;
+  float edge_px = 1.1 - min(u_peak, 1.0) * 0.25;
+  float split_px = falloff * (0.6 + 2.4 * u_treble + 0.8 * u_peak);
 
-  float warning = smoothstep(0.55, 1.0, u_progress);
-  vec3 bg = vec3(0.0, 0.0, 0.0);
-  vec3 ring_color = mix(vec3(0.86, 0.58, 0.16), vec3(0.95, 0.34, 0.16), warning * 0.45 + u_peak * 0.2);
+  float mask_white = dot_mask(sample_px, spacing_px, dot_radius_px, edge_px);
+  float mask_r = dot_mask(sample_px + split_axis * split_px, spacing_px, dot_radius_px, edge_px);
+  float mask_g = mask_white;
+  float mask_b = dot_mask(sample_px - split_axis * split_px, spacing_px, dot_radius_px, edge_px);
 
-  vec3 current = bg;
-  current += ring_color * rings * (0.18 + u_bass * 0.82);
-  current += ring_color * shock * 0.45;
-
-  float feedback = clamp(0.16 + u_energy * 0.24, 0.16, 0.42);
-  vec3 color = mix(current, max(current, prev * 0.93), feedback);
-
-  float edge = clamp(rings, 0.0, 1.0);
-  float split = edge * u_treble * (0.012 + 0.01 * u_progress);
-  vec2 split_px = vec2(split / max(u_resolution.x, 1.0), 0.0);
-  vec3 split_sample;
-  split_sample.r = texture(u_prev_frame, clamp(prev_uv + split_px, vec2(0.001), vec2(0.999))).r;
-  split_sample.g = texture(u_prev_frame, prev_uv).g;
-  split_sample.b = texture(u_prev_frame, clamp(prev_uv - split_px, vec2(0.001), vec2(0.999))).b;
-  color = max(color, split_sample * edge * (0.15 + u_treble * 0.22));
-
-  float flash = smoothstep(0.55, 1.0, u_peak);
-  vec3 flash_color = mix(vec3(0.2, 0.9, 0.9), vec3(1.0, 0.24, 0.16), 0.65 + 0.35 * warning);
-  color = mix(color, max(color, flash_color), flash * 0.18);
-  color += flash_color * shock * flash * 0.1;
+  vec3 white_core = vec3(mask_white);
+  vec3 aberrated = vec3(mask_r, mask_g, mask_b);
+  float aberration_mix = clamp(falloff * (0.18 + 0.32 * u_treble + 0.12 * u_peak), 0.0, 0.55);
+  vec3 color = mix(white_core, aberrated, aberration_mix);
+  color *= 0.72 + 0.28 * u_energy;
+  color *= 0.96 + 0.04 * smoothstep(0.7, 1.0, u_progress);
 
   out_color = vec4(clamp(color, 0.0, 1.0), 1.0);
 }
@@ -137,6 +111,7 @@ void main() {
 #[derive(Clone, Debug)]
 pub struct PanelShaderRequest {
     pub area: Rect,
+    pub mode: TrackVisualizerMode,
     pub record_id: String,
     pub analysis: AudioAnalysisSnapshot,
     pub viewer_tick: u64,
@@ -155,11 +130,11 @@ struct SharedPanelShaderState {
 
 struct PanelShaderRenderHook {
     shared: Rc<RefCell<SharedPanelShaderState>>,
-    runtime: ContainmentLatticeRuntime,
+    runtime: PanelShaderRuntime,
 }
 
 #[derive(Default)]
-struct ContainmentLatticeRuntime {
+struct PanelShaderRuntime {
     resources: Option<RuntimeResources>,
     panel_size: Option<(i32, i32)>,
     active_record_id: Option<String>,
@@ -185,7 +160,6 @@ struct UniformSet {
     peak: f32,
     progress: f32,
     motion_rate: f32,
-    ring_count: f32,
     lattice_density: f32,
 }
 
@@ -211,9 +185,7 @@ struct SceneUniformLocations {
     peak: glow::UniformLocation,
     progress: glow::UniformLocation,
     motion_rate: glow::UniformLocation,
-    ring_count: glow::UniformLocation,
     lattice_density: glow::UniformLocation,
-    prev_frame: glow::UniformLocation,
 }
 
 struct BlitUniformLocations {
@@ -243,14 +215,17 @@ impl PanelShaderVisualizerLayer {
     pub fn render_hook(&self) -> RenderHookHandle {
         RenderHookHandle::new(PanelShaderRenderHook {
             shared: Rc::clone(&self.shared),
-            runtime: ContainmentLatticeRuntime::default(),
+            runtime: PanelShaderRuntime::default(),
         })
+    }
+
+    pub fn queue(&self, request: PanelShaderRequest) {
+        self.shared.borrow_mut().pending_request = Some(request);
     }
 
     pub fn begin_frame(&self) {
         self.shared.borrow_mut().pending_request = None;
     }
-
 }
 
 impl RenderHook for PanelShaderRenderHook {
@@ -278,13 +253,17 @@ impl RenderHook for PanelShaderRenderHook {
     }
 }
 
-impl ContainmentLatticeRuntime {
+impl PanelShaderRuntime {
     fn render(
         &mut self,
         gl: &glow::Context,
         context: &RenderHookContext<'_>,
         request: &PanelShaderRequest,
     ) -> Result<(), Error> {
+        if !matches!(request.mode, TrackVisualizerMode::ChromaticBulgeGrid) {
+            return Ok(());
+        }
+
         let Some(cell_size) = context.cell_size() else {
             return Ok(());
         };
@@ -330,7 +309,12 @@ impl ContainmentLatticeRuntime {
             gl.viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
             if scissor_enabled {
                 gl.enable(glow::SCISSOR_TEST);
-                gl.scissor(scissor_box[0], scissor_box[1], scissor_box[2], scissor_box[3]);
+                gl.scissor(
+                    scissor_box[0],
+                    scissor_box[1],
+                    scissor_box[2],
+                    scissor_box[3],
+                );
             } else {
                 gl.disable(glow::SCISSOR_TEST);
             }
@@ -391,11 +375,20 @@ impl ContainmentLatticeRuntime {
         Ok(())
     }
 
-    fn render_scene_pass(&mut self, gl: &glow::Context, uniforms: &UniformSet) -> Result<(), Error> {
+    fn render_scene_pass(
+        &mut self,
+        gl: &glow::Context,
+        uniforms: &UniformSet,
+    ) -> Result<(), Error> {
         let resources = self.resources_mut()?;
         unsafe {
             gl.bind_framebuffer(glow::FRAMEBUFFER, Some(resources.next_framebuffer));
-            gl.viewport(0, 0, uniforms.resolution.0 as i32, uniforms.resolution.1 as i32);
+            gl.viewport(
+                0,
+                0,
+                uniforms.resolution.0 as i32,
+                uniforms.resolution.1 as i32,
+            );
             gl.disable(glow::SCISSOR_TEST);
             gl.disable(glow::DEPTH_TEST);
             gl.disable(glow::BLEND);
@@ -404,9 +397,6 @@ impl ContainmentLatticeRuntime {
 
             gl.use_program(Some(resources.scene_program));
             gl.bind_vertex_array(Some(resources.vao));
-            gl.active_texture(glow::TEXTURE0);
-            gl.bind_texture(glow::TEXTURE_2D, Some(resources.prev_texture));
-            gl.uniform_1_i32(Some(&resources.scene_uniforms.prev_frame), 0);
             gl.uniform_2_f32(
                 Some(&resources.scene_uniforms.resolution),
                 uniforms.resolution.0,
@@ -423,14 +413,12 @@ impl ContainmentLatticeRuntime {
                 Some(&resources.scene_uniforms.motion_rate),
                 uniforms.motion_rate,
             );
-            gl.uniform_1_f32(Some(&resources.scene_uniforms.ring_count), uniforms.ring_count);
             gl.uniform_1_f32(
                 Some(&resources.scene_uniforms.lattice_density),
                 uniforms.lattice_density,
             );
             gl.draw_arrays(glow::TRIANGLES, 0, 3);
 
-            gl.bind_texture(glow::TEXTURE_2D, None);
             gl.bind_vertex_array(None);
             gl.use_program(None);
         }
@@ -446,9 +434,19 @@ impl ContainmentLatticeRuntime {
         let resources = self.resources_mut()?;
         unsafe {
             gl.bind_framebuffer(glow::FRAMEBUFFER, target_framebuffer);
-            gl.viewport(panel_rect.x, panel_rect.y, panel_rect.width, panel_rect.height);
+            gl.viewport(
+                panel_rect.x,
+                panel_rect.y,
+                panel_rect.width,
+                panel_rect.height,
+            );
             gl.enable(glow::SCISSOR_TEST);
-            gl.scissor(panel_rect.x, panel_rect.y, panel_rect.width, panel_rect.height);
+            gl.scissor(
+                panel_rect.x,
+                panel_rect.y,
+                panel_rect.width,
+                panel_rect.height,
+            );
             gl.disable(glow::DEPTH_TEST);
             gl.disable(glow::BLEND);
 
@@ -481,7 +479,7 @@ impl ContainmentLatticeRuntime {
     fn resources_mut(&mut self) -> Result<&mut RuntimeResources, Error> {
         self.resources
             .as_mut()
-            .ok_or_else(|| gl_error("containment runtime resources are unavailable"))
+            .ok_or_else(|| gl_error("panel shader runtime resources are unavailable"))
     }
 }
 
@@ -530,7 +528,6 @@ impl UniformSet {
             peak: request.analysis.peak.clamp(0.0, 1.0),
             progress: request.analysis.progress_ratio.clamp(0.0, 1.0),
             motion_rate,
-            ring_count: request.params.ring_count.clamp(1, 8) as f32,
             lattice_density: request.params.lattice_density.clamp(2, 12) as f32,
         }
     }
@@ -538,8 +535,11 @@ impl UniformSet {
 
 impl RuntimeResources {
     fn new(gl: &glow::Context) -> Result<Self, Error> {
-        let scene_program =
-            create_program(gl, FULLSCREEN_VERTEX_SHADER, CONTAINMENT_SCENE_FRAGMENT_SHADER)?;
+        let scene_program = create_program(
+            gl,
+            FULLSCREEN_VERTEX_SHADER,
+            CHROMATIC_BULGE_GRID_FRAGMENT_SHADER,
+        )?;
         let blit_program = create_program(gl, FULLSCREEN_VERTEX_SHADER, BLIT_FRAGMENT_SHADER)?;
         let vao = unsafe {
             gl.create_vertex_array()
@@ -559,9 +559,7 @@ impl RuntimeResources {
                 peak: uniform_location(gl, scene_program, "u_peak")?,
                 progress: uniform_location(gl, scene_program, "u_progress")?,
                 motion_rate: uniform_location(gl, scene_program, "u_motion_rate")?,
-                ring_count: uniform_location(gl, scene_program, "u_ring_count")?,
                 lattice_density: uniform_location(gl, scene_program, "u_lattice_density")?,
-                prev_frame: uniform_location(gl, scene_program, "u_prev_frame")?,
             },
             blit_uniforms: BlitUniformLocations {
                 scene: uniform_location(gl, blit_program, "u_scene")?,
@@ -636,7 +634,7 @@ fn create_render_target(
             gl.bind_framebuffer(glow::FRAMEBUFFER, None);
             gl.delete_framebuffer(framebuffer);
             gl.delete_texture(texture);
-            return Err(gl_error("containment framebuffer is incomplete"));
+            return Err(gl_error("panel shader framebuffer is incomplete"));
         }
         gl.bind_texture(glow::TEXTURE_2D, None);
         gl.bind_framebuffer(glow::FRAMEBUFFER, None);
@@ -713,9 +711,91 @@ fn uniform_location(
     name: &str,
 ) -> Result<glow::UniformLocation, Error> {
     unsafe { gl.get_uniform_location(program, name) }
-        .ok_or_else(|| gl_error(&format!("missing containment shader uniform {name}")))
+        .ok_or_else(|| gl_error(&format!("missing panel shader uniform {name}")))
 }
 
 fn gl_error(message: &str) -> Error {
     Error::UnableToRetrieveElementById(message.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PanelShaderRequest, PanelShaderVisualizerLayer, UniformSet};
+    use crate::{
+        archive::{TrackVisualizerMode, TrackVisualizerParams},
+        track_visualizer::AudioAnalysisSnapshot,
+    };
+    use ratzilla::ratatui::layout::Rect;
+
+    fn request() -> PanelShaderRequest {
+        PanelShaderRequest {
+            area: Rect::new(2, 3, 20, 10),
+            mode: TrackVisualizerMode::ChromaticBulgeGrid,
+            record_id: "0x07E2BIG".to_string(),
+            analysis: AudioAnalysisSnapshot {
+                energy: 2.0,
+                bass: 2.0,
+                mid: 2.0,
+                treble: 2.0,
+                peak: 1.4,
+                progress_ratio: 1.4,
+                is_playing: true,
+            },
+            viewer_tick: 1_250,
+            params: TrackVisualizerParams {
+                motion_rate: 8.0,
+                energy_gain: 8.0,
+                bass_gain: 8.0,
+                mid_gain: 8.0,
+                treble_gain: 8.0,
+                ring_count: 99,
+                particle_count: 99,
+                lattice_density: 99,
+            },
+        }
+    }
+
+    #[test]
+    fn begin_frame_clears_queued_request() {
+        let layer = PanelShaderVisualizerLayer::new();
+        layer.queue(request());
+
+        assert!(layer.shared.borrow().pending_request.is_some());
+
+        layer.begin_frame();
+
+        assert!(layer.shared.borrow().pending_request.is_none());
+    }
+
+    #[test]
+    fn queue_preserves_area_and_mode() {
+        let layer = PanelShaderVisualizerLayer::new();
+        let request = request();
+        layer.queue(request);
+
+        let pending = layer.shared.borrow();
+        let pending = pending
+            .pending_request
+            .as_ref()
+            .expect("queued request should exist");
+
+        assert_eq!(pending.area, Rect::new(2, 3, 20, 10));
+        assert_eq!(pending.mode, TrackVisualizerMode::ChromaticBulgeGrid);
+    }
+
+    #[test]
+    fn uniform_set_clamps_analysis_values() {
+        let uniforms = UniformSet::from_request(&request(), 320, 180);
+
+        assert_eq!(uniforms.resolution, (320.0, 180.0));
+        assert_eq!(uniforms.time, 1.25);
+        assert_eq!(uniforms.energy, 1.0);
+        assert_eq!(uniforms.bass, 1.0);
+        assert_eq!(uniforms.mid, 1.0);
+        assert_eq!(uniforms.treble, 1.0);
+        assert_eq!(uniforms.peak, 1.0);
+        assert_eq!(uniforms.progress, 1.0);
+        assert_eq!(uniforms.motion_rate, 3.0);
+        assert_eq!(uniforms.lattice_density, 12.0);
+    }
 }
