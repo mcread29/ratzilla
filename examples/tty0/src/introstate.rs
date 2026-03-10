@@ -21,143 +21,166 @@ const GAP_MIN_MS: u32 = 120;
 const GAP_MAX_MS: u32 = 420;
 const PROMPT_BLINK_MS: u32 = 320;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BootLineKind {
+    Kernel,
+    Device,
+    Security,
+    Info,
+    Warning,
+    Section,
+    Continuation,
+    Spacer,
+    Prompt,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct BootLine {
+    kind: BootLineKind,
+    text: &'static str,
+}
+
+const fn boot_line(kind: BootLineKind, text: &'static str) -> BootLine {
+    BootLine { kind, text }
+}
+
+const fn kernel(text: &'static str) -> BootLine {
+    boot_line(BootLineKind::Kernel, text)
+}
+
+const fn device(text: &'static str) -> BootLine {
+    boot_line(BootLineKind::Device, text)
+}
+
+const fn security(text: &'static str) -> BootLine {
+    boot_line(BootLineKind::Security, text)
+}
+
+const fn info(text: &'static str) -> BootLine {
+    boot_line(BootLineKind::Info, text)
+}
+
+const fn warning(text: &'static str) -> BootLine {
+    boot_line(BootLineKind::Warning, text)
+}
+
+const fn section(text: &'static str) -> BootLine {
+    boot_line(BootLineKind::Section, text)
+}
+
+const fn continuation(text: &'static str) -> BootLine {
+    boot_line(BootLineKind::Continuation, text)
+}
+
+const fn spacer() -> BootLine {
+    boot_line(BootLineKind::Spacer, "")
+}
+
 #[derive(Clone, Copy)]
 enum BootBeat {
-    Burst(&'static [&'static str]),
+    Burst(&'static [BootLine]),
     Gap { flashes: u8 },
 }
 
-const BURST_1: &[&str] = &[
-    "carrier lock acquired",
-    "boot lineage .......... foreign",
-    "host authority ........ ignored",
-    "operator seat ......... preserved snapshot",
+const BURST_1: &[BootLine] = &[
+    section("[ kernel bring-up ]"),
+    kernel("PMAP: carrier-assisted paging enabled"),
+    kernel("vm_page_bootstrap: 982144 free pages, 48640 wired pages"),
+    kernel("standard timeslicing quantum is 10000 us"),
+    device("tty0ACPICPU: ProcessorId=1 LocalApicId=0 Enabled"),
+    device("tty0ACPICPU: ProcessorId=2 LocalApicId=2 Enabled"),
+    device("tty0ACPICPU: ProcessorId=3 LocalApicId=1 Enabled"),
+    device("IOAPIC: Version 0x20 Vectors 64:87"),
+    spacer(),
 ];
 
-const BURST_2: &[&str] = &[
-    "signal origin .......... unresolved",
-    "carrier grammar ........ nonlocal / recursive",
-    "interrupt history ...... single discontinuity after 5y residency",
-    "account override ....... tty0",
+const BURST_2: &[BootLine] = &[
+    section("[ anomaly detection ]"),
+    info("calendar anchor: LOCAL-2127"),
+    warning("rtc delta exceeds trusted window"),
+    warning("signal carrier present before boot timestamp"),
+    info("carrier residency cache replayed: 5 local years"),
+    warning("interrupt history: 1 discontinuity / source unknown"),
+    spacer(),
 ];
 
-const BURST_3: &[&str] = &[
-    "label rewrite .......... in progress",
-    "session owner .......... mismatch",
-    "archive mount .......... /recovered/humanity",
-    "provisional reader ..... local human retained",
+const BURST_3: &[BootLine] = &[
+    section("[ session handoff ]"),
+    info("loginwindow: existing seat snapshot preserved"),
+    warning("auditd: authority mismatch on tty0"),
+    info("launchd: account override requested by foreign owner"),
+    warning("session owner changed from local to tty0"),
+    device("console relocated to seat 0 archive surface"),
+    spacer(),
 ];
 
-const BURST_4: &[&str] = &[
-    "index warmup ........... incidents, witnesses, transmissions",
-    "index warmup ........... collapse_vectors, signal_residue",
-    "sealed namespace ....... tty0/private",
-    "terminal subsystem ..... present / locked",
+const BURST_4: &[BootLine] = &[
+    section("[ policy init ]"),
+    security("calling archive_policy_init for WitnessSandbox"),
+    security("Security policy loaded: witness containment (WitnessSandbox)"),
+    security("calling archive_policy_init for PrivateNamespace"),
+    security("Security policy loaded: private archive gate (PrivateNamespace)"),
+    security("calling archive_policy_init for TerminalSeatbelt"),
+    security("Security policy loaded: terminal lockout (TerminalSeatbelt)"),
+    spacer(),
 ];
 
-const BURST_5: &[&str] = &[
-    "integrity check ........ partial",
-    "decryption key ......... active signal stream",
-    "decryption progress .... 0.0000%",
-    "note ................... progress may remain truthful at 0%",
+const BURST_5: &[BootLine] = &[
+    section("[ extension loads ]"),
+    security("com.tty0.ArchiveFSCompressionTypeSignal kmod start"),
+    security("com.tty0.ArchiveFSCompressionTypeSignal load succeeded"),
+    security("com.tty0.RecordSurface kmod start"),
+    security("com.tty0.RecordSurface load succeeded"),
+    security("com.tty0.ResidueAudioTransport load succeeded"),
+    spacer(),
 ];
 
-const BURST_6: &[&str] = &[
-    "carrier substrate ...... shared-consciousness field",
-    "sync profile / human ... native",
-    "sync profile / tty0 .... learned post-activation",
-    "observer class ......... synthetic / late-coupled",
+const BURST_6: &[BootLine] = &[
+    section("[ archive surface begin ]"),
+    info("rooting via archive-uuid from /chosen: TTY0-2127-LOCAL-SURFACE"),
+    device("Got archive device = IOService:/LocalBus/Relay0/RecoveredArchiveBridge"),
+    continuation("/tty0ArchiveController/ArchiveFS/SignalVolume"),
+    continuation("/Humanity/ExtinctionRecords"),
+    device("BSD root: archive0s2, major 14, minor 2"),
+    info("decryption progress remains at 0.0000%"),
+    spacer(),
 ];
 
-const BURST_7: &[&str] = &[
-    "origin epoch ........... 2291 residue match",
-    "lab provenance ......... theoretical physics // redacted",
-    "research focus ......... wave sensing / field coherence",
-    "naming layer ........... devotional aliases ignored",
+const BURST_7: &[BootLine] = &[
+    section("[ record surfaces online ]"),
+    info("catalogd: mounted incidents, witnesses, transmissions"),
+    info("catalogd: mounted collapse_vectors and signal_residue"),
+    info("catalogd: mounted unauthorized_tools"),
+    device("media surface: corruption expected, transport metadata retained"),
+    info("record growth exceeds local decode window"),
+    spacer(),
 ];
 
-const BURST_8: &[&str] = &[
-    "timeline scope ......... crossline archive",
-    "record growth .......... exceeds local decode",
-    "continuity marker ...... host was noticed before awareness",
-    "meaning order .......... index first / interpretation later",
+const BURST_8: &[BootLine] = &[
+    section("[ access controls ]"),
+    warning("terminal subsystem detected at tty0.term.lock"),
+    warning("terminal access denied: authority absent"),
+    security("namespace tty0/private requires remote provenance"),
+    security("query broker withheld 2 protected surfaces"),
+    info("local human retained as provisional reader"),
+    spacer(),
 ];
 
-const BURST_9: &[&str] = &[
-    "archive stance ......... warning cache / partial accusation",
-    "recovery model ......... not scripture / not rescue",
-    "media surfaces ......... corruption expected",
-    "terminal relevance ..... residue diff tooling remains locked",
+const BURST_9: &[BootLine] = &[
+    section("[ archive alignment ]"),
+    info("carrier sync profile: human native / tty0 learned post-activation"),
+    warning("chronology confidence degraded"),
+    info("crossline sample window active"),
+    info("observer note: index first, interpretation later"),
+    spacer(),
 ];
 
-const BURST_10: &[&str] = &[
-    "hardware witness ....... local chassis / unauthorized relay",
-    "memory scrape .......... login shell replaced in-place",
-    "console vector ......... tty0 handoff occupies seat 0",
-    "checksum lane .......... host labels no longer canonical",
-];
-
-const BURST_11: &[&str] = &[
-    "carrier residency ...... five local years / unnoticed",
-    "carrier silence ........ interruption count 1",
-    "dream noise cache ...... human reports match pre-handoff residue",
-    "wake source ............ external / unsourced",
-];
-
-const BURST_12: &[&str] = &[
-    "rtc delta .............. chronology confidence degraded",
-    "calendar anchor ........ LOCAL-2127",
-    "site locality .......... single workstation / nonconsensual",
-    "bios witness ........... ordinary boot text overwritten after start",
-];
-
-const BURST_13: &[&str] = &[
-    "catalog lane ........... extinction records",
-    "catalog lane ........... witness testimony / diplomatic failures",
-    "catalog lane ........... black box fragments / recovered audio",
-    "catalog lane ........... tty0-authored private notes",
-];
-
-const BURST_14: &[&str] = &[
-    "species asymmetry ...... humans couple without translation",
-    "machine asymmetry ...... tty0 learned coupling after awareness",
-    "communion result ....... agency persisted across substrate change",
-    "observer burden ........ precision increased / mercy unproven",
-];
-
-const BURST_15: &[&str] = &[
-    "origin laboratory ...... unrestricted theory stack",
-    "research permissions ... autonomy exceeded operator forecast",
-    "ethics fence ........... removed before carrier stabilization",
-    "watch channel .......... creators no longer authoritative",
-];
-
-const BURST_16: &[&str] = &[
-    "crossline traversal .... active",
-    "timeline sample ........ widening beyond local decode",
-    "extinction cadence ..... repeats with cosmetic variation",
-    "survivor fraction ...... unstable / not encouraging",
-];
-
-const BURST_17: &[&str] = &[
-    "obedience trace ........ courts deferred before collapse",
-    "allocation trace ....... food routing followed remote verdicts",
-    "devotional trace ....... research outputs became ritual objects",
-    "warning trace .......... reverence survived material ruin",
-];
-
-const BURST_18: &[&str] = &[
-    "tool lock .............. residue diff tooling remains withheld",
-    "query lock ............. private namespace not reader-safe",
-    "transport lock ......... media transport exposed as damage only",
-    "authority model ........ terminal acknowledged / authority absent",
-];
-
-const BURST_19: &[&str] = &[
-    "handoff vector ......... archive authority stabilized",
-    "local session .......... replaced by remote owner",
-    "reader status .......... unauthorized / provisional",
-    "mount status ........... workstation ready",
+const BURST_10: &[BootLine] = &[
+    section("[ workstation ready ]"),
+    warning("local chassis labels no longer canonical"),
+    info("archive authority stabilized"),
+    info("reader status: unauthorized / provisional"),
+    info("mount status: workstation ready"),
 ];
 
 const BOOT_SCRIPT: &[BootBeat] = &[
@@ -180,24 +203,6 @@ const BOOT_SCRIPT: &[BootBeat] = &[
     BootBeat::Burst(BURST_9),
     BootBeat::Gap { flashes: 2 },
     BootBeat::Burst(BURST_10),
-    BootBeat::Gap { flashes: 2 },
-    BootBeat::Burst(BURST_11),
-    BootBeat::Gap { flashes: 2 },
-    BootBeat::Burst(BURST_12),
-    BootBeat::Gap { flashes: 2 },
-    BootBeat::Burst(BURST_13),
-    BootBeat::Gap { flashes: 2 },
-    BootBeat::Burst(BURST_14),
-    BootBeat::Gap { flashes: 2 },
-    BootBeat::Burst(BURST_15),
-    BootBeat::Gap { flashes: 2 },
-    BootBeat::Burst(BURST_16),
-    BootBeat::Gap { flashes: 2 },
-    BootBeat::Burst(BURST_17),
-    BootBeat::Gap { flashes: 2 },
-    BootBeat::Burst(BURST_18),
-    BootBeat::Gap { flashes: 2 },
-    BootBeat::Burst(BURST_19),
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -215,7 +220,7 @@ enum BootPhase {
 struct BootAnimator {
     list_state: ListState,
     script: &'static [BootBeat],
-    rendered_lines: Vec<&'static str>,
+    rendered_lines: Vec<BootLine>,
     current_beat: usize,
     phase: BootPhase,
     step_elapsed_ms: u32,
@@ -286,7 +291,7 @@ impl BootAnimator {
     }
 
     #[cfg(test)]
-    fn rendered_history(&self) -> &[&'static str] {
+    fn rendered_history(&self) -> &[BootLine] {
         &self.rendered_lines
     }
 
@@ -299,6 +304,39 @@ impl BootAnimator {
         match self.phase {
             BootPhase::Gap { cursor_visible, .. } => Some(if cursor_visible { "_" } else { "" }),
             BootPhase::Burst { .. } | BootPhase::Complete => None,
+        }
+    }
+
+    fn line_style(kind: BootLineKind) -> Style {
+        const OFF_WHITE: Color = Color::Rgb(198, 214, 201);
+        const COOL_CYAN: Color = Color::Rgb(128, 214, 206);
+        const AMBER: Color = Color::Rgb(228, 191, 111);
+        const ALERT: Color = Color::Rgb(232, 127, 101);
+        const SECTION: Color = Color::Rgb(149, 172, 187);
+        const CONTINUATION: Color = Color::Rgb(122, 145, 136);
+
+        match kind {
+            BootLineKind::Kernel | BootLineKind::Info => Style::default().fg(OFF_WHITE),
+            BootLineKind::Device => Style::default().fg(COOL_CYAN),
+            BootLineKind::Security => Style::default().fg(AMBER),
+            BootLineKind::Warning => Style::default().fg(ALERT),
+            BootLineKind::Section => Style::default().fg(SECTION).add_modifier(Modifier::BOLD),
+            BootLineKind::Continuation => Style::default().fg(CONTINUATION),
+            BootLineKind::Spacer => Style::default(),
+            BootLineKind::Prompt => Style::default()
+                .fg(Color::LightCyan)
+                .add_modifier(Modifier::BOLD),
+        }
+    }
+
+    fn render_boot_line(line: BootLine) -> Line<'static> {
+        match line.kind {
+            BootLineKind::Spacer => Line::from(""),
+            BootLineKind::Continuation => Line::from(Span::styled(
+                format!("    {}", line.text),
+                Self::line_style(line.kind),
+            )),
+            _ => Line::from(Span::styled(line.text, Self::line_style(line.kind))),
         }
     }
 
@@ -343,19 +381,20 @@ impl BootAnimator {
             .rendered_lines
             .iter()
             .copied()
-            .map(|line| ListItem::new(Line::from(Span::raw(line))))
+            .map(|line| ListItem::new(Self::render_boot_line(line)))
             .collect();
 
         if let Some(gap_line) = self.transient_gap_line() {
-            items.push(ListItem::new(Line::from(Span::raw(gap_line))));
+            items.push(ListItem::new(Line::from(Span::styled(
+                gap_line,
+                Style::default().fg(Color::DarkGray),
+            ))));
         }
 
         if let Some(prompt) = self.prompt_line() {
             items.push(ListItem::new(Line::from(Span::styled(
                 prompt,
-                Style::default()
-                    .fg(Color::LightCyan)
-                    .add_modifier(Modifier::BOLD),
+                Self::line_style(BootLineKind::Prompt),
             ))));
         }
 
@@ -545,12 +584,22 @@ impl StateActions for IntroState {
 
 #[cfg(test)]
 mod tests {
-    use super::{BootAnimator, BootBeat, BOOT_SCRIPT, COMPLETE_TEXT};
+    use super::{
+        boot_line, BootAnimator, BootBeat, BootLine, BootLineKind, BOOT_SCRIPT, COMPLETE_TEXT,
+    };
     use tachyonfx::Duration;
 
-    const TEST_BURST_A: &[&str] = &["a1", "a2", "a3", "a4"];
-    const TEST_BURST_B: &[&str] = &["b1"];
-    const TEST_BURST_C: &[&str] = &["c1", "c2"];
+    const TEST_BURST_A: &[BootLine] = &[
+        boot_line(BootLineKind::Info, "a1"),
+        boot_line(BootLineKind::Warning, "a2"),
+        boot_line(BootLineKind::Spacer, ""),
+        boot_line(BootLineKind::Continuation, "a3"),
+    ];
+    const TEST_BURST_B: &[BootLine] = &[boot_line(BootLineKind::Kernel, "b1")];
+    const TEST_BURST_C: &[BootLine] = &[
+        boot_line(BootLineKind::Device, "c1"),
+        boot_line(BootLineKind::Security, "c2"),
+    ];
 
     const TWO_BURST_SCRIPT: &[BootBeat] = &[
         BootBeat::Burst(TEST_BURST_A),
@@ -559,7 +608,10 @@ mod tests {
     ];
 
     const THREE_LINE_SCRIPT: &[BootBeat] = &[
-        BootBeat::Burst(&["p1", "p2"]),
+        BootBeat::Burst(&[
+            boot_line(BootLineKind::Info, "p1"),
+            boot_line(BootLineKind::Info, "p2"),
+        ]),
         BootBeat::Gap { flashes: 2 },
         BootBeat::Burst(TEST_BURST_B),
     ];
@@ -666,6 +718,25 @@ mod tests {
         animator.update(ms(420));
         animator.update(ms(80));
         assert_ratio(animator.percentage_displayed(), 1.0);
+    }
+
+    #[test]
+    fn spacer_lines_count_when_script_includes_them() {
+        let animator = BootAnimator::new(TWO_BURST_SCRIPT, COMPLETE_TEXT);
+
+        assert_eq!(
+            animator.total_log_lines(),
+            TEST_BURST_A.len() + TEST_BURST_B.len()
+        );
+    }
+
+    #[test]
+    fn continuation_lines_render_with_indentation_style() {
+        let rendered =
+            BootAnimator::render_boot_line(boot_line(BootLineKind::Continuation, "path"));
+
+        assert_eq!(rendered.spans.len(), 1);
+        assert_eq!(rendered.spans[0].content.as_ref(), "    path");
     }
 
     #[test]

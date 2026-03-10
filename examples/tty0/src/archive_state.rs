@@ -518,12 +518,16 @@ impl ArchiveState {
     fn render_logs(&self, frame: &mut Frame, area: Rect) {
         let session = self.session.borrow();
         let visible = area.height.saturating_sub(2) as usize;
+        let max_width = area.width.saturating_sub(2) as usize;
         let skip = session.log_lines.len().saturating_sub(visible);
         let lines = session
             .log_lines
             .iter()
             .skip(skip)
-            .map(|line| Line::from(Span::styled(line.text.clone(), log_style(line.color_role))))
+            .map(|line| {
+                let text = truncate_log_line(line.text.as_str(), max_width);
+                Line::from(Span::styled(text, log_style(line.color_role)))
+            })
             .collect::<Vec<_>>();
 
         frame.render_widget(
@@ -535,6 +539,23 @@ impl ArchiveState {
             area,
         );
     }
+}
+
+fn truncate_log_line(text: &str, max_width: usize) -> String {
+    if max_width == 0 {
+        return String::new();
+    }
+    let text_len = text.chars().count();
+    if text_len <= max_width {
+        return text.to_string();
+    }
+    if max_width <= 3 {
+        return ".".repeat(max_width);
+    }
+
+    let keep = max_width - 3;
+    let truncated = text.chars().take(keep).collect::<String>();
+    format!("{truncated}...")
 }
 
 fn build_overview_lines(record: &RecordDocument) -> Vec<Line<'static>> {

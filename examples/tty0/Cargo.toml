@@ -11,6 +11,7 @@ examples-shared.workspace = true
 tachyonfx.workspace = true
 web-time.workspace = true
 wasm-bindgen.workspace = true
+rand = { workspace = true, features = ["small_rng"] }
 web-sys = { workspace = true, features = ["HtmlAudioElement", "HtmlMediaElement", "Storage", "Window"] }
 thiserror = "2.0.18"
 glow = "0.16"

@@ -1,13 +1,16 @@
 use std::{collections::VecDeque, rc::Rc};
 
 use crate::{
-    archive::{ArchiveStore, FlatRecordEntry, MediaHealth, RecordDocument},
+    archive::{ArchiveStore, FlatRecordEntry, RecordDocument},
     audio::{AudioController, PlaybackView},
+    session_logs::{SessionLogContext, SessionLogGenerator},
     state::StateId,
 };
 use tachyonfx::Duration;
+use web_time::{SystemTime, UNIX_EPOCH};
 
-const LOG_BUFFER_LIMIT: usize = 64;
+const LOG_BUFFER_LIMIT: usize = 96;
+const LOG_CHUNK_RANGE: std::ops::RangeInclusive<usize> = 4..=7;
 
 #[derive(Clone, Debug)]
 pub struct LogLine {
@@ -73,13 +76,23 @@ pub struct SessionModel {
     pub terminal_return_state: StateId,
     pub log_lines: VecDeque<LogLine>,
     pub log_elapsed_ms: u32,
-    pub log_tick: u64,
+    pub next_log_delay_ms: u32,
     pub viewer_tick: u64,
+    log_generator: SessionLogGenerator,
+    pending_log_lines: VecDeque<LogLine>,
     audio: AudioController,
 }
 
 impl SessionModel {
     pub fn new(archive: Rc<ArchiveStore>) -> Self {
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64;
+        Self::new_with_log_seed(archive, seed)
+    }
+
+    fn new_with_log_seed(archive: Rc<ArchiveStore>, seed: u64) -> Self {
         let mut session = Self {
             archive,
             selected_record: 0,
@@ -92,11 +105,14 @@ impl SessionModel {
             terminal_return_state: StateId::Archive,
             log_lines: VecDeque::new(),
             log_elapsed_ms: 0,
-            log_tick: 0,
+            next_log_delay_ms: 0,
             viewer_tick: 0,
+            log_generator: SessionLogGenerator::new(seed),
+            pending_log_lines: VecDeque::new(),
             audio: AudioController::new(),
         };
-        session.bootstrap_logs();
+        session.prime_logs();
+        session.next_log_delay_ms = session.log_generator.next_chunk_pause_ms();
         session
     }
 
@@ -185,11 +201,29 @@ impl SessionModel {
         }
 
         self.log_elapsed_ms += elapsed_ms;
-        while self.log_elapsed_ms >= self.next_log_interval() {
-            self.log_elapsed_ms -= self.next_log_interval();
-            let line = self.build_log_line();
+        while self.log_elapsed_ms >= self.next_log_delay_ms {
+            self.log_elapsed_ms -= self.next_log_delay_ms;
+
+            if self.pending_log_lines.is_empty() {
+                self.queue_next_chunk();
+                if self.pending_log_lines.is_empty() {
+                    break;
+                }
+                self.next_log_delay_ms = 0;
+                continue;
+            }
+
+            let Some(line) = self.pending_log_lines.pop_front() else {
+                self.next_log_delay_ms = self.log_generator.next_chunk_pause_ms();
+                break;
+            };
+
             self.push_log(line);
-            self.log_tick = self.log_tick.wrapping_add(1);
+            self.next_log_delay_ms = if self.pending_log_lines.is_empty() {
+                self.log_generator.next_chunk_pause_ms()
+            } else {
+                self.log_generator.next_line_delay_ms()
+            };
         }
     }
 
@@ -202,141 +236,53 @@ impl SessionModel {
         }
     }
 
-    fn next_log_interval(&self) -> u32 {
-        90 + ((self.log_tick % 6) as u32 * 10)
+    fn build_log_context(&self) -> SessionLogContext {
+        let record = self.current_record();
+        let record_meta = self.current_record_meta();
+        SessionLogContext {
+            record: record.clone(),
+            record_meta: record_meta.clone(),
+            active_page_label: self.active_page.label().to_string(),
+            decryption_status: self.decryption_status.to_string(),
+            corruption_label: self.corruption_label().to_string(),
+            related_record_id: record.related_record_ids.first().cloned(),
+        }
     }
 
-    fn bootstrap_logs(&mut self) {
-        let initial_logs = [
-            (
-                "◎ manifest parsed -> embedded archive hydrated",
-                LogColorRole::Sync,
-            ),
-            (
-                "• decryption truthful at 0% -> waiting for reader movement",
-                LogColorRole::Info,
-            ),
-            (
-                "△ terminal surface present -> authority withheld",
-                LogColorRole::Deny,
-            ),
-            (
-                "┆ content files mounted -> records / pages / media surfaces",
-                LogColorRole::Info,
-            ),
-            (
-                "◇ tty0 left the labels readable on purpose",
-                LogColorRole::Ghost,
-            ),
-        ];
-
-        for (text, color_role) in initial_logs {
-            self.push_log(LogLine {
-                text: text.to_string(),
-                color_role,
-            });
+    fn prime_logs(&mut self) {
+        if !self.has_records() {
+            return;
         }
+
+        let chunk = {
+            let ctx = self.build_log_context();
+            self.log_generator
+                .generate_startup_chunk(&ctx, LOG_CHUNK_RANGE)
+        };
+
+        for line in chunk.lines {
+            self.push_log(line);
+        }
+    }
+
+    fn queue_next_chunk(&mut self) {
+        if !self.has_records() {
+            self.next_log_delay_ms = self.log_generator.next_chunk_pause_ms();
+            return;
+        }
+
+        let chunk = {
+            let ctx = self.build_log_context();
+            self.log_generator.generate_chunk(&ctx, LOG_CHUNK_RANGE)
+        };
+        self.pending_log_lines = chunk.lines.into();
     }
 
     fn push_log(&mut self, line: LogLine) {
+        self.log_generator.note_emitted_line(line.text.as_str());
         self.log_lines.push_back(line);
         while self.log_lines.len() > LOG_BUFFER_LIMIT {
             self.log_lines.pop_front();
-        }
-    }
-
-    fn build_log_line(&self) -> LogLine {
-        let record = self.current_record();
-        let record_meta = self.current_record_meta();
-        let lane = self.log_tick % 20;
-
-        if lane == 0 {
-            return self.ghost_log(record);
-        }
-        if lane < 6 {
-            return self.reactive_log(record_meta, record);
-        }
-        self.ambient_log(record_meta, record)
-    }
-
-    fn ambient_log(&self, record_meta: &FlatRecordEntry, record: &RecordDocument) -> LogLine {
-        let variant = (self.log_tick % 7) as usize;
-        let text = match variant {
-            0 => format!(
-                "• relay sync → {} → {}",
-                record_meta.category_id, record.signal_integrity
-            ),
-            1 => format!(
-                "┆ checksum drift {} -> {}",
-                record.id,
-                self.corruption_label()
-            ),
-            2 => format!(
-                "░ index cache refresh -> {} [{}]",
-                record_meta.record_id,
-                record.badge_label()
-            ),
-            3 => format!(
-                "▁▂▃ page carrier -> {} / {}",
-                record.id,
-                self.active_page.label()
-            ),
-            4 => format!(
-                "• media state {} -> {}",
-                record.id,
-                record.media_health().label()
-            ),
-            5 => format!("┆ decryption unchanged -> {}", self.decryption_status),
-            _ => format!("╎ archive path verified -> {}", record_meta.category_path),
-        };
-
-        let color_role = if variant == 1 || variant == 5 {
-            LogColorRole::Warn
-        } else if variant == 0 || variant == 4 {
-            LogColorRole::Sync
-        } else {
-            LogColorRole::Info
-        };
-
-        LogLine { text, color_role }
-    }
-
-    fn reactive_log(&self, record_meta: &FlatRecordEntry, record: &RecordDocument) -> LogLine {
-        let variant = (self.log_tick % 5) as usize;
-        let text = match variant {
-            0 => format!(
-                "◎ selection -> {} [{}] // {}",
-                record.id,
-                record.badge_label(),
-                record_meta.category_label
-            ),
-            1 => format!("› page {} -> {}", record.id, self.active_page.label()),
-            2 => format!("› access {} -> {}", record.id, record.access_level.label()),
-            3 => format!("› source {} -> {}", record.id, record.recovered_source),
-            _ => format!("› media {} -> {}", record.id, record.media_health().label()),
-        };
-
-        let color_role = if record.media_health() == MediaHealth::Mounted {
-            LogColorRole::Sync
-        } else {
-            LogColorRole::Info
-        };
-
-        LogLine { text, color_role }
-    }
-
-    fn ghost_log(&self, record: &RecordDocument) -> LogLine {
-        let variant = (self.log_tick % 4) as usize;
-        let text = match variant {
-            0 => "◇ the signal noticed the host before the host named the signal".to_string(),
-            1 => "◇ index first -> meaning later".to_string(),
-            2 => format!("◇ tty0 withheld the rest of {}", record.id),
-            _ => "◇ terminal surface acknowledged -> authority still absent".to_string(),
-        };
-
-        LogLine {
-            text,
-            color_role: LogColorRole::Ghost,
         }
     }
 }
@@ -347,12 +293,13 @@ mod tests {
 
     use crate::archive::ArchiveLoader;
 
-    use super::{RecordPageTab, SessionModel};
+    use super::{RecordPageTab, SessionModel, LOG_BUFFER_LIMIT};
+    use tachyonfx::Duration;
 
     #[test]
     fn moving_record_resets_page_and_scroll() {
         let archive = Rc::new(ArchiveLoader::load_embedded().expect("embedded archive"));
-        let mut session = SessionModel::new(archive);
+        let mut session = SessionModel::new_with_log_seed(archive, 11);
 
         session.active_page = RecordPageTab::Media;
         session.detail_scroll = 7;
@@ -366,7 +313,7 @@ mod tests {
     #[test]
     fn moving_record_updates_flat_metadata() {
         let archive = Rc::new(ArchiveLoader::load_embedded().expect("embedded archive"));
-        let mut session = SessionModel::new(archive);
+        let mut session = SessionModel::new_with_log_seed(archive, 12);
 
         session.move_record(1);
 
@@ -374,5 +321,81 @@ mod tests {
             session.current_record().id,
             session.current_record_meta().record_id
         );
+    }
+
+    #[test]
+    fn startup_seeding_populates_generated_logs_immediately() {
+        let archive = Rc::new(ArchiveLoader::load_embedded().expect("embedded archive"));
+        let session = SessionModel::new_with_log_seed(archive, 13);
+
+        assert!((4..=7).contains(&session.log_lines.len()));
+        assert!(session.log_lines.iter().any(|line| {
+            line.text.contains("manifest hydrated")
+                || line.text.contains("signal attach")
+                || line.text.contains("provisional reader")
+        }));
+    }
+
+    #[test]
+    fn runtime_streaming_emits_one_line_at_a_time() {
+        let archive = Rc::new(ArchiveLoader::load_embedded().expect("embedded archive"));
+        let mut session = SessionModel::new_with_log_seed(archive, 14);
+        let initial_len = session.log_lines.len();
+        let pause = session.next_log_delay_ms;
+
+        session.tick(Duration::from_millis(pause));
+        assert_eq!(session.log_lines.len(), initial_len + 1);
+        assert!(!session.pending_log_lines.is_empty());
+
+        let intra_chunk_delay = session.next_log_delay_ms;
+        session.tick(Duration::from_millis(intra_chunk_delay));
+        assert_eq!(session.log_lines.len(), initial_len + 2);
+    }
+
+    #[test]
+    fn moving_record_changes_future_chunk_content() {
+        let archive = Rc::new(ArchiveLoader::load_embedded().expect("embedded archive"));
+        let mut session = SessionModel::new_with_log_seed(archive, 15);
+
+        session.move_record(1);
+        let pause = session.next_log_delay_ms;
+        session.tick(Duration::from_millis(pause));
+
+        let record_id = session.current_record().id.clone();
+        assert!(session
+            .log_lines
+            .iter()
+            .rev()
+            .take(7)
+            .any(|line| line.text.contains(record_id.as_str())));
+    }
+
+    #[test]
+    fn moving_page_changes_future_chunk_content() {
+        let archive = Rc::new(ArchiveLoader::load_embedded().expect("embedded archive"));
+        let mut session = SessionModel::new_with_log_seed(archive, 16);
+
+        session.move_record_page(1);
+        let pause = session.next_log_delay_ms;
+        session.tick(Duration::from_millis(pause));
+
+        assert!(session
+            .log_lines
+            .iter()
+            .rev()
+            .take(7)
+            .any(|line| line.text.contains(session.active_page.label())));
+    }
+
+    #[test]
+    fn log_buffer_limit_is_enforced() {
+        let archive = Rc::new(ArchiveLoader::load_embedded().expect("embedded archive"));
+        let mut session = SessionModel::new_with_log_seed(archive, 17);
+
+        for _ in 0..256 {
+            session.tick(Duration::from_millis(400));
+        }
+
+        assert_eq!(session.log_lines.len(), LOG_BUFFER_LIMIT);
     }
 }
