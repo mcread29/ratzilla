@@ -42,6 +42,7 @@ uniform float u_mid;
 uniform float u_treble;
 uniform float u_peak;
 uniform float u_beat;
+uniform float u_is_playing;
 uniform float u_progress;
 uniform float u_motion_rate;
 uniform float u_lattice_density;
@@ -73,6 +74,8 @@ void main() {
   float spacing_px = mix(22.0, 12.0, density);
   float base_radius_px = spacing_px * 0.16;
   float scroll_px = u_time * (28.0 + 42.0 * clamp(u_motion_rate - 0.2, 0.0, 2.8));
+  vec2 base_sample_px = frag_px;
+  base_sample_px.x += scroll_px;
 
   vec2 sphere_offset = frag_px - center;
   float center_profile = falloff * hemisphere;
@@ -82,29 +85,31 @@ void main() {
   vec2 rim_direction = sphere_normal.xy / max(sphere_normal.z, 0.55);
   float rim_profile = falloff * pow(clamp(1.0 - sphere_normal.z, 0.0, 1.0), 1.8);
   float rim_warp = rim_profile * (0.12 + 0.78 * u_bass + 0.10 * u_peak);
-  vec2 warped_sample_px = warped_screen_px + rim_direction * rim_warp;
-  warped_sample_px.x += scroll_px;
-  float dot_radius_px = base_radius_px;
+  vec2 sphere_sample_px = warped_screen_px + rim_direction * rim_warp;
+  sphere_sample_px.x += scroll_px;
+  float sphere_mix = clamp(falloff * hemisphere, 0.0, 1.0);
+  float dot_radius_px = mix(base_radius_px * 0.33, base_radius_px, sphere_mix);
   float edge_px = 1.1 - min(u_peak, 1.0) * 0.25;
-  float visible = falloff * smoothstep(0.0, 0.06 + 0.08 * u_peak + 0.06 * u_bass, hemisphere);
-  visible *= 0.64 + 0.20 * u_energy + 0.16 * u_peak + 0.36 * u_beat;
+  vec2 final_sample_px = mix(base_sample_px, sphere_sample_px, sphere_mix);
 
-  float chroma_drive = falloff * (0.10 + 1.85 * u_treble + 0.22 * u_peak);
+  float chroma_drive = sphere_mix * (0.22 + 1.35 * u_treble + 0.18 * u_peak);
   vec2 chroma_offset = radial_axis * chroma_drive;
+  float playing = step(0.5, u_is_playing);
+  float paused = 1.0 - playing;
 
-  float mask_g = dot_mask(warped_sample_px, spacing_px, dot_radius_px, edge_px) * visible;
+  float mask_g = dot_mask(final_sample_px, spacing_px, dot_radius_px, edge_px);
   float mask_r = dot_mask(
-    warped_sample_px + chroma_offset,
+    final_sample_px + chroma_offset,
     spacing_px,
     dot_radius_px,
     edge_px
-  ) * visible;
+  );
   float mask_b = dot_mask(
-    warped_sample_px - chroma_offset,
+    final_sample_px - chroma_offset,
     spacing_px,
     dot_radius_px,
     edge_px
-  ) * visible;
+  );
 
   vec3 normal_color = vec3(
     0.5 + 0.5 * sphere_normal.x,
@@ -123,12 +128,17 @@ void main() {
   );
   float color_drive = clamp(0.10 + 0.95 * u_mid + 0.18 * smoothstep(0.0, 1.0, u_progress), 0.0, 1.0);
   vec3 base_color = mix(cold_color, hot_color, color_drive);
+  vec3 reactive_color = mix(vec3(1.0), base_color, playing);
+  vec3 dot_color = mix(vec3(1.0), reactive_color, sphere_mix);
 
-  vec3 color = vec3(mask_r, mask_g, mask_b) * base_color;
-  color += vec3(mask_r, mask_g, mask_b) * (0.14 * u_peak + 0.10 * u_energy);
-  color *= 0.68 + 0.24 * u_energy + 0.14 * u_peak + 0.32 * u_beat;
+  float outer_alpha = mask_g;
+  float inner_alpha = mask_g * mix(1.0, clamp(0.22 + 0.62 * u_beat + 0.12 * u_peak + 0.08 * u_energy, 0.0, 1.0), playing);
+  float alpha = mix(outer_alpha, inner_alpha, sphere_mix);
+  vec3 color = vec3(mask_r, mask_g, mask_b) * dot_color;
+  color += vec3(mask_r, mask_g, mask_b) * playing * (0.10 * u_peak + 0.06 * u_energy);
+  color *= mix(1.0, 0.82 + 0.18 * u_energy, playing);
 
-  out_color = vec4(clamp(color, 0.0, 1.0), 1.0);
+  out_color = vec4(clamp(color, 0.0, 1.0), clamp(alpha, 0.0, 1.0));
 }
 "#;
 
@@ -197,6 +207,7 @@ struct UniformSet {
     treble: f32,
     peak: f32,
     beat: f32,
+    is_playing: f32,
     progress: f32,
     motion_rate: f32,
     lattice_density: f32,
@@ -223,6 +234,7 @@ struct SceneUniformLocations {
     treble: glow::UniformLocation,
     peak: glow::UniformLocation,
     beat: glow::UniformLocation,
+    is_playing: glow::UniformLocation,
     progress: glow::UniformLocation,
     motion_rate: glow::UniformLocation,
     lattice_density: glow::UniformLocation,
@@ -405,11 +417,12 @@ impl PanelShaderRuntime {
         unsafe {
             gl.bind_framebuffer(glow::FRAMEBUFFER, Some(resources.prev_framebuffer));
             gl.viewport(0, 0, width, height);
-            gl.clear_color(0.0, 0.0, 0.0, 1.0);
+            gl.clear_color(0.0, 0.0, 0.0, 0.0);
             gl.clear(glow::COLOR_BUFFER_BIT);
 
             gl.bind_framebuffer(glow::FRAMEBUFFER, Some(resources.next_framebuffer));
             gl.viewport(0, 0, width, height);
+            gl.clear_color(0.0, 0.0, 0.0, 0.0);
             gl.clear(glow::COLOR_BUFFER_BIT);
         }
         Ok(())
@@ -432,7 +445,7 @@ impl PanelShaderRuntime {
             gl.disable(glow::SCISSOR_TEST);
             gl.disable(glow::DEPTH_TEST);
             gl.disable(glow::BLEND);
-            gl.clear_color(0.0, 0.0, 0.0, 1.0);
+            gl.clear_color(0.0, 0.0, 0.0, 0.0);
             gl.clear(glow::COLOR_BUFFER_BIT);
 
             gl.use_program(Some(resources.scene_program));
@@ -449,6 +462,7 @@ impl PanelShaderRuntime {
             gl.uniform_1_f32(Some(&resources.scene_uniforms.treble), uniforms.treble);
             gl.uniform_1_f32(Some(&resources.scene_uniforms.peak), uniforms.peak);
             gl.uniform_1_f32(Some(&resources.scene_uniforms.beat), uniforms.beat);
+            gl.uniform_1_f32(Some(&resources.scene_uniforms.is_playing), uniforms.is_playing);
             gl.uniform_1_f32(Some(&resources.scene_uniforms.progress), uniforms.progress);
             gl.uniform_1_f32(
                 Some(&resources.scene_uniforms.motion_rate),
@@ -489,7 +503,8 @@ impl PanelShaderRuntime {
                 panel_rect.height,
             );
             gl.disable(glow::DEPTH_TEST);
-            gl.disable(glow::BLEND);
+            gl.enable(glow::BLEND);
+            gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
 
             gl.use_program(Some(resources.blit_program));
             gl.bind_vertex_array(Some(resources.vao));
@@ -501,6 +516,7 @@ impl PanelShaderRuntime {
             gl.bind_texture(glow::TEXTURE_2D, None);
             gl.bind_vertex_array(None);
             gl.use_program(None);
+            gl.disable(glow::BLEND);
         }
         Ok(())
     }
@@ -568,6 +584,7 @@ impl UniformSet {
                 .clamp(0.0, 1.0),
             peak: request.analysis.peak.clamp(0.0, 1.0),
             beat: request.analysis.beat.clamp(0.0, 1.0),
+            is_playing: if request.analysis.is_playing { 1.0 } else { 0.0 },
             progress: request.analysis.progress_ratio.clamp(0.0, 1.0),
             motion_rate,
             lattice_density: request.params.lattice_density.clamp(2, 12) as f32,
@@ -600,6 +617,7 @@ impl RuntimeResources {
                 treble: uniform_location(gl, scene_program, "u_treble")?,
                 peak: uniform_location(gl, scene_program, "u_peak")?,
                 beat: uniform_location(gl, scene_program, "u_beat")?,
+                is_playing: uniform_location(gl, scene_program, "u_is_playing")?,
                 progress: uniform_location(gl, scene_program, "u_progress")?,
                 motion_rate: uniform_location(gl, scene_program, "u_motion_rate")?,
                 lattice_density: uniform_location(gl, scene_program, "u_lattice_density")?,
@@ -839,6 +857,7 @@ mod tests {
         assert_eq!(uniforms.treble, 1.0);
         assert_eq!(uniforms.peak, 1.0);
         assert_eq!(uniforms.beat, 1.0);
+        assert_eq!(uniforms.is_playing, 1.0);
         assert_eq!(uniforms.progress, 1.0);
         assert_eq!(uniforms.motion_rate, 3.0);
         assert_eq!(uniforms.lattice_density, 12.0);
