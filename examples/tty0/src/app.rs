@@ -5,6 +5,7 @@ use crate::{
     archive_state::ArchiveState,
     help::{HelpKeyOutcome, HelpOverlay},
     introstate::IntroState,
+    panel_shader_visualizer::PanelShaderVisualizerLayer,
     session::SessionModel,
     state::{StateId, StateMachine},
     terminal_state::TerminalState,
@@ -13,12 +14,16 @@ use ratzilla::{event::KeyCode, ratatui::Frame, widgets::GraphicsCanvasLayer};
 
 pub struct App {
     help_overlay: HelpOverlay,
+    panel_shader_visualizer: PanelShaderVisualizerLayer,
     state_machine: Option<StateMachine>,
     last_frame: web_time::Instant,
 }
 
 impl App {
-    pub fn new(visual_layer: GraphicsCanvasLayer) -> Self {
+    pub fn new(
+        visual_layer: GraphicsCanvasLayer,
+        panel_shader_visualizer: PanelShaderVisualizerLayer,
+    ) -> Self {
         let archive = Rc::new(
             ArchiveLoader::load_embedded().expect("tty0 embedded archive must load successfully"),
         );
@@ -28,7 +33,11 @@ impl App {
         states.insert(StateId::Intro, IntroState::create(Rc::clone(&session)));
         states.insert(
             StateId::Archive,
-            ArchiveState::create(Rc::clone(&session), visual_layer),
+            ArchiveState::create(
+                Rc::clone(&session),
+                visual_layer,
+                panel_shader_visualizer.clone(),
+            ),
         );
         states.insert(StateId::Terminal, TerminalState::create(session));
 
@@ -39,6 +48,7 @@ impl App {
 
         Self {
             help_overlay: HelpOverlay::new(),
+            panel_shader_visualizer,
             state_machine: Some(state_machine),
             last_frame: web_time::Instant::now(),
         }
@@ -58,6 +68,7 @@ impl App {
         let now = web_time::Instant::now();
         let elapsed = now.duration_since(self.last_frame).as_millis() as u32;
         self.last_frame = now;
+        self.panel_shader_visualizer.begin_frame();
 
         if let Some(state_machine) = &mut self.state_machine {
             let _ =

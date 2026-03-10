@@ -15,6 +15,7 @@ mod audio;
 mod help;
 mod introstate;
 mod logo_text;
+mod panel_shader_visualizer;
 mod postprocessing;
 mod session;
 mod session_logs;
@@ -24,18 +25,28 @@ mod terminal_state;
 mod track_visualizer;
 
 use app::App;
+use panel_shader_visualizer::PanelShaderVisualizerLayer;
 use postprocessing::PostProcessing;
 
 fn main() -> io::Result<()> {
     let visual_layer = GraphicsCanvasLayer::new();
-    let app_state = Rc::new(RefCell::new(App::new(visual_layer.clone())));
+    let panel_shader_visualizer = PanelShaderVisualizerLayer::new();
+    let app_state = Rc::new(RefCell::new(App::new(
+        visual_layer.clone(),
+        panel_shader_visualizer.clone(),
+    )));
 
     let mut terminal = MultiBackendBuilder::with_fallback(BackendType::WebGl2)
-        .canvas_options(CanvasBackendOptions::new().with_render_hook(visual_layer.render_hook()))
+        .canvas_options(
+            CanvasBackendOptions::new()
+                .with_render_hook(visual_layer.render_hook())
+                .with_render_hook(panel_shader_visualizer.render_hook()),
+        )
         .webgl2_options(
             WebGl2BackendOptions::new()
                 .cursor_shape(CursorShape::SteadyUnderScore)
                 .with_render_hook(visual_layer.render_hook())
+                .with_render_hook(panel_shader_visualizer.render_hook())
                 .with_render_hook(PostProcessing::default()),
         )
         .build_terminal()?;
