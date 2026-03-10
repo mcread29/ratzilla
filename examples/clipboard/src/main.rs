@@ -7,9 +7,12 @@ use ratatui::{
     Frame,
 };
 
-use ratzilla::{event::{KeyCode, KeyEvent}, SelectionMode, WebRenderer};
 use examples_shared::backend::{BackendType, MultiBackendBuilder};
 use ratzilla::backend::webgl2::WebGl2BackendOptions;
+use ratzilla::{
+    event::{KeyCode, KeyEvent},
+    SelectionMode, WebRenderer,
+};
 
 fn main() -> io::Result<()> {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));

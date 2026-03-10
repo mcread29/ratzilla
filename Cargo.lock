@@ -596,9 +596,11 @@ dependencies = [
  "bitvec",
  "compact_str",
  "console_error_panic_hook",
+ "glow",
  "ratatui",
  "thiserror",
  "unicode-width",
+ "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
 ]

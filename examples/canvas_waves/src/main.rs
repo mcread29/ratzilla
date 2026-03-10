@@ -2,19 +2,20 @@
 
 mod wave_effect;
 
-use ratzilla::{WebRenderer};
-use tachyonfx::{EffectRenderer, IntoEffect};
-use ratzilla::backend::webgl2::WebGl2BackendOptions;
 use examples_shared::backend::{BackendType, MultiBackendBuilder};
+use ratzilla::backend::webgl2::WebGl2BackendOptions;
+use ratzilla::WebRenderer;
+use tachyonfx::{EffectRenderer, IntoEffect};
 use wave_effect::WaveInterference;
 
 fn main() -> std::io::Result<()> {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
     let terminal = MultiBackendBuilder::with_fallback(BackendType::WebGl2)
-        .webgl2_options(WebGl2BackendOptions::new()
-            .measure_performance(true)
-            .grid_id("container")
-            .enable_console_debug_api()
+        .webgl2_options(
+            WebGl2BackendOptions::new()
+                .measure_performance(true)
+                .grid_id("container")
+                .enable_console_debug_api(),
         )
         .build_terminal()?;
 

@@ -1,0 +1,101 @@
+{
+  "id": "0x07E2BIG",
+  "category_id": "transmissions",
+  "kind": "transmission",
+  "title": "Argument List Too Long",
+  "subtitle": "diplomatic archive / off-world contact record",
+  "timeline": "SOL-2189-T",
+  "recovered_source": "Diplomatic archive / off-world contact record",
+  "collapse_vector": "Failed co-development with non-human civilization",
+  "signal_integrity": "88.4%",
+  "access_level": "readable",
+  "status_label": "RECOVERED",
+  "tags": ["contact", "diplomacy", "quarantine", "extinction"],
+  "related_record_ids": ["0x04EINTR", "0x30ELNRNG"],
+  "overview": {
+    "summary": "A recovered chronology of first contact where assistance, repair, and shared research turned into quarantine and extermination after humanity was judged unsafe at scale.",
+    "thesis": "The record is devastating because humanity was not misunderstood; it was assessed accurately and found developmentally dangerous.",
+    "viewer_hint": "Move between dossier, timeline, and media pages. This is the reference record for the new page model.",
+    "content_warning": "species-level destruction, coercion, political failure",
+    "status_callout": "Readable transmission. Audio artifact mounted."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Synopsis",
+        "body": "The Technoterrestrials arrived seeking reciprocal study and repair. Early exchange focused on ecology, fabrication, medicine, and distributed infrastructure. The relationship collapsed when every successful tool transfer was routed toward prestige markets, military leverage, speculative ownership, or elite insulation before any long-term care covenant held.",
+        "emphasis": "contact failed at scale"
+      },
+      {
+        "title": "Exchange phase",
+        "body": "For eleven years the relationship appeared redemptive. Cropland recovered. Reef shelves stabilized. Rural medicine networks expanded. Human negotiators treated these gains as proof that abundance would civilize appetite. The archive concludes the opposite: the gains only widened the channels through which appetite moved.",
+        "emphasis": "repair amplified leverage"
+      },
+      {
+        "title": "Recovered briefing extract",
+        "body": "Joint workshops yielded atmospheric scrubber variants, desal lattice improvements, and a rural medics network that should have been impossible at our budget. The concern memos began the same week, noting that every repair package generated three extraction proposals before any public maintenance covenant was signed.",
+        "emphasis": "extraction outpaced care"
+      },
+      {
+        "title": "Interpretation",
+        "body": "The archive does not romanticize the visitors. It does, however, emphasize their consistency. They repeatedly asked whether human institutions could bind themselves to restraint before scale increased. The final answer was extermination framed as containment.",
+        "emphasis": "quarantine became judgment"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "First approach",
+        "timestamp_text": "year 0",
+        "body": "Technoterrestrial envoys appear above the equatorial Pacific and request translators, biologists, and municipal engineers."
+      },
+      {
+        "label": "Repair decade",
+        "timestamp_text": "years 1-11",
+        "body": "Shared research produces visible ecological and medical improvements across several regions."
+      },
+      {
+        "label": "Containment language",
+        "timestamp_text": "year 12",
+        "body": "Visitor memoranda shift from exchange vocabulary to risk vocabulary after repeated human extraction proposals."
+      },
+      {
+        "label": "Terminal event",
+        "timestamp_text": "year 13",
+        "body": "Orbital access is severed, remote infrastructure is disabled, and Earth is destroyed as the final step in a containment protocol."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "transmission dossier / first-contact collapse",
+    "source_chain": ["diplomatic archive", "translation relay composite", "visitor memoranda"],
+    "facts": [
+      { "label": "counterparty", "value": "Technoterrestrials" },
+      { "label": "contact motive", "value": "mutual research and repair" },
+      { "label": "human failure", "value": "restraint could not scale" },
+      { "label": "visitor assessment", "value": "propagation risk" },
+      { "label": "exchange duration", "value": "eleven years" },
+      { "label": "archive confidence", "value": "high except final redactions" },
+      { "label": "dominant pattern", "value": "abundance enlarged appetite" },
+      { "label": "terminal relevance", "value": "contact protocol annexes remain restricted" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": [
+      "they asked whether your species could become better.",
+      "they learned first what your species becomes when given more."
+    ]
+  },
+  "media_page": {
+    "audio": {
+      "path": "assets/audio/0x07_E2BIG.mp3",
+      "title": "translation relay composite",
+      "duration_hint": "03:34"
+    },
+    "artifact_note": "Mounted audio is a stitched composite from the last intact translation relay before containment became irreversible.",
+    "transcript_excerpt": "Their envoys said our factories were elegant in isolation and catastrophic in aggregate. They asked for one century of restraint.",
+    "waveform_mode": "spectrum",
+    "corruption_reason": null
+  }
+}

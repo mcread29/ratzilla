@@ -1,5 +1,6 @@
 // This example shows the full range of RGB colors that can be displayed in the browser.
 
+use examples_shared::backend::{BackendType, MultiBackendBuilder};
 use palette::{convert::FromColorUnclamped, Okhsv, Srgb};
 use ratzilla::{
     ratatui::{
@@ -10,12 +11,10 @@ use ratzilla::{
     },
     WebRenderer,
 };
-use examples_shared::backend::{BackendType, MultiBackendBuilder};
 
 fn main() -> std::io::Result<()> {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-    let terminal = MultiBackendBuilder::with_fallback(BackendType::Canvas)
-        .build_terminal()?;
+    let terminal = MultiBackendBuilder::with_fallback(BackendType::Canvas).build_terminal()?;
     let mut app = ColorsWidget::default();
     terminal.draw_web(move |frame| {
         frame.render_widget(&mut app, frame.area());

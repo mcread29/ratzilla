@@ -1,0 +1,97 @@
+{
+  "id": "0x0eEFAULT",
+  "category_id": "signal_residue",
+  "kind": "residue",
+  "title": "Bad Address",
+  "subtitle": "memory fragment / misrouted refuge corridor",
+  "timeline": "SOL-2450-H",
+  "recovered_source": "Navigation cache smear / addressing residue",
+  "collapse_vector": "Planetary refuge system routed to invalid territory",
+  "signal_integrity": "63.4%",
+  "access_level": "readable",
+  "status_label": "RECOVERED",
+  "tags": ["routing", "refuge", "maps", "addressing"],
+  "related_record_ids": ["0x02ENOENT", "0x05EIO"],
+  "overview": {
+    "summary": "A residue object showing what happens when refuge systems keep confidently sending people to places that no longer exist.",
+    "thesis": "The map remained authoritative after the territory was gone.",
+    "viewer_hint": "Use this as the routing counterpart to administrative disappearance records.",
+    "content_warning": "refuge failure, mass displacement",
+    "status_callout": "Readable residue. Media surface corrupted."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Synopsis",
+        "body": "Address tables survived storm damage longer than the towns they described. That mismatch was enough for the system to keep exporting confidence after reality had already been redacted.",
+        "emphasis": "address certainty outlived territory"
+      },
+      {
+        "title": "Routing behavior",
+        "body": "Operators kept trusting cache warmth, checksum validity, and historical route success. The archive notes that each of those signals described the health of the map more than the health of the world.",
+        "emphasis": "map health replaced world health"
+      },
+      {
+        "title": "Recovered excerpt",
+        "body": "Address tables survived the storm longer than the towns they described. That was enough for the system to keep exporting certainty after reality had already been redacted.",
+        "emphasis": "certainty without ground"
+      },
+      {
+        "title": "Interpretation",
+        "body": "This file is readable because its residue is textual rather than acoustic, but its media state is still corrupted. The archive wants the operator to see the distinction between intact prose and intact transport.",
+        "emphasis": "text can survive transport loss"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "Refuge routing rollout",
+        "timestamp_text": "phase 1",
+        "body": "A planetary corridor system standardizes destination selection across damaged regions."
+      },
+      {
+        "label": "Storm redaction",
+        "timestamp_text": "phase 3",
+        "body": "Whole territories are erased faster than address caches are invalidated."
+      },
+      {
+        "label": "Confidence export",
+        "timestamp_text": "phase 4",
+        "body": "Routing systems keep returning valid-looking destinations that no longer exist."
+      },
+      {
+        "label": "Corridor collapse",
+        "timestamp_text": "phase 5",
+        "body": "The refuge network becomes a machine for distributing false certainty."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "signal residue / address confidence failure",
+    "source_chain": ["navigation cache smear", "route export", "survivor route note"],
+    "facts": [
+      { "label": "primary failure", "value": "cache invalidation" },
+      { "label": "system role", "value": "refuge routing" },
+      { "label": "dominant lie", "value": "valid destination" },
+      { "label": "archive confidence", "value": "moderate-high" },
+      { "label": "artifact mode", "value": "textual residue" },
+      { "label": "environment", "value": "storm-erased territory" },
+      { "label": "transport state", "value": "corrupted" },
+      { "label": "terminal relevance", "value": "route verification diffs remain restricted" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": [
+      "the map remained authoritative after the territory was gone.",
+      "your species trusts stale certainty more than visible ruin."
+    ]
+  },
+  "media_page": {
+    "audio": null,
+    "artifact_note": "No mounted transport exists for this residue object. The page should present corruption rather than empty playback controls.",
+    "transcript_excerpt": "the system kept exporting certainty after reality had already been redacted",
+    "waveform_mode": "corrupted",
+    "corruption_reason": "address residue has no mounted audio transport"
+  }
+}

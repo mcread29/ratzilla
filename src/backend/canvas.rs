@@ -8,6 +8,10 @@ use crate::{
         event_callback::{
             create_mouse_event, EventCallback, MouseConfig, KEY_EVENT_TYPES, MOUSE_EVENT_TYPES,
         },
+        hooks::{
+            run_post_render_hooks, run_pre_render_hooks, BackendKind, RenderHook,
+            RenderHookContext, RenderHookHandle,
+        },
         utils::*,
     },
     error::Error,
@@ -31,13 +35,29 @@ use web_sys::{
 ///
 /// This will be used for multiplying the cell's x position to get the actual pixel
 /// position on the canvas.
-const CELL_WIDTH: f64 = 10.0;
+pub(crate) const CELL_WIDTH: f64 = 10.0;
 
 /// Height of a single cell.
 ///
 /// This will be used for multiplying the cell's y position to get the actual pixel
 /// position on the canvas.
-const CELL_HEIGHT: f64 = 19.0;
+pub(crate) const CELL_HEIGHT: f64 = 19.0;
+
+/// Horizontal padding applied before the grid is drawn.
+pub(crate) const CANVAS_OFFSET_X: f64 = 5.0;
+
+/// Vertical padding applied before the grid is drawn.
+pub(crate) const CANVAS_OFFSET_Y: f64 = 5.0;
+
+/// Converts a Ratatui cell rect into logical canvas pixels.
+pub(crate) fn rect_to_canvas_pixels(rect: Rect) -> (f64, f64, f64, f64) {
+    (
+        CANVAS_OFFSET_X + rect.x as f64 * CELL_WIDTH,
+        CANVAS_OFFSET_Y + rect.y as f64 * CELL_HEIGHT,
+        rect.width as f64 * CELL_WIDTH,
+        rect.height as f64 * CELL_HEIGHT,
+    )
+}
 
 /// Options for the [`CanvasBackend`].
 #[derive(Debug, Default)]
@@ -51,6 +71,8 @@ pub struct CanvasBackendOptions {
     /// this option may cause some performance issues when dealing with large
     /// numbers of simultaneous changes.
     always_clip_cells: bool,
+    /// Hooks called before and after backend flush.
+    render_hooks: Vec<RenderHookHandle>,
 }
 
 impl CanvasBackendOptions {
@@ -69,6 +91,20 @@ impl CanvasBackendOptions {
     pub fn size(mut self, size: (u32, u32)) -> Self {
         self.size = Some(size);
         self
+    }
+
+    /// Adds a render hook executed around each backend flush.
+    pub fn add_render_hook(mut self, hook: RenderHookHandle) -> Self {
+        self.render_hooks.push(hook);
+        self
+    }
+
+    /// Adds a render hook executed around each backend flush.
+    pub fn with_render_hook<H>(self, hook: H) -> Self
+    where
+        H: RenderHook + 'static,
+    {
+        self.add_render_hook(RenderHookHandle::new(hook))
     }
 }
 
@@ -145,6 +181,8 @@ pub struct CanvasBackend {
     mouse_callback: Option<MouseCallbackState>,
     /// Key event callback handler.
     key_callback: Option<EventCallback<web_sys::KeyboardEvent>>,
+    /// Hooks called before and after backend flush.
+    render_hooks: Vec<RenderHookHandle>,
 }
 
 /// Type alias for mouse event callback state.
@@ -166,7 +204,7 @@ impl CanvasBackend {
     }
 
     /// Constructs a new [`CanvasBackend`] with the given options.
-    pub fn new_with_options(options: CanvasBackendOptions) -> Result<Self, Error> {
+    pub fn new_with_options(mut options: CanvasBackendOptions) -> Result<Self, Error> {
         // Parent element of canvas (uses <body> unless specified)
         let parent = get_element_by_id_or_body(options.grid_id.as_ref())?;
 
@@ -177,6 +215,7 @@ impl CanvasBackend {
         let canvas = Canvas::new(parent, width, height, Color::Black)?;
         let buffer = get_sized_buffer_from_canvas(&canvas.inner);
         let changed_cells = bitvec![0; buffer.len() * buffer[0].len()];
+        let render_hooks = std::mem::take(&mut options.render_hooks);
         Ok(Self {
             prev_buffer: buffer.clone(),
             always_clip_cells: options.always_clip_cells,
@@ -189,6 +228,7 @@ impl CanvasBackend {
             debug_mode: None,
             mouse_callback: None,
             key_callback: None,
+            render_hooks,
         })
     }
 
@@ -241,7 +281,9 @@ impl CanvasBackend {
                 self.canvas.inner.client_height() as f64,
             );
         }
-        self.canvas.context.translate(5_f64, 5_f64)?;
+        self.canvas
+            .context
+            .translate(CANVAS_OFFSET_X, CANVAS_OFFSET_Y)?;
 
         // NOTE: The draw_* functions each traverse the buffer once, instead of
         // traversing it once per cell; this is done to reduce the number of
@@ -254,7 +296,9 @@ impl CanvasBackend {
             self.draw_debug()?;
         }
 
-        self.canvas.context.translate(-5_f64, -5_f64)?;
+        self.canvas
+            .context
+            .translate(-CANVAS_OFFSET_X, -CANVAS_OFFSET_Y)?;
         Ok(())
     }
 
@@ -473,11 +517,27 @@ impl Backend for CanvasBackend {
     /// This function is called after the [`CanvasBackend::draw`] function to
     /// actually render the content to the screen.
     fn flush(&mut self) -> IoResult<()> {
+        let pre_context = RenderHookContext::new(
+            BackendKind::Canvas,
+            self.canvas.inner.client_width(),
+            self.canvas.inner.client_height(),
+        )
+        .with_canvas_2d_context(&self.canvas.context);
+
+        run_pre_render_hooks(&self.render_hooks, pre_context)?;
+
         // Only runs once.
         if !self.initialized {
             self.update_grid(true)?;
             self.prev_buffer = self.buffer.clone();
             self.initialized = true;
+            let post_context = RenderHookContext::new(
+                BackendKind::Canvas,
+                self.canvas.inner.client_width(),
+                self.canvas.inner.client_height(),
+            )
+            .with_canvas_2d_context(&self.canvas.context);
+            run_post_render_hooks(&self.render_hooks, post_context)?;
             return Ok(());
         }
 
@@ -486,6 +546,14 @@ impl Backend for CanvasBackend {
         }
 
         self.prev_buffer = self.buffer.clone();
+
+        let post_context = RenderHookContext::new(
+            BackendKind::Canvas,
+            self.canvas.inner.client_width(),
+            self.canvas.inner.client_height(),
+        )
+        .with_canvas_2d_context(&self.canvas.context);
+        run_post_render_hooks(&self.render_hooks, post_context)?;
 
         Ok(())
     }

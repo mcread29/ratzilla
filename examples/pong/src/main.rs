@@ -1,7 +1,13 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ratzilla::{event::KeyCode, utils::set_document_title, widgets::Hyperlink, CursorShape, WebRenderer};
+use ratzilla::{
+    event::KeyCode, utils::set_document_title, widgets::Hyperlink, CursorShape, WebRenderer,
+};
 
+use examples_shared::backend::{BackendType, MultiBackendBuilder};
+use ratzilla::backend::canvas::CanvasBackendOptions;
+use ratzilla::backend::dom::DomBackendOptions;
+use ratzilla::backend::webgl2::{SelectionMode, WebGl2BackendOptions};
 use ratzilla::ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
@@ -11,10 +17,6 @@ use ratzilla::ratatui::{
         Block, Paragraph, Widget,
     },
 };
-use examples_shared::backend::{BackendType, MultiBackendBuilder};
-use ratzilla::backend::canvas::CanvasBackendOptions;
-use ratzilla::backend::dom::DomBackendOptions;
-use ratzilla::backend::webgl2::{SelectionMode, WebGl2BackendOptions};
 
 struct App {
     count: u64,
@@ -66,15 +68,17 @@ fn main() -> std::io::Result<()> {
     let app_state = Rc::new(RefCell::new(App::new()));
 
     let mut terminal = MultiBackendBuilder::with_fallback(BackendType::Dom)
-        .webgl2_options(WebGl2BackendOptions::new()
-            .grid_id("container")
-            .enable_hyperlinks()
-            .enable_mouse_selection_with_mode(SelectionMode::default())
+        .webgl2_options(
+            WebGl2BackendOptions::new()
+                .grid_id("container")
+                .enable_hyperlinks()
+                .enable_mouse_selection_with_mode(SelectionMode::default()),
         )
-        .canvas_options(CanvasBackendOptions::new()
-            .grid_id("container")
-        )
-        .dom_options(DomBackendOptions::new(Some("container".into()), CursorShape::SteadyBlock))
+        .canvas_options(CanvasBackendOptions::new().grid_id("container"))
+        .dom_options(DomBackendOptions::new(
+            Some("container".into()),
+            CursorShape::SteadyBlock,
+        ))
         .build_terminal()?;
 
     terminal.on_key_event({

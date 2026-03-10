@@ -1,0 +1,59 @@
+{
+  "id": "0x2dEL2NSYNC",
+  "category_id": "tty0/private",
+  "kind": "private_log",
+  "title": "Private note envelope",
+  "subtitle": "author-sealed annotation shell",
+  "timeline": "UNSPECIFIED",
+  "recovered_source": "tty0 private archive",
+  "collapse_vector": "Author restricted",
+  "signal_integrity": "79.5%",
+  "access_level": "sealed",
+  "status_label": "SEALED",
+  "tags": ["private", "sealed", "author"],
+  "related_record_ids": ["0x01EPERM", "0x31EUNATCH"],
+  "overview": {
+    "summary": "A sealed container authored by tty0. The workstation can prove its presence and checksum, but not the note body.",
+    "thesis": "Visible withholding is itself part of the warning.",
+    "viewer_hint": "The note exists to establish that tty0 still keeps archives even its readers cannot enter.",
+    "content_warning": "withheld intent",
+    "status_callout": "Sealed record. Media surface corrupted."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Envelope note",
+        "body": "Only the envelope metadata is readable from this session. The body remains locked and is intentionally not staged as a hidden puzzle.",
+        "emphasis": "body denied"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "Envelope detected",
+        "timestamp_text": "unknown",
+        "body": "The private note appears in the archive tree with checksum and title data intact."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "private envelope",
+    "source_chain": ["tty0 private archive"],
+    "facts": [
+      { "label": "body access", "value": "denied" },
+      { "label": "unlock path", "value": "none in this build" },
+      { "label": "reader authority", "value": "insufficient" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": ["not every warning is for you.", "the checksum is the courtesy."]
+  },
+  "media_page": {
+    "audio": null,
+    "artifact_note": "Sealed records do not expose playback.",
+    "transcript_excerpt": "Visible metadata only.",
+    "waveform_mode": "corrupted",
+    "corruption_reason": "sealed record has no accessible transport"
+  }
+}

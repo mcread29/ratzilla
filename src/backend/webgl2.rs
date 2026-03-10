@@ -2,6 +2,7 @@ use crate::{
     backend::{
         color::to_rgb,
         event_callback::{EventCallback, KEY_EVENT_TYPES},
+        hooks::{run_post_render_hooks, run_pre_render_hooks, BackendKind, RenderHookContext},
         utils::*,
     },
     error::Error,
@@ -28,6 +29,8 @@ use std::{
     rc::Rc,
 };
 use web_sys::{wasm_bindgen::JsCast, window, Element};
+
+pub use crate::backend::hooks::{RenderHook, RenderHookHandle};
 
 /// Re-export beamterm's atlas data type. Used by [`FontAtlasConfig::Static`].
 pub use beamterm_renderer::FontAtlasData;
@@ -93,6 +96,8 @@ pub struct WebGl2BackendOptions {
     console_debug_api: bool,
     /// Disable automatic canvas CSS sizing (let external CSS control dimensions).
     disable_auto_css_resize: bool,
+    /// Hooks called before and after frame rendering.
+    render_hooks: Vec<RenderHookHandle>,
 }
 
 impl WebGl2BackendOptions {
@@ -249,6 +254,20 @@ impl WebGl2BackendOptions {
         self.disable_auto_css_resize = true;
         self
     }
+
+    /// Registers a render hook executed around each frame.
+    pub fn add_render_hook(mut self, hook: RenderHookHandle) -> Self {
+        self.render_hooks.push(hook);
+        self
+    }
+
+    /// Registers a render hook executed around each frame.
+    pub fn with_render_hook<H>(self, hook: H) -> Self
+    where
+        H: RenderHook + 'static,
+    {
+        self.add_render_hook(RenderHookHandle::new(hook))
+    }
 }
 
 /// WebGl2 backend for high-performance terminal rendering.
@@ -331,6 +350,8 @@ pub struct WebGl2Backend {
     _user_mouse_handler: Option<TerminalMouseHandler>,
     /// User-provided key event handler.
     _user_key_handler: Option<EventCallback<web_sys::KeyboardEvent>>,
+    /// Hooks called before and after `beamterm.render_frame()`.
+    render_hooks: Vec<RenderHookHandle>,
 }
 
 impl WebGl2Backend {
@@ -373,6 +394,8 @@ impl WebGl2Backend {
             (None, None)
         };
 
+        let render_hooks = std::mem::take(&mut options.render_hooks);
+
         let mut backend = Self {
             beamterm,
             cursor_position: None,
@@ -384,6 +407,7 @@ impl WebGl2Backend {
             hyperlink_state,
             _user_mouse_handler: None,
             _user_key_handler: None,
+            render_hooks,
         };
 
         // Convert handler metrics from physical pixels to CSS pixels
@@ -511,6 +535,50 @@ impl WebGl2Backend {
         if let Some(pos) = self.cursor_position {
             self.draw_cursor(pos);
         }
+    }
+
+    fn run_pre_render_hooks(&mut self) -> Result<(), Error> {
+        if self.render_hooks.is_empty() {
+            return Ok(());
+        }
+
+        let gl = self.beamterm.gl();
+        let raw_gl = self
+            .beamterm
+            .canvas()
+            .get_context("webgl2")?
+            .ok_or(Error::UnableToRetrieveComponent("WebGl2RenderingContext"))?
+            .dyn_into::<web_sys::WebGl2RenderingContext>()
+            .map_err(|error| Error::from(web_sys::wasm_bindgen::JsValue::from(error)))?;
+        let (canvas_width, canvas_height) = self.beamterm.canvas_size();
+        let (cell_width, cell_height) = self.beamterm.cell_size();
+        let context = RenderHookContext::new(BackendKind::WebGl2, canvas_width, canvas_height)
+            .with_cell_size(cell_width, cell_height)
+            .with_webgl2_context(&raw_gl)
+            .with_webgl_context(&gl);
+        run_pre_render_hooks(&self.render_hooks, context)
+    }
+
+    fn run_post_render_hooks(&mut self) -> Result<(), Error> {
+        if self.render_hooks.is_empty() {
+            return Ok(());
+        }
+
+        let gl = self.beamterm.gl();
+        let raw_gl = self
+            .beamterm
+            .canvas()
+            .get_context("webgl2")?
+            .ok_or(Error::UnableToRetrieveComponent("WebGl2RenderingContext"))?
+            .dyn_into::<web_sys::WebGl2RenderingContext>()
+            .map_err(|error| Error::from(web_sys::wasm_bindgen::JsValue::from(error)))?;
+        let (canvas_width, canvas_height) = self.beamterm.canvas_size();
+        let (cell_width, cell_height) = self.beamterm.cell_size();
+        let context = RenderHookContext::new(BackendKind::WebGl2, canvas_width, canvas_height)
+            .with_cell_size(cell_width, cell_height)
+            .with_webgl2_context(&raw_gl)
+            .with_webgl_context(&gl);
+        run_post_render_hooks(&self.render_hooks, context)
     }
 
     /// Draws the cursor at the specified position.
@@ -730,9 +798,11 @@ impl Backend for WebGl2Backend {
         self.measure_begin(WEBGL_RENDER_MARK);
 
         // Flushes GPU buffers and render existing content to the canvas
+        self.run_pre_render_hooks()?;
         self.toggle_cursor(); // show cursor before rendering
         self.beamterm.render_frame().map_err(Error::from)?;
         self.toggle_cursor(); // restore cell to previous state
+        self.run_post_render_hooks()?;
 
         self.measure_end(WEBGL_RENDER_MARK);
 

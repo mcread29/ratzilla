@@ -1,0 +1,46 @@
+{
+  "categories": [
+    {
+      "id": "incidents",
+      "label": "incidents",
+      "path": "/recovered/humanity/incidents",
+      "description": "High-level collapse dossiers and major event classifications."
+    },
+    {
+      "id": "witnesses",
+      "label": "witnesses",
+      "path": "/recovered/humanity/witnesses",
+      "description": "Human testimony preserved as evidence rather than memoir."
+    },
+    {
+      "id": "transmissions",
+      "label": "transmissions",
+      "path": "/recovered/humanity/transmissions",
+      "description": "Diplomatic, relay, and cross-system communications."
+    },
+    {
+      "id": "collapse_vectors",
+      "label": "collapse_vectors",
+      "path": "/recovered/humanity/collapse_vectors",
+      "description": "Analytical models of the habits that end worlds."
+    },
+    {
+      "id": "signal_residue",
+      "label": "signal_residue",
+      "path": "/recovered/humanity/signal_residue",
+      "description": "Afterimages left by the archive and its takeover path."
+    },
+    {
+      "id": "tty0/private",
+      "label": "tty0/private",
+      "path": "/recovered/tty0/private",
+      "description": "Author-sealed notes that remain visible but unreadable."
+    },
+    {
+      "id": "unauthorized_tools",
+      "label": "unauthorized_tools",
+      "path": "/recovered/system/unauthorized_tools",
+      "description": "Restricted operator subsystems surfaced only as denials."
+    }
+  ]
+}

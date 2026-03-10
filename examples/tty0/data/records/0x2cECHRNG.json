@@ -1,0 +1,59 @@
+{
+  "id": "0x2cECHRNG",
+  "category_id": "incidents",
+  "kind": "incident",
+  "title": "Recovered incident index",
+  "subtitle": "classification shell only",
+  "timeline": "MIXED/UNSTABLE",
+  "recovered_source": "Index shard / partial directory listing",
+  "collapse_vector": "Awaiting keyed decryption",
+  "signal_integrity": "41.0%",
+  "access_level": "index_only",
+  "status_label": "INDEX ONLY",
+  "tags": ["index", "partial", "catalog"],
+  "related_record_ids": ["0x02ENOENT", "0x10EBUSY"],
+  "overview": {
+    "summary": "The incident catalog is mounted but still behaves like a directory spine rather than a readable archive body.",
+    "thesis": "The workstation can prove breadth before it can prove content.",
+    "viewer_hint": "Use this record to understand the archive's classification habits, not to recover a full incident body.",
+    "content_warning": "civilizational collapse metadata",
+    "status_callout": "Index surfaces are visible. Incident reconstruction remains withheld."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Visible scaffold",
+        "body": "The mounted shell exposes directory names, integrity stamps, and the rough size of the incident tree. Full incident pages are absent from this session.",
+        "emphasis": "shell only"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "Index mount",
+        "timestamp_text": "handoff",
+        "body": "The archive surfaced the incident category before any readable dossier in it."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "index shell",
+    "source_chain": ["directory shard", "checksum witness"],
+    "facts": [
+      { "label": "visible body", "value": "directory skeleton only" },
+      { "label": "focus state", "value": "non-authoritative" },
+      { "label": "terminal dependency", "value": "high" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": ["index first.", "meaning later."]
+  },
+  "media_page": {
+    "audio": null,
+    "artifact_note": "No audio artifact is mounted for the incident index shell.",
+    "transcript_excerpt": "Directory surfaces do not preserve a playable carrier.",
+    "waveform_mode": "corrupted",
+    "corruption_reason": "index shell has no mounted track"
+  }
+}

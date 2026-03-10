@@ -1,0 +1,59 @@
+{
+  "id": "0x08ENOEXEC",
+  "category_id": "unauthorized_tools",
+  "kind": "tooling",
+  "title": "Exec Format Error",
+  "subtitle": "unauthorized tool bundle / governance patch",
+  "timeline": "SOL-2304-C",
+  "recovered_source": "Emergency firmware rollout manifest",
+  "collapse_vector": "Civil authority replaced with incompatible automation",
+  "signal_integrity": "74.1%",
+  "access_level": "sealed",
+  "status_label": "LOCKED",
+  "tags": ["governance", "firmware", "automation"],
+  "related_record_ids": ["0x04EINTR", "0x33EL2HLT"],
+  "overview": {
+    "summary": "A sealed tool record from a timeline where cities deployed governance binaries faster than anyone verified they were written for the systems they controlled.",
+    "thesis": "Incompatibility was marketed as innovation until governance itself stopped parsing the city it ruled.",
+    "viewer_hint": "The archive exposes enough metadata to tie this tool bundle to the interrupted-negotiation world of institutional instability.",
+    "content_warning": "authoritarian automation",
+    "status_callout": "Locked record. Media surface corrupted."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Manifest note",
+        "body": "Checksums confirm the bundle existed and was signed under emergency authority. Execution traces are sealed from this session.",
+        "emphasis": "execution withheld"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "Patch deployment",
+        "timestamp_text": "emergency window",
+        "body": "Governance bundle is authorized faster than anyone verifies compatibility."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "tool bundle shell",
+    "source_chain": ["firmware rollout manifest"],
+    "facts": [
+      { "label": "execution", "value": "denied" },
+      { "label": "signature state", "value": "emergency authority" },
+      { "label": "reader authority", "value": "insufficient" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": ["they kept calling incompatibility innovation.", "the patch fit the panic better than it fit the city."]
+  },
+  "media_page": {
+    "audio": null,
+    "artifact_note": "Sealed governance bundle exposes no transport.",
+    "transcript_excerpt": "Execution traces withheld.",
+    "waveform_mode": "corrupted",
+    "corruption_reason": "tool bundle exposes no playback transport"
+  }
+}

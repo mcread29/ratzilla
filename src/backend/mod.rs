@@ -70,6 +70,9 @@ pub mod dom;
 /// WebGL2 backend.
 pub mod webgl2;
 
+/// Shared backend render hooks.
+pub mod hooks;
+
 /// Color handling.
 mod color;
 /// Event callback management.

@@ -216,8 +216,41 @@ There is a Vercel deployment template available for Ratzilla [here](https://verc
 ## Examples
 
 - [Minimal](https://github.com/ratatui/ratzilla/tree/main/examples/minimal) ([Preview](https://ratatui.github.io/ratzilla/minimal))
+- [Canvas Image](https://github.com/ratatui/ratzilla/tree/main/examples/canvas_image)
 - [Demo](https://github.com/ratatui/ratzilla/tree/main/examples/demo) ([Preview](https://ratatui.github.io/ratzilla/demo))
 - [Pong](https://github.com/ratatui/ratzilla/tree/main/examples/pong) ([Preview](https://ratatui.github.io/ratzilla/pong))
+
+### Canvas Image Widget
+
+```rust no_run
+use ratzilla::{
+    backend::canvas::CanvasBackendOptions,
+    ratatui::{style::Style, Terminal},
+    widgets::{CanvasImage, CanvasImageLayer},
+    CanvasBackend,
+};
+
+fn main() -> std::io::Result<()> {
+    let image_layer = CanvasImageLayer::new();
+    let backend = CanvasBackend::new_with_options(
+        CanvasBackendOptions::new().with_render_hook(image_layer.render_hook()),
+    )?;
+    let mut terminal = Terminal::new(backend)?;
+
+    terminal.draw_web(move |frame| {
+        frame.render_widget(
+            CanvasImage::new(image_layer.clone(), "data:image/svg+xml,...")
+                .style(Style::default()),
+            frame.area(),
+        );
+    });
+
+    Ok(())
+}
+```
+
+On `WebGl2Backend`, `CanvasImage` renders through textured quads in a render hook. Hook order controls composition: register the image hook before a post-processing hook if the image should receive that effect. Remote URLs on WebGL2 must be CORS-safe; data URLs and same-origin assets are the reliable default.
+
 - [Colors RGB](https://github.com/ratatui/ratzilla/tree/main/examples/colors_rgb) ([Preview](https://ratatui.github.io/ratzilla/colors_rgb))
 - [Animations](https://github.com/ratatui/ratzilla/tree/main/examples/animations) ([Preview](https://ratatui.github.io/ratzilla/animations))
 - [World Map](https://github.com/ratatui/ratzilla/tree/main/examples/world_map) ([Preview](https://ratatui.github.io/ratzilla/world_map))

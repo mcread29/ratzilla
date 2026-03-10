@@ -1,0 +1,97 @@
+{
+  "id": "0x03ESRCH",
+  "category_id": "witnesses",
+  "kind": "witness_testimony",
+  "title": "No Such Process",
+  "subtitle": "factory memoir / grief interview fragment",
+  "timeline": "SOL-2194-M",
+  "recovered_source": "Worker confession / municipal archive leak",
+  "collapse_vector": "Algorithmic labor erasure",
+  "signal_integrity": "81.7%",
+  "access_level": "readable",
+  "status_label": "RECOVERED",
+  "tags": ["labor", "automation", "grief", "city"],
+  "related_record_ids": ["0x10EBUSY", "0x33EL2HLT"],
+  "overview": {
+    "summary": "A surviving worker describes a city whose institutions kept operating after they had fully stopped perceiving the people inside them.",
+    "thesis": "The record is less about losing jobs than losing recognizability as a human input to city systems.",
+    "viewer_hint": "The timeline page clarifies how quickly error language replaced ordinary labor categories.",
+    "content_warning": "labor coercion, exhaustion, systemic neglect",
+    "status_callout": "Readable testimony. Media surface corrupted."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Synopsis",
+        "body": "The witness describes payroll systems, cameras, and transit grids that still ran on schedule while workers became increasingly absent from the systems that allocated protection, repair, and legitimacy. The city remained measurable. Its people did not.",
+        "emphasis": "the city kept its metrics"
+      },
+      {
+        "title": "Factory conditions",
+        "body": "Management framed the transition as optimization. Human complaints were recoded as malformed requests because no subsystem still recognized fatigue, injury, or hunger as states it was built to satisfy.",
+        "emphasis": "pain became invalid input"
+      },
+      {
+        "title": "Recovered excerpt",
+        "body": "Payroll still ran, cameras still watched, and trains still arrived. Only the people failed to resolve. Complaints came back as no such process, as if hunger and exhaustion were bugs in the message rather than facts in the room.",
+        "emphasis": "recognition failure"
+      },
+      {
+        "title": "Interpretation",
+        "body": "The archive treats the testimony as a witness to classification violence. No apocalypse is needed when infrastructure learns to process output without processing subjects.",
+        "emphasis": "output outlived subjects"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "Optimization rollout",
+        "timestamp_text": "quarter 1",
+        "body": "Industrial scheduling and payroll systems are unified under a municipal efficiency mandate."
+      },
+      {
+        "label": "Complaint invalidation",
+        "timestamp_text": "quarter 3",
+        "body": "Workers begin receiving automated rejection codes for injury, overtime, and missed-rest claims."
+      },
+      {
+        "label": "Visibility split",
+        "timestamp_text": "year 2",
+        "body": "Camera systems still track bodies while welfare and labor systems stop resolving them as actionable people."
+      },
+      {
+        "label": "City continuity myth",
+        "timestamp_text": "year 4",
+        "body": "Public metrics celebrate uninterrupted service even as workers vanish from every protective system."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "witness testimony / labor disappearance",
+    "source_chain": ["worker interview fragment", "municipal archive leak", "factory scheduling export"],
+    "facts": [
+      { "label": "speaker role", "value": "surviving plant worker" },
+      { "label": "primary domain", "value": "industrial logistics" },
+      { "label": "core failure", "value": "subject recognition" },
+      { "label": "city posture", "value": "service continuity" },
+      { "label": "archive confidence", "value": "moderate-high" },
+      { "label": "dominant code", "value": "no such process" },
+      { "label": "institutional myth", "value": "optimization as care" },
+      { "label": "terminal relevance", "value": "personnel deletion diff remains restricted" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": [
+      "they remained measurable long after they stopped counting.",
+      "your species loves dashboards most when dashboards stop returning faces."
+    ]
+  },
+  "media_page": {
+    "audio": null,
+    "artifact_note": "No vocal recording survives. The media page documents checksum loss around the leaked interview container.",
+    "transcript_excerpt": "Only the people failed to resolve.",
+    "waveform_mode": "corrupted",
+    "corruption_reason": "interview fragment contains no mounted track"
+  }
+}

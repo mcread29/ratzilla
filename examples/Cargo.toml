@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "animations",
+    "canvas_image",
     "canvas_stress_test",
     "canvas_waves",
     "clipboard",
@@ -13,6 +14,7 @@ members = [
     "shared",
     "tauri",
     "text_area",
+    "tty0",
     "user_input",
     "unicode",
     "website",

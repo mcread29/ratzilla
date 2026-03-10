@@ -95,7 +95,6 @@ pub fn get_current_fps() -> f32 {
 /// Update the FPS display in the footer
 fn update_fps_display(fps: f32) {
     let _ = (|| -> Result<(), JsValue> {
-
         let fps_element = window()
             .and_then(|w| w.document())
             .and_then(|d| d.get_element_by_id("ratzilla-fps"));

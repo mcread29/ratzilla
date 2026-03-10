@@ -1,0 +1,97 @@
+{
+  "id": "0x04EINTR",
+  "category_id": "transmissions",
+  "kind": "transmission",
+  "title": "Interrupted System Call",
+  "subtitle": "deep-range relay break / treaty burst",
+  "timeline": "SOL-2271-Q",
+  "recovered_source": "Interstellar relay transcript / partial burst capture",
+  "collapse_vector": "Negotiation cut short by planetary panic",
+  "signal_integrity": "73.8%",
+  "access_level": "readable",
+  "status_label": "RECOVERED",
+  "tags": ["relay", "negotiation", "panic", "governance"],
+  "related_record_ids": ["0x07E2BIG", "0x08ENOEXEC"],
+  "overview": {
+    "summary": "A transmission log documenting a rescue negotiation repeatedly interrupted by Earth's own command instability until the corridor closed.",
+    "thesis": "Humanity failed to speak for itself long enough to remain rescuable.",
+    "viewer_hint": "Use the timeline page for pacing; the dossier reads like panic only after you see how many interruptions were institutional.",
+    "content_warning": "panic, failed rescue, mass casualty implication",
+    "status_callout": "Readable transmission. Media surface corrupted."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Synopsis",
+        "body": "The relay offered a narrow but credible rescue corridor. Each interruption looked temporary in isolation: a new cabinet, a defense override, an emergency board, a media backlash. Together they made continuity impossible.",
+        "emphasis": "no one could hold the line"
+      },
+      {
+        "title": "Negotiation dynamics",
+        "body": "Different factions used interruption tactically, hoping to bargain from a stronger position once control stabilized. The archive stresses that control never stabilized. Bargaining strategy became a self-consuming proof that no authority could commit the planet to a single promise.",
+        "emphasis": "strategy became sabotage"
+      },
+      {
+        "title": "Recovered excerpt",
+        "body": "The relay burst ends mid-offer nine separate times. Successive governments, emergency boards, and military councils each interrupted the exchange long enough to prove no one on Earth could speak for Earth for longer than a minute.",
+        "emphasis": "continuity failure"
+      },
+      {
+        "title": "Interpretation",
+        "body": "Unlike 0x07E2BIG, this record never reaches a mature exchange phase. Its lesson is shorter and more humiliating: a species can lose help before it decides whether it wants to deserve it.",
+        "emphasis": "help lost before judgment"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "Corridor offer",
+        "timestamp_text": "hour 0",
+        "body": "A deep-range relay proposes evacuation and infrastructure support under strict coordination rules."
+      },
+      {
+        "label": "Command interruption",
+        "timestamp_text": "hour 4",
+        "body": "A new emergency authority halts negotiation pending review and credentials."
+      },
+      {
+        "label": "Factional override",
+        "timestamp_text": "hour 17",
+        "body": "Military and corporate blocs reopen contact only to request privileged continuity access."
+      },
+      {
+        "label": "Corridor closure",
+        "timestamp_text": "day 3",
+        "body": "The rescue window closes after repeated proof that Earth cannot sustain a single binding voice."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "transmission dossier / interrupted rescue negotiation",
+    "source_chain": ["relay transcript", "partial burst capture", "governance trace notes"],
+    "facts": [
+      { "label": "offer type", "value": "rescue corridor" },
+      { "label": "main failure", "value": "command continuity" },
+      { "label": "interrupting actors", "value": "state, military, corporate" },
+      { "label": "archive certainty", "value": "high on interruption count" },
+      { "label": "duration", "value": "less than three days" },
+      { "label": "visitor posture", "value": "cautious, procedural" },
+      { "label": "human posture", "value": "competitive, unstable" },
+      { "label": "terminal relevance", "value": "burst reconstruction tooling remains restricted" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": [
+      "the call kept dropping because the callers kept changing.",
+      "your species loves leverage enough to interrupt rescue with negotiation."
+    ]
+  },
+  "media_page": {
+    "audio": null,
+    "artifact_note": "Relay checksum damage is too severe for transport playback. Only transcript and timing data remain.",
+    "transcript_excerpt": "No one on Earth could speak for Earth for longer than a minute.",
+    "waveform_mode": "corrupted",
+    "corruption_reason": "relay burst exposes transcript only"
+  }
+}
