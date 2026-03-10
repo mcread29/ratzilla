@@ -3,6 +3,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::{
     archive::ArchiveLoader,
     archive_state::ArchiveState,
+    help::{HelpKeyOutcome, HelpOverlay},
     introstate::IntroState,
     session::SessionModel,
     state::{StateId, StateMachine},
@@ -11,6 +12,7 @@ use crate::{
 use ratzilla::{event::KeyCode, ratatui::Frame};
 
 pub struct App {
+    help_overlay: HelpOverlay,
     state_machine: Option<StateMachine>,
     last_frame: web_time::Instant,
 }
@@ -33,12 +35,17 @@ impl App {
             .expect("state machine init must succeed");
 
         Self {
+            help_overlay: HelpOverlay::new(),
             state_machine: Some(state_machine),
             last_frame: web_time::Instant::now(),
         }
     }
 
     pub fn key_press(&mut self, key: KeyCode) {
+        if matches!(self.help_overlay.handle_key(&key), HelpKeyOutcome::Consumed) {
+            return;
+        }
+
         if let Some(state_machine) = &mut self.state_machine {
             let _ = state_machine.key_press(key);
         }
@@ -52,6 +59,12 @@ impl App {
         if let Some(state_machine) = &mut self.state_machine {
             let _ =
                 state_machine.update_statemachine(tachyonfx::Duration::from_millis(elapsed), frame);
+            self.help_overlay
+                .maybe_open_for_state(state_machine.current_state);
+        }
+
+        if self.help_overlay.is_open() {
+            self.help_overlay.render(frame);
         }
     }
 }

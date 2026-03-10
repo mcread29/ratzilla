@@ -1,13 +1,13 @@
 use ratzilla::ratatui::layout::Rect;
 use ratzilla::ratatui::layout::{Constraint, Layout};
+use ratzilla::ratatui::style::{Color, Style};
 use ratzilla::ratatui::widgets::Block;
 use ratzilla::ratatui::Frame;
 
 use ratzilla::ratatui::text;
 use ratzilla::ratatui::widgets::{Paragraph, Wrap};
 
-const LOGO_RAW: &str = r#"
-  _   _          ___   
+const LOGO_RAW: &str = r#"  _   _          ___   
  | | | |        / _ \  
  | |_| |_ _   _| | | | 
  | __| __| | | | | | | 
@@ -18,9 +18,7 @@ const LOGO_RAW: &str = r#"
 "#;
 
 pub fn render_logo_text(frame: &mut Frame, area: Rect) -> Rect {
-    let chunks = Layout::vertical([Constraint::Max(10), Constraint::Min(50)])
-        .margin(1)
-        .split(area);
+    let chunks = Layout::vertical([Constraint::Length(8), Constraint::Min(3)]).split(area);
 
     let mut lines: Vec<text::Line> = vec![];
     for line in LOGO_RAW.lines() {
@@ -29,6 +27,7 @@ pub fn render_logo_text(frame: &mut Frame, area: Rect) -> Rect {
     let block = Block::new();
     let paragraph = Paragraph::new(lines)
         .block(block)
+        .style(Style::default().fg(Color::Rgb(196, 214, 198)))
         .wrap(Wrap { trim: false });
     frame.render_widget(paragraph, chunks[0]);
     chunks[1]

@@ -47,18 +47,15 @@ impl AudioController {
 
     pub fn toggle(&mut self, record: &RecordDocument) -> Result<bool, String> {
         let Some(source) = record.audio_source() else {
-            return Err(
-                record
-                    .media_page
-                    .corruption_reason
-                    .clone()
-                    .unwrap_or_else(|| "record media is corrupted".to_string()),
-            );
+            return Err(record
+                .media_page
+                .corruption_reason
+                .clone()
+                .unwrap_or_else(|| "record media is corrupted".to_string()));
         };
 
-        let same_record =
-            self.active_record_id.as_deref() == Some(record.id.as_str())
-                && self.active_source.as_deref() == Some(source);
+        let same_record = self.active_record_id.as_deref() == Some(record.id.as_str())
+            && self.active_source.as_deref() == Some(source);
 
         if !same_record {
             let audio = HtmlAudioElement::new_with_src(source)
@@ -76,7 +73,11 @@ impl AudioController {
             .ok_or_else(|| "audio transport is unavailable".to_string())?;
 
         if audio.paused() || audio.ended() {
-            let _ = audio.set_current_time(if audio.ended() { 0.0 } else { audio.current_time() });
+            let _ = audio.set_current_time(if audio.ended() {
+                0.0
+            } else {
+                audio.current_time()
+            });
             let _ = audio.play().map_err(|_| {
                 let message = "browser blocked playback or transport failed".to_string();
                 self.last_error = Some(message.clone());

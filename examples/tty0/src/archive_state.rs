@@ -89,7 +89,7 @@ impl StateActions for ArchiveState {
 impl ArchiveState {
     fn render_wide(&self, frame: &mut Frame, area: Rect) {
         let root = Block::bordered()
-            .title(" tty0 recovered analysis workstation ")
+            .title(" tty0 recovered analysis workstation // H help ")
             .border_type(BorderType::Double)
             .border_style(Style::default().fg(BORDER));
         let inner = root.inner(area);
@@ -126,7 +126,7 @@ impl ArchiveState {
 
     fn render_compact(&self, frame: &mut Frame, area: Rect) {
         let root = Block::bordered()
-            .title(" tty0 archive ")
+            .title(" tty0 archive // H help ")
             .border_style(Style::default().fg(BORDER));
         let inner = root.inner(area);
         frame.render_widget(root, area);
@@ -201,19 +201,20 @@ impl ArchiveState {
                             Span::styled("cat ", Style::default().fg(DIM)),
                             Span::styled(entry.category_label.clone(), Style::default().fg(TEXT)),
                             Span::styled("  •  ", Style::default().fg(AMBER)),
-                            Span::styled(record.access_level.label(), access_style(record.access_level)),
-                        ]),
-                        Line::from(vec![
                             Span::styled(
-                                format!(
-                                    "{} pages • {} tags • {} links",
-                                    record.page_count(),
-                                    record.tags.len(),
-                                    record.related_record_ids.len()
-                                ),
-                                Style::default().fg(DIM),
+                                record.access_level.label(),
+                                access_style(record.access_level),
                             ),
                         ]),
+                        Line::from(vec![Span::styled(
+                            format!(
+                                "{} pages • {} tags • {} links",
+                                record.page_count(),
+                                record.tags.len(),
+                                record.related_record_ids.len()
+                            ),
+                            Style::default().fg(DIM),
+                        )]),
                     ])
                 })
                 .collect::<Vec<_>>()
@@ -222,7 +223,7 @@ impl ArchiveState {
         let list = List::new(items)
             .block(
                 Block::bordered()
-                    .title(" records ")
+                    .title(" records ( ↑ / ↓ ) ")
                     .border_style(Style::default().fg(BORDER)),
             )
             .highlight_style(
@@ -270,9 +271,15 @@ impl ArchiveState {
                     badge_style(record).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(" • ", Style::default().fg(AMBER)),
-                Span::styled(record.access_level.label(), access_style(record.access_level)),
+                Span::styled(
+                    record.access_level.label(),
+                    access_style(record.access_level),
+                ),
                 Span::styled(" • ", Style::default().fg(AMBER)),
-                Span::styled(record.media_health().label(), media_style(record.media_health())),
+                Span::styled(
+                    record.media_health().label(),
+                    media_style(record.media_health()),
+                ),
                 Span::styled(" • ", Style::default().fg(AMBER)),
                 Span::styled(record.timeline.clone(), Style::default().fg(DIM)),
             ]),
@@ -320,7 +327,7 @@ impl ArchiveState {
         frame.render_widget(
             Paragraph::new(Line::from(tabs)).block(
                 Block::bordered()
-                    .title(" page tabs ")
+                    .title(" page tabs ( ← / → ) ")
                     .border_style(Style::default().fg(BORDER)),
             ),
             area,
@@ -358,7 +365,6 @@ impl ArchiveState {
             RecordPageTab::Overview => build_overview_lines(record),
             RecordPageTab::Dossier => build_dossier_lines(record),
             RecordPageTab::Timeline => build_timeline_lines(record),
-            RecordPageTab::Metadata => build_metadata_lines(record),
             RecordPageTab::Notes => build_notes_lines(record),
             RecordPageTab::Media => build_media_lines(record, &session),
         };
@@ -414,11 +420,17 @@ impl ArchiveState {
             ]),
             Line::from(vec![
                 Span::styled("access ", Style::default().fg(DIM)),
-                Span::styled(record.access_level.label(), access_style(record.access_level)),
+                Span::styled(
+                    record.access_level.label(),
+                    access_style(record.access_level),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("media ", Style::default().fg(DIM)),
-                Span::styled(record.media_health().label(), media_style(record.media_health())),
+                Span::styled(
+                    record.media_health().label(),
+                    media_style(record.media_health()),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("integrity ", Style::default().fg(DIM)),
@@ -533,21 +545,33 @@ fn build_overview_lines(record: &RecordDocument) -> Vec<Line<'static>> {
         )),
         Line::from(""),
         Line::from(vec![
-            Span::styled("thesis ", Style::default().fg(CYAN).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "thesis ",
+                Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+            ),
             Span::styled(record.overview.thesis.clone(), Style::default().fg(TEXT)),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::styled("status ", Style::default().fg(CYAN)),
-            Span::styled(record.overview.status_callout.clone(), Style::default().fg(AMBER)),
+            Span::styled(
+                record.overview.status_callout.clone(),
+                Style::default().fg(AMBER),
+            ),
         ]),
         Line::from(vec![
             Span::styled("warning ", Style::default().fg(CYAN)),
-            Span::styled(record.overview.content_warning.clone(), Style::default().fg(DIM)),
+            Span::styled(
+                record.overview.content_warning.clone(),
+                Style::default().fg(DIM),
+            ),
         ]),
         Line::from(vec![
             Span::styled("hint ", Style::default().fg(CYAN)),
-            Span::styled(record.overview.viewer_hint.clone(), Style::default().fg(TEXT)),
+            Span::styled(
+                record.overview.viewer_hint.clone(),
+                Style::default().fg(TEXT),
+            ),
         ]),
     ]
 }
@@ -600,47 +624,6 @@ fn build_timeline_lines(record: &RecordDocument) -> Vec<Line<'static>> {
             Style::default().fg(TEXT),
         )));
         lines.push(Line::from(""));
-    }
-    lines
-}
-
-fn build_metadata_lines(record: &RecordDocument) -> Vec<Line<'static>> {
-    if record.access_level != AccessLevel::Readable {
-        return restricted_lines(record, "metadata");
-    }
-
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("classification ", Style::default().fg(CYAN)),
-            Span::styled(
-                record.metadata_page.classification.clone(),
-                Style::default().fg(TEXT),
-            ),
-        ]),
-        Line::from(""),
-        Line::from(Span::styled(
-            "source chain",
-            Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
-        )),
-    ];
-
-    for source in &record.metadata_page.source_chain {
-        lines.push(Line::from(vec![
-            Span::styled("↳ ", Style::default().fg(DIM)),
-            Span::styled(source.clone(), Style::default().fg(TEXT)),
-        ]));
-    }
-
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "facts",
-        Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
-    )));
-    for fact in &record.metadata_page.facts {
-        lines.push(Line::from(vec![
-            Span::styled(format!("{:<18}", fact.label), Style::default().fg(DIM)),
-            Span::styled(fact.value.clone(), Style::default().fg(TEXT)),
-        ]));
     }
     lines
 }
@@ -733,7 +716,10 @@ fn build_media_lines(record: &RecordDocument, session: &SessionModel) -> Vec<Lin
             lines.push(Line::from(""));
             lines.push(Line::from(vec![
                 Span::styled("artifact ", Style::default().fg(CYAN)),
-                Span::styled(record.media_page.artifact_note.clone(), Style::default().fg(DIM)),
+                Span::styled(
+                    record.media_page.artifact_note.clone(),
+                    Style::default().fg(DIM),
+                ),
             ]));
             lines.push(Line::from(vec![
                 Span::styled("excerpt ", Style::default().fg(CYAN)),
@@ -808,7 +794,11 @@ fn build_music_lines(width: usize, height: usize, tick: u64) -> Vec<String> {
             (0..width)
                 .map(|col| {
                     let band = (((col as u64 / 3) + tick / 90) % height as u64) as usize;
-                    if height - row <= band + 1 { '▇' } else { ' ' }
+                    if height - row <= band + 1 {
+                        '▇'
+                    } else {
+                        ' '
+                    }
                 })
                 .collect()
         })

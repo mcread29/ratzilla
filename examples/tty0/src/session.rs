@@ -29,17 +29,15 @@ pub enum RecordPageTab {
     Overview,
     Dossier,
     Timeline,
-    Metadata,
     Notes,
     Media,
 }
 
 impl RecordPageTab {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 5] = [
         Self::Overview,
         Self::Dossier,
         Self::Timeline,
-        Self::Metadata,
         Self::Notes,
         Self::Media,
     ];
@@ -49,7 +47,6 @@ impl RecordPageTab {
             Self::Overview => "overview",
             Self::Dossier => "dossier",
             Self::Timeline => "timeline",
-            Self::Metadata => "metadata",
             Self::Notes => "notes",
             Self::Media => "media",
         }
@@ -88,7 +85,8 @@ impl SessionModel {
             selected_record: 0,
             detail_scroll: 0,
             active_page: RecordPageTab::Overview,
-            decryption_status: "archive signal attached // manifest hydrated // decryption stalled at 0%",
+            decryption_status:
+                "archive signal attached // manifest hydrated // decryption stalled at 0%",
             corruption_tick: 0,
             corruption_elapsed_ms: 0,
             terminal_return_state: StateId::Archive,
@@ -146,7 +144,6 @@ impl SessionModel {
             RecordPageTab::Overview => "overview surface active",
             RecordPageTab::Dossier => "dossier surface active",
             RecordPageTab::Timeline => "timeline surface active",
-            RecordPageTab::Metadata => "metadata surface active",
             RecordPageTab::Notes => "notes surface active",
             RecordPageTab::Media => "media surface active",
         };
@@ -269,13 +266,21 @@ impl SessionModel {
                 "• relay sync → {} → {}",
                 record_meta.category_id, record.signal_integrity
             ),
-            1 => format!("┆ checksum drift {} -> {}", record.id, self.corruption_label()),
+            1 => format!(
+                "┆ checksum drift {} -> {}",
+                record.id,
+                self.corruption_label()
+            ),
             2 => format!(
                 "░ index cache refresh -> {} [{}]",
                 record_meta.record_id,
                 record.badge_label()
             ),
-            3 => format!("▁▂▃ page carrier -> {} / {}", record.id, self.active_page.label()),
+            3 => format!(
+                "▁▂▃ page carrier -> {} / {}",
+                record.id,
+                self.active_page.label()
+            ),
             4 => format!(
                 "• media state {} -> {}",
                 record.id,

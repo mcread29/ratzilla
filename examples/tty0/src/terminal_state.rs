@@ -124,6 +124,11 @@ impl StateActions for TerminalState {
             ),
             Span::raw(" return "),
             Span::styled(
+                " H ",
+                Style::default().fg(Color::Black).bg(Color::LightBlue),
+            ),
+            Span::raw(" help "),
+            Span::styled(
                 " Enter ",
                 Style::default().fg(Color::Black).bg(Color::Yellow),
             ),

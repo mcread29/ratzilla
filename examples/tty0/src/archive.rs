@@ -218,12 +218,15 @@ impl ArchiveLoader {
 
         for (record_file, record_json) in record_jsons {
             let record = parse_json::<RecordDocument>(record_file, record_json)?;
-            let category_idx = category_index.get(&record.category_id).copied().ok_or_else(|| {
-                ArchiveLoadError::Validation(format!(
-                    "record {} references unknown category {}",
-                    record.id, record.category_id
-                ))
-            })?;
+            let category_idx = category_index
+                .get(&record.category_id)
+                .copied()
+                .ok_or_else(|| {
+                    ArchiveLoadError::Validation(format!(
+                        "record {} references unknown category {}",
+                        record.id, record.category_id
+                    ))
+                })?;
 
             if record_by_id.contains_key(record.id.as_str()) {
                 return Err(ArchiveLoadError::Validation(format!(
@@ -320,7 +323,10 @@ impl RecordDocument {
     }
 
     pub fn audio_source(&self) -> Option<&str> {
-        self.media_page.audio.as_ref().map(|audio| audio.path.as_str())
+        self.media_page
+            .audio
+            .as_ref()
+            .map(|audio| audio.path.as_str())
     }
 
     pub fn badge_label(&self) -> &'static str {
@@ -379,10 +385,7 @@ impl MediaHealth {
     }
 }
 
-fn parse_json<T: for<'de> Deserialize<'de>>(
-    path: &str,
-    json: &str,
-) -> Result<T, ArchiveLoadError> {
+fn parse_json<T: for<'de> Deserialize<'de>>(path: &str, json: &str) -> Result<T, ArchiveLoadError> {
     serde_json::from_str(json).map_err(|source| ArchiveLoadError::Json {
         path: path.to_string(),
         source,
@@ -404,7 +407,7 @@ fn validate_unique_category_ids(manifest: &ArchiveManifestDoc) -> Result<(), Arc
 
 #[cfg(test)]
 mod tests {
-    use super::{ArchiveLoader, ArchiveLoadError, MediaHealth};
+    use super::{ArchiveLoadError, ArchiveLoader, MediaHealth};
 
     const MANIFEST: &str = r#"{
       "categories": [
@@ -499,11 +502,8 @@ mod tests {
     #[test]
     fn parses_manifest_and_records() {
         let records = [("one.json", readable_record_json("one", Some("a.mp3"), &[]))];
-        let store = ArchiveLoader::load_from_strs(
-            MANIFEST,
-            &[("one.json", records[0].1.as_str())],
-        )
-        .expect("archive store");
+        let store = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", records[0].1.as_str())])
+            .expect("archive store");
 
         assert_eq!(store.record_count(), 1);
         assert_eq!(store.records()[0].record_id, "one");
@@ -519,17 +519,23 @@ mod tests {
         )
         .expect_err("duplicate ids should fail");
 
-        assert!(matches!(error, ArchiveLoadError::Validation(message) if message.contains("duplicate record id")));
+        assert!(
+            matches!(error, ArchiveLoadError::Validation(message) if message.contains("duplicate record id"))
+        );
     }
 
     #[test]
     fn rejects_unknown_category() {
-        let record = readable_record_json("bad", Some("a.mp3"), &[])
-            .replace("\"category_id\": \"witnesses\"", "\"category_id\": \"missing\"");
+        let record = readable_record_json("bad", Some("a.mp3"), &[]).replace(
+            "\"category_id\": \"witnesses\"",
+            "\"category_id\": \"missing\"",
+        );
         let error = ArchiveLoader::load_from_strs(MANIFEST, &[("bad.json", &record)])
             .expect_err("unknown category should fail");
 
-        assert!(matches!(error, ArchiveLoadError::Validation(message) if message.contains("unknown category")));
+        assert!(
+            matches!(error, ArchiveLoadError::Validation(message) if message.contains("unknown category"))
+        );
     }
 
     #[test]
@@ -538,7 +544,9 @@ mod tests {
         let error = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
             .expect_err("unknown related record should fail");
 
-        assert!(matches!(error, ArchiveLoadError::Validation(message) if message.contains("unknown related record")));
+        assert!(
+            matches!(error, ArchiveLoadError::Validation(message) if message.contains("unknown related record"))
+        );
     }
 
     #[test]
@@ -581,7 +589,11 @@ mod tests {
 
         let store = ArchiveLoader::load_from_strs(
             MANIFEST,
-            &[("one.json", &one), ("two.json", &two), ("three.json", &three)],
+            &[
+                ("one.json", &one),
+                ("two.json", &two),
+                ("three.json", &three),
+            ],
         )
         .expect("archive store");
 

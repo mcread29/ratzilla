@@ -11,6 +11,7 @@ mod app;
 mod archive;
 mod archive_state;
 mod audio;
+mod help;
 mod introstate;
 mod logo_text;
 mod postprocessing;
