@@ -99,14 +99,52 @@
     "visualizer": {
       "mode": "chromatic_bulge_grid",
       "params": {
-        "motion_rate": 0.72,
-        "energy_gain": 1.2,
-        "bass_gain": 1.4,
-        "mid_gain": 1.15,
-        "treble_gain": 1.2,
-        "ring_count": 6,
-        "particle_count": 14,
-        "lattice_density": 9
+        "shader_states": {
+          "playing": {
+            "motion_rate": 0.72,
+            "circle_radius": 0.24,
+            "circle_falloff_start": 0.78,
+            "circle_falloff_end": 1.0,
+            "bulge_amount": 0.42,
+            "rim_guard": 0.55,
+            "rim_exponent": 1.8,
+            "rim_warp": 0.18,
+            "spacing_max_px": 22.0,
+            "spacing_min_px": 12.0,
+            "dot_size": 0.16,
+            "outer_dot_scale": 0.33,
+            "edge_softness": 1.0,
+            "chromatic_aberration": 0.28,
+            "scroll_base": 28.0,
+            "scroll_motion_scale": 42.0,
+            "scroll_motion_floor": 0.2,
+            "scroll_motion_ceiling": 2.8,
+            "color_cycle_rate": 0.16,
+            "inner_alpha": 0.9
+          },
+          "idle": {
+            "motion_rate": 0.72,
+            "circle_radius": 0.2,
+            "circle_falloff_start": 0.84,
+            "circle_falloff_end": 1.02,
+            "bulge_amount": 0.22,
+            "rim_guard": 0.62,
+            "rim_exponent": 2.2,
+            "rim_warp": 0.08,
+            "spacing_max_px": 24.0,
+            "spacing_min_px": 14.0,
+            "dot_size": 0.13,
+            "outer_dot_scale": 0.24,
+            "edge_softness": 1.2,
+            "chromatic_aberration": 0.08,
+            "scroll_base": 9.0,
+            "scroll_motion_scale": 18.0,
+            "scroll_motion_floor": 0.2,
+            "scroll_motion_ceiling": 2.8,
+            "color_cycle_rate": 0.05,
+            "inner_alpha": 0.72
+          }
+        }
       }
     },
     "corruption_reason": null

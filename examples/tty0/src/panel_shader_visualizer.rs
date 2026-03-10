@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    archive::{TrackVisualizerMode, TrackVisualizerParams},
+    archive::{ChromaticBulgeGridShaderState, TrackVisualizerMode, TrackVisualizerParams},
     track_visualizer::AudioAnalysisSnapshot,
 };
 use glow::{self, HasContext, PixelUnpackData};
@@ -36,16 +36,29 @@ in vec2 v_uv;
 
 uniform vec2 u_resolution;
 uniform float u_time;
-uniform float u_energy;
-uniform float u_bass;
-uniform float u_mid;
-uniform float u_treble;
-uniform float u_peak;
-uniform float u_beat;
-uniform float u_is_playing;
-uniform float u_progress;
 uniform float u_motion_rate;
 uniform float u_lattice_density;
+uniform float u_circle_radius;
+uniform float u_circle_falloff_start;
+uniform float u_circle_falloff_end;
+uniform float u_bulge_amount;
+uniform float u_rim_guard;
+uniform float u_rim_exponent;
+uniform float u_rim_warp;
+uniform float u_spacing_max_px;
+uniform float u_spacing_min_px;
+uniform float u_dot_size;
+uniform float u_outer_dot_scale;
+uniform float u_edge_softness;
+uniform float u_chromatic_aberration;
+uniform float u_scroll_base;
+uniform float u_scroll_motion_scale;
+uniform float u_scroll_motion_floor;
+uniform float u_scroll_motion_ceiling;
+uniform vec3 u_cold_color;
+uniform vec3 u_hot_color;
+uniform float u_color_cycle_rate;
+uniform float u_inner_alpha;
 
 out vec4 out_color;
 
@@ -61,41 +74,44 @@ void main() {
   vec2 lens_delta = frag_px - center;
   vec2 radial_axis = length(lens_delta) > 0.0001 ? normalize(lens_delta) : vec2(1.0, 0.0);
 
-  float radius_drive = 1.0 + 0.06 * u_energy + 0.08 * u_peak + 0.52 * u_beat;
-  float lens_radius = 0.24 * min(u_resolution.x, u_resolution.y) * radius_drive;
+  float lens_radius = u_circle_radius * min(u_resolution.x, u_resolution.y);
   float lens_distance = length(lens_delta);
   float normalized_radius = lens_distance / max(lens_radius, 1.0);
-  float falloff = 1.0 - smoothstep(0.78, 1.0, normalized_radius);
+  float falloff = 1.0 - smoothstep(u_circle_falloff_start, u_circle_falloff_end, normalized_radius);
   float hemisphere = sqrt(max(0.0, 1.0 - normalized_radius * normalized_radius));
   vec2 sphere_xy = lens_radius > 0.0 ? lens_delta / lens_radius : vec2(0.0);
   vec3 sphere_normal = normalize(vec3(sphere_xy, max(hemisphere, 0.001)));
 
   float density = clamp((u_lattice_density - 2.0) / 10.0, 0.0, 1.0);
-  float spacing_px = mix(22.0, 12.0, density);
-  float base_radius_px = spacing_px * 0.16;
-  float scroll_px = u_time * (28.0 + 42.0 * clamp(u_motion_rate - 0.2, 0.0, 2.8));
+  float spacing_px = mix(u_spacing_max_px, u_spacing_min_px, density);
+  float base_radius_px = spacing_px * u_dot_size;
+  float scroll_px = u_time * (
+    u_scroll_base
+    + u_scroll_motion_scale * clamp(
+      u_motion_rate - u_scroll_motion_floor,
+      0.0,
+      u_scroll_motion_ceiling
+    )
+  );
   vec2 base_sample_px = frag_px;
   base_sample_px.x += scroll_px;
 
   vec2 sphere_offset = frag_px - center;
   float center_profile = falloff * hemisphere;
-  float bulge_drive = 0.18 + 0.92 * u_bass + 0.18 * u_energy;
-  float magnify = 1.0 - center_profile * (0.20 + 0.44 * bulge_drive);
+  float magnify = 1.0 - center_profile * u_bulge_amount;
   vec2 warped_screen_px = center + sphere_offset * magnify;
-  vec2 rim_direction = sphere_normal.xy / max(sphere_normal.z, 0.55);
-  float rim_profile = falloff * pow(clamp(1.0 - sphere_normal.z, 0.0, 1.0), 1.8);
-  float rim_warp = rim_profile * (0.12 + 0.78 * u_bass + 0.10 * u_peak);
+  vec2 rim_direction = sphere_normal.xy / max(sphere_normal.z, u_rim_guard);
+  float rim_profile = falloff * pow(clamp(1.0 - sphere_normal.z, 0.0, 1.0), u_rim_exponent);
+  float rim_warp = rim_profile * u_rim_warp;
   vec2 sphere_sample_px = warped_screen_px + rim_direction * rim_warp;
   sphere_sample_px.x += scroll_px;
   float sphere_mix = clamp(falloff * hemisphere, 0.0, 1.0);
-  float dot_radius_px = mix(base_radius_px * 0.33, base_radius_px, sphere_mix);
-  float edge_px = 1.1 - min(u_peak, 1.0) * 0.25;
+  float dot_radius_px = mix(base_radius_px * u_outer_dot_scale, base_radius_px, sphere_mix);
+  float edge_px = u_edge_softness;
   vec2 final_sample_px = mix(base_sample_px, sphere_sample_px, sphere_mix);
 
-  float chroma_drive = sphere_mix * (0.22 + 1.35 * u_treble + 0.18 * u_peak);
+  float chroma_drive = sphere_mix * u_chromatic_aberration;
   vec2 chroma_offset = radial_axis * chroma_drive;
-  float playing = step(0.5, u_is_playing);
-  float paused = 1.0 - playing;
 
   float mask_g = dot_mask(final_sample_px, spacing_px, dot_radius_px, edge_px);
   float mask_r = dot_mask(
@@ -111,32 +127,14 @@ void main() {
     edge_px
   );
 
-  vec3 normal_color = vec3(
-    0.5 + 0.5 * sphere_normal.x,
-    0.5 + 0.5 * sphere_normal.y,
-    sphere_normal.z
-  );
-  vec3 cold_color = vec3(
-    0.22 + 0.48 * sphere_normal.z,
-    0.38 + 0.42 * (0.5 + 0.5 * sphere_normal.y),
-    0.82 + 0.18 * (0.5 + 0.5 * sphere_normal.x)
-  );
-  vec3 hot_color = vec3(
-    0.96 - 0.18 * sphere_normal.z,
-    0.18 + 0.55 * (0.5 + 0.5 * sphere_normal.x),
-    0.34 + 0.34 * (0.5 + 0.5 * sphere_normal.y)
-  );
-  float color_drive = clamp(0.10 + 0.95 * u_mid + 0.18 * smoothstep(0.0, 1.0, u_progress), 0.0, 1.0);
-  vec3 base_color = mix(cold_color, hot_color, color_drive);
-  vec3 reactive_color = mix(vec3(1.0), base_color, playing);
-  vec3 dot_color = mix(vec3(1.0), reactive_color, sphere_mix);
+  float color_phase = 0.5 + 0.5 * sin(u_time * u_color_cycle_rate);
+  vec3 base_color = mix(u_cold_color, u_hot_color, color_phase);
+  vec3 dot_color = mix(vec3(1.0), base_color, sphere_mix);
 
   float outer_alpha = mask_g;
-  float inner_alpha = mask_g * mix(1.0, clamp(0.22 + 0.62 * u_beat + 0.12 * u_peak + 0.08 * u_energy, 0.0, 1.0), playing);
+  float inner_alpha = mask_g * u_inner_alpha;
   float alpha = mix(outer_alpha, inner_alpha, sphere_mix);
   vec3 color = vec3(mask_r, mask_g, mask_b) * dot_color;
-  color += vec3(mask_r, mask_g, mask_b) * playing * (0.10 * u_peak + 0.06 * u_energy);
-  color *= mix(1.0, 0.82 + 0.18 * u_energy, playing);
 
   out_color = vec4(clamp(color, 0.0, 1.0), clamp(alpha, 0.0, 1.0));
 }
@@ -201,16 +199,29 @@ struct PanelPixelRect {
 struct UniformSet {
     resolution: (f32, f32),
     time: f32,
-    energy: f32,
-    bass: f32,
-    mid: f32,
-    treble: f32,
-    peak: f32,
-    beat: f32,
-    is_playing: f32,
-    progress: f32,
     motion_rate: f32,
     lattice_density: f32,
+    circle_radius: f32,
+    circle_falloff_start: f32,
+    circle_falloff_end: f32,
+    bulge_amount: f32,
+    rim_guard: f32,
+    rim_exponent: f32,
+    rim_warp: f32,
+    spacing_max_px: f32,
+    spacing_min_px: f32,
+    dot_size: f32,
+    outer_dot_scale: f32,
+    edge_softness: f32,
+    chromatic_aberration: f32,
+    scroll_base: f32,
+    scroll_motion_scale: f32,
+    scroll_motion_floor: f32,
+    scroll_motion_ceiling: f32,
+    cold_color: [f32; 3],
+    hot_color: [f32; 3],
+    color_cycle_rate: f32,
+    inner_alpha: f32,
 }
 
 struct RuntimeResources {
@@ -228,16 +239,29 @@ struct RuntimeResources {
 struct SceneUniformLocations {
     resolution: glow::UniformLocation,
     time: glow::UniformLocation,
-    energy: glow::UniformLocation,
-    bass: glow::UniformLocation,
-    mid: glow::UniformLocation,
-    treble: glow::UniformLocation,
-    peak: glow::UniformLocation,
-    beat: glow::UniformLocation,
-    is_playing: glow::UniformLocation,
-    progress: glow::UniformLocation,
     motion_rate: glow::UniformLocation,
     lattice_density: glow::UniformLocation,
+    circle_radius: glow::UniformLocation,
+    circle_falloff_start: glow::UniformLocation,
+    circle_falloff_end: glow::UniformLocation,
+    bulge_amount: glow::UniformLocation,
+    rim_guard: glow::UniformLocation,
+    rim_exponent: glow::UniformLocation,
+    rim_warp: glow::UniformLocation,
+    spacing_max_px: glow::UniformLocation,
+    spacing_min_px: glow::UniformLocation,
+    dot_size: glow::UniformLocation,
+    outer_dot_scale: glow::UniformLocation,
+    edge_softness: glow::UniformLocation,
+    chromatic_aberration: glow::UniformLocation,
+    scroll_base: glow::UniformLocation,
+    scroll_motion_scale: glow::UniformLocation,
+    scroll_motion_floor: glow::UniformLocation,
+    scroll_motion_ceiling: glow::UniformLocation,
+    cold_color: glow::UniformLocation,
+    hot_color: glow::UniformLocation,
+    color_cycle_rate: glow::UniformLocation,
+    inner_alpha: glow::UniformLocation,
 }
 
 struct BlitUniformLocations {
@@ -342,7 +366,8 @@ impl PanelShaderRuntime {
             self.clear_feedback(gl)?;
         }
 
-        let uniforms = UniformSet::from_request(request, panel_rect.width, panel_rect.height);
+        let uniforms =
+            UniformSet::from_request(request, panel_rect.width, panel_rect.height, cell_size);
         let target_framebuffer = unsafe { gl.get_parameter_framebuffer(glow::FRAMEBUFFER_BINDING) };
         let scissor_enabled = unsafe { gl.is_enabled(glow::SCISSOR_TEST) };
         let mut scissor_box = [0; 4];
@@ -456,14 +481,6 @@ impl PanelShaderRuntime {
                 uniforms.resolution.1,
             );
             gl.uniform_1_f32(Some(&resources.scene_uniforms.time), uniforms.time);
-            gl.uniform_1_f32(Some(&resources.scene_uniforms.energy), uniforms.energy);
-            gl.uniform_1_f32(Some(&resources.scene_uniforms.bass), uniforms.bass);
-            gl.uniform_1_f32(Some(&resources.scene_uniforms.mid), uniforms.mid);
-            gl.uniform_1_f32(Some(&resources.scene_uniforms.treble), uniforms.treble);
-            gl.uniform_1_f32(Some(&resources.scene_uniforms.peak), uniforms.peak);
-            gl.uniform_1_f32(Some(&resources.scene_uniforms.beat), uniforms.beat);
-            gl.uniform_1_f32(Some(&resources.scene_uniforms.is_playing), uniforms.is_playing);
-            gl.uniform_1_f32(Some(&resources.scene_uniforms.progress), uniforms.progress);
             gl.uniform_1_f32(
                 Some(&resources.scene_uniforms.motion_rate),
                 uniforms.motion_rate,
@@ -472,6 +489,79 @@ impl PanelShaderRuntime {
                 Some(&resources.scene_uniforms.lattice_density),
                 uniforms.lattice_density,
             );
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.circle_radius),
+                uniforms.circle_radius,
+            );
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.circle_falloff_start),
+                uniforms.circle_falloff_start,
+            );
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.circle_falloff_end),
+                uniforms.circle_falloff_end,
+            );
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.bulge_amount),
+                uniforms.bulge_amount,
+            );
+            gl.uniform_1_f32(Some(&resources.scene_uniforms.rim_guard), uniforms.rim_guard);
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.rim_exponent),
+                uniforms.rim_exponent,
+            );
+            gl.uniform_1_f32(Some(&resources.scene_uniforms.rim_warp), uniforms.rim_warp);
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.spacing_max_px),
+                uniforms.spacing_max_px,
+            );
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.spacing_min_px),
+                uniforms.spacing_min_px,
+            );
+            gl.uniform_1_f32(Some(&resources.scene_uniforms.dot_size), uniforms.dot_size);
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.outer_dot_scale),
+                uniforms.outer_dot_scale,
+            );
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.edge_softness),
+                uniforms.edge_softness,
+            );
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.chromatic_aberration),
+                uniforms.chromatic_aberration,
+            );
+            gl.uniform_1_f32(Some(&resources.scene_uniforms.scroll_base), uniforms.scroll_base);
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.scroll_motion_scale),
+                uniforms.scroll_motion_scale,
+            );
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.scroll_motion_floor),
+                uniforms.scroll_motion_floor,
+            );
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.scroll_motion_ceiling),
+                uniforms.scroll_motion_ceiling,
+            );
+            gl.uniform_3_f32(
+                Some(&resources.scene_uniforms.cold_color),
+                uniforms.cold_color[0],
+                uniforms.cold_color[1],
+                uniforms.cold_color[2],
+            );
+            gl.uniform_3_f32(
+                Some(&resources.scene_uniforms.hot_color),
+                uniforms.hot_color[0],
+                uniforms.hot_color[1],
+                uniforms.hot_color[2],
+            );
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.color_cycle_rate),
+                uniforms.color_cycle_rate,
+            );
+            gl.uniform_1_f32(Some(&resources.scene_uniforms.inner_alpha), uniforms.inner_alpha);
             gl.draw_arrays(glow::TRIANGLES, 0, 3);
 
             gl.bind_vertex_array(None);
@@ -565,31 +655,81 @@ impl PanelPixelRect {
 }
 
 impl UniformSet {
-    fn from_request(request: &PanelShaderRequest, width: i32, height: i32) -> Self {
-        let motion_rate = request.params.motion_rate.clamp(0.2, 3.0);
-        let energy_gain = request.params.energy_gain.clamp(0.2, 2.5);
-        let bass_gain = request.params.bass_gain.clamp(0.2, 2.5);
-        let mid_gain = request.params.mid_gain.clamp(0.2, 2.5);
-        let treble_gain = request.params.treble_gain.clamp(0.2, 2.5);
-        let spark_budget =
-            ((request.params.particle_count.clamp(8, 96) as f32 - 8.0) / 88.0).clamp(0.0, 1.0);
+    fn from_request(
+        request: &PanelShaderRequest,
+        width: i32,
+        height: i32,
+        cell_size: (i32, i32),
+    ) -> Self {
+        let shader_state = request
+            .params
+            .shader_states
+            .as_ref()
+            .map(|states| {
+                if request.analysis.is_playing {
+                    states.playing
+                } else {
+                    states.idle
+                }
+            })
+            .unwrap_or_else(|| ChromaticBulgeGridShaderState::from_legacy_params(&request.params));
+        let spacing_max_px = shader_state.spacing_max_px.clamp(2.0, 64.0);
+        let spacing_min_px = shader_state.spacing_min_px.clamp(2.0, spacing_max_px);
+        let lattice_density = resolve_lattice_density(shader_state.lattice_density, cell_size.1, spacing_max_px, spacing_min_px);
 
         Self {
             resolution: (width as f32, height as f32),
             time: request.viewer_tick as f32 / 1000.0,
-            energy: (request.analysis.energy * energy_gain).clamp(0.0, 1.0),
-            bass: (request.analysis.bass * bass_gain).clamp(0.0, 1.0),
-            mid: (request.analysis.mid * mid_gain).clamp(0.0, 1.0),
-            treble: (request.analysis.treble * treble_gain * (0.7 + spark_budget * 0.45))
-                .clamp(0.0, 1.0),
-            peak: request.analysis.peak.clamp(0.0, 1.0),
-            beat: request.analysis.beat.clamp(0.0, 1.0),
-            is_playing: if request.analysis.is_playing { 1.0 } else { 0.0 },
-            progress: request.analysis.progress_ratio.clamp(0.0, 1.0),
-            motion_rate,
-            lattice_density: request.params.lattice_density.clamp(2, 12) as f32,
+            motion_rate: shader_state.motion_rate.clamp(0.2, 3.0),
+            lattice_density,
+            circle_radius: shader_state.circle_radius.clamp(0.05, 0.48),
+            circle_falloff_start: shader_state.circle_falloff_start.clamp(0.0, 0.98),
+            circle_falloff_end: shader_state
+                .circle_falloff_end
+                .max(shader_state.circle_falloff_start + 0.01)
+                .clamp(0.02, 1.2),
+            bulge_amount: shader_state.bulge_amount.clamp(0.0, 1.5),
+            rim_guard: shader_state.rim_guard.clamp(0.05, 1.0),
+            rim_exponent: shader_state.rim_exponent.clamp(0.2, 4.0),
+            rim_warp: shader_state.rim_warp.clamp(0.0, 1.0),
+            spacing_max_px,
+            spacing_min_px,
+            dot_size: shader_state.dot_size.clamp(0.02, 0.5),
+            outer_dot_scale: shader_state.outer_dot_scale.clamp(0.02, 1.0),
+            edge_softness: shader_state.edge_softness.clamp(0.1, 8.0),
+            chromatic_aberration: shader_state.chromatic_aberration.clamp(0.0, 4.0),
+            scroll_base: shader_state.scroll_base.clamp(0.0, 256.0),
+            scroll_motion_scale: shader_state.scroll_motion_scale.clamp(0.0, 256.0),
+            scroll_motion_floor: shader_state.scroll_motion_floor.clamp(0.0, 3.0),
+            scroll_motion_ceiling: shader_state.scroll_motion_ceiling.clamp(0.0, 4.0),
+            cold_color: shader_state.cold_color.map(|value| value.clamp(0.0, 1.0)),
+            hot_color: shader_state.hot_color.map(|value| value.clamp(0.0, 1.0)),
+            color_cycle_rate: shader_state.color_cycle_rate.clamp(0.0, 4.0),
+            inner_alpha: shader_state.inner_alpha.clamp(0.0, 1.0),
         }
     }
+}
+
+fn resolve_lattice_density(
+    lattice_density: f32,
+    cell_height_px: i32,
+    spacing_max_px: f32,
+    spacing_min_px: f32,
+) -> f32 {
+    let density = lattice_density.clamp(2.0, 12.0);
+    if (density - 6.0).abs() > f32::EPSILON {
+        return density;
+    }
+
+    let cell_height = cell_height_px.max(1) as f32;
+    let spacing_span = (spacing_max_px - spacing_min_px).abs();
+    if spacing_span <= f32::EPSILON {
+        return density;
+    }
+
+    let normalized = ((spacing_max_px - cell_height) / (spacing_max_px - spacing_min_px))
+        .clamp(0.0, 1.0);
+    (2.0 + normalized * 10.0).clamp(2.0, 12.0)
 }
 
 impl RuntimeResources {
@@ -611,16 +751,49 @@ impl RuntimeResources {
             scene_uniforms: SceneUniformLocations {
                 resolution: uniform_location(gl, scene_program, "u_resolution")?,
                 time: uniform_location(gl, scene_program, "u_time")?,
-                energy: uniform_location(gl, scene_program, "u_energy")?,
-                bass: uniform_location(gl, scene_program, "u_bass")?,
-                mid: uniform_location(gl, scene_program, "u_mid")?,
-                treble: uniform_location(gl, scene_program, "u_treble")?,
-                peak: uniform_location(gl, scene_program, "u_peak")?,
-                beat: uniform_location(gl, scene_program, "u_beat")?,
-                is_playing: uniform_location(gl, scene_program, "u_is_playing")?,
-                progress: uniform_location(gl, scene_program, "u_progress")?,
                 motion_rate: uniform_location(gl, scene_program, "u_motion_rate")?,
                 lattice_density: uniform_location(gl, scene_program, "u_lattice_density")?,
+                circle_radius: uniform_location(gl, scene_program, "u_circle_radius")?,
+                circle_falloff_start: uniform_location(
+                    gl,
+                    scene_program,
+                    "u_circle_falloff_start",
+                )?,
+                circle_falloff_end: uniform_location(gl, scene_program, "u_circle_falloff_end")?,
+                bulge_amount: uniform_location(gl, scene_program, "u_bulge_amount")?,
+                rim_guard: uniform_location(gl, scene_program, "u_rim_guard")?,
+                rim_exponent: uniform_location(gl, scene_program, "u_rim_exponent")?,
+                rim_warp: uniform_location(gl, scene_program, "u_rim_warp")?,
+                spacing_max_px: uniform_location(gl, scene_program, "u_spacing_max_px")?,
+                spacing_min_px: uniform_location(gl, scene_program, "u_spacing_min_px")?,
+                dot_size: uniform_location(gl, scene_program, "u_dot_size")?,
+                outer_dot_scale: uniform_location(gl, scene_program, "u_outer_dot_scale")?,
+                edge_softness: uniform_location(gl, scene_program, "u_edge_softness")?,
+                chromatic_aberration: uniform_location(
+                    gl,
+                    scene_program,
+                    "u_chromatic_aberration",
+                )?,
+                scroll_base: uniform_location(gl, scene_program, "u_scroll_base")?,
+                scroll_motion_scale: uniform_location(
+                    gl,
+                    scene_program,
+                    "u_scroll_motion_scale",
+                )?,
+                scroll_motion_floor: uniform_location(
+                    gl,
+                    scene_program,
+                    "u_scroll_motion_floor",
+                )?,
+                scroll_motion_ceiling: uniform_location(
+                    gl,
+                    scene_program,
+                    "u_scroll_motion_ceiling",
+                )?,
+                cold_color: uniform_location(gl, scene_program, "u_cold_color")?,
+                hot_color: uniform_location(gl, scene_program, "u_hot_color")?,
+                color_cycle_rate: uniform_location(gl, scene_program, "u_color_cycle_rate")?,
+                inner_alpha: uniform_location(gl, scene_program, "u_inner_alpha")?,
             },
             blit_uniforms: BlitUniformLocations {
                 scene: uniform_location(gl, blit_program, "u_scene")?,
@@ -783,7 +956,10 @@ fn gl_error(message: &str) -> Error {
 mod tests {
     use super::{PanelShaderRequest, PanelShaderVisualizerLayer, UniformSet};
     use crate::{
-        archive::{TrackVisualizerMode, TrackVisualizerParams},
+        archive::{
+            ChromaticBulgeGridShaderState, ChromaticBulgeGridShaderStates, TrackVisualizerMode,
+            TrackVisualizerParams,
+        },
         track_visualizer::AudioAnalysisSnapshot,
     };
     use ratzilla::ratatui::layout::Rect;
@@ -813,6 +989,24 @@ mod tests {
                 ring_count: 99,
                 particle_count: 99,
                 lattice_density: 99,
+                shader_states: Some(ChromaticBulgeGridShaderStates {
+                    playing: ChromaticBulgeGridShaderState {
+                        motion_rate: 8.0,
+                        lattice_density: 99.0,
+                        circle_radius: 0.31,
+                        chromatic_aberration: 0.63,
+                        hot_color: [1.2, 0.4, 0.1],
+                        ..ChromaticBulgeGridShaderState::default()
+                    },
+                    idle: ChromaticBulgeGridShaderState {
+                        motion_rate: 0.05,
+                        lattice_density: 1.0,
+                        circle_radius: 0.12,
+                        chromatic_aberration: 0.05,
+                        hot_color: [0.2, 0.3, 0.4],
+                        ..ChromaticBulgeGridShaderState::default()
+                    },
+                }),
             },
         }
     }
@@ -846,20 +1040,41 @@ mod tests {
     }
 
     #[test]
-    fn uniform_set_clamps_analysis_values() {
-        let uniforms = UniformSet::from_request(&request(), 320, 180);
+    fn uniform_set_uses_playing_shader_state() {
+        let uniforms = UniformSet::from_request(&request(), 320, 180, (9, 18));
 
         assert_eq!(uniforms.resolution, (320.0, 180.0));
         assert_eq!(uniforms.time, 1.25);
-        assert_eq!(uniforms.energy, 1.0);
-        assert_eq!(uniforms.bass, 1.0);
-        assert_eq!(uniforms.mid, 1.0);
-        assert_eq!(uniforms.treble, 1.0);
-        assert_eq!(uniforms.peak, 1.0);
-        assert_eq!(uniforms.beat, 1.0);
-        assert_eq!(uniforms.is_playing, 1.0);
-        assert_eq!(uniforms.progress, 1.0);
         assert_eq!(uniforms.motion_rate, 3.0);
         assert_eq!(uniforms.lattice_density, 12.0);
+        assert_eq!(uniforms.circle_radius, 0.31);
+        assert_eq!(uniforms.chromatic_aberration, 0.63);
+        assert_eq!(uniforms.hot_color, [1.0, 0.4, 0.1]);
+    }
+
+    #[test]
+    fn uniform_set_uses_idle_shader_state_when_not_playing() {
+        let mut request = request();
+        request.analysis.is_playing = false;
+
+        let uniforms = UniformSet::from_request(&request, 320, 180, (9, 18));
+
+        assert_eq!(uniforms.motion_rate, 0.2);
+        assert_eq!(uniforms.lattice_density, 2.0);
+        assert_eq!(uniforms.circle_radius, 0.12);
+        assert_eq!(uniforms.chromatic_aberration, 0.05);
+        assert_eq!(uniforms.hot_color, [0.2, 0.3, 0.4]);
+    }
+
+    #[test]
+    fn default_lattice_density_aligns_to_terminal_rows() {
+        let mut request = request();
+        request.params.shader_states = None;
+        request.params.motion_rate = 1.0;
+        request.params.lattice_density = 6;
+
+        let uniforms = UniformSet::from_request(&request, 320, 180, (9, 18));
+
+        assert_eq!(uniforms.lattice_density, 6.0);
     }
 }

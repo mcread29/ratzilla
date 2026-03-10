@@ -28,6 +28,7 @@ const RED: Color = Color::Rgb(240, 104, 96);
 const GREEN: Color = Color::Rgb(130, 208, 132);
 const WHITE: Color = Color::Rgb(232, 238, 232);
 const MAGENTA: Color = Color::Rgb(188, 144, 228);
+const RECORDS_PANEL_WIDTH: u16 = 65;
 
 pub struct ArchiveState {
     session: Rc<RefCell<SessionModel>>,
@@ -115,9 +116,9 @@ impl ArchiveState {
         frame.render_widget(root, area);
 
         let body = Layout::horizontal([
-            Constraint::Percentage(30),
-            Constraint::Percentage(42),
-            Constraint::Percentage(28),
+            Constraint::Length(RECORDS_PANEL_WIDTH),
+            Constraint::Fill(3),
+            Constraint::Fill(2),
         ])
         .margin(1)
         .split(inner);

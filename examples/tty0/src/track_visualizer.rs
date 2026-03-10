@@ -629,6 +629,7 @@ mod tests {
             ring_count: 99,
             particle_count: 0,
             lattice_density: 32,
+            shader_states: None,
         });
 
         assert_eq!(

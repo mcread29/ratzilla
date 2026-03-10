@@ -158,6 +158,66 @@ pub struct TrackVisualizerParams {
     pub particle_count: u16,
     #[serde(default = "default_lattice_density")]
     pub lattice_density: u16,
+    #[serde(default)]
+    pub shader_states: Option<ChromaticBulgeGridShaderStates>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+pub struct ChromaticBulgeGridShaderStates {
+    #[serde(default)]
+    pub playing: ChromaticBulgeGridShaderState,
+    #[serde(default, alias = "not_playing")]
+    pub idle: ChromaticBulgeGridShaderState,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+pub struct ChromaticBulgeGridShaderState {
+    #[serde(default = "default_motion_rate")]
+    pub motion_rate: f32,
+    #[serde(default = "default_shader_lattice_density")]
+    pub lattice_density: f32,
+    #[serde(default = "default_circle_radius")]
+    pub circle_radius: f32,
+    #[serde(default = "default_circle_falloff_start")]
+    pub circle_falloff_start: f32,
+    #[serde(default = "default_circle_falloff_end")]
+    pub circle_falloff_end: f32,
+    #[serde(default = "default_bulge_amount")]
+    pub bulge_amount: f32,
+    #[serde(default = "default_rim_guard")]
+    pub rim_guard: f32,
+    #[serde(default = "default_rim_exponent")]
+    pub rim_exponent: f32,
+    #[serde(default = "default_rim_warp")]
+    pub rim_warp: f32,
+    #[serde(default = "default_spacing_max_px")]
+    pub spacing_max_px: f32,
+    #[serde(default = "default_spacing_min_px")]
+    pub spacing_min_px: f32,
+    #[serde(default = "default_dot_size")]
+    pub dot_size: f32,
+    #[serde(default = "default_outer_dot_scale")]
+    pub outer_dot_scale: f32,
+    #[serde(default = "default_edge_softness")]
+    pub edge_softness: f32,
+    #[serde(default = "default_chromatic_aberration")]
+    pub chromatic_aberration: f32,
+    #[serde(default = "default_scroll_base")]
+    pub scroll_base: f32,
+    #[serde(default = "default_scroll_motion_scale")]
+    pub scroll_motion_scale: f32,
+    #[serde(default = "default_scroll_motion_floor")]
+    pub scroll_motion_floor: f32,
+    #[serde(default = "default_scroll_motion_ceiling")]
+    pub scroll_motion_ceiling: f32,
+    #[serde(default = "default_cold_color")]
+    pub cold_color: [f32; 3],
+    #[serde(default = "default_hot_color")]
+    pub hot_color: [f32; 3],
+    #[serde(default = "default_color_cycle_rate")]
+    pub color_cycle_rate: f32,
+    #[serde(default = "default_inner_alpha")]
+    pub inner_alpha: f32,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -449,6 +509,56 @@ impl Default for TrackVisualizerParams {
             ring_count: default_ring_count(),
             particle_count: default_particle_count(),
             lattice_density: default_lattice_density(),
+            shader_states: None,
+        }
+    }
+}
+
+impl Default for ChromaticBulgeGridShaderStates {
+    fn default() -> Self {
+        Self {
+            playing: ChromaticBulgeGridShaderState::default(),
+            idle: ChromaticBulgeGridShaderState::default(),
+        }
+    }
+}
+
+impl Default for ChromaticBulgeGridShaderState {
+    fn default() -> Self {
+        Self {
+            motion_rate: default_motion_rate(),
+            lattice_density: default_shader_lattice_density(),
+            circle_radius: default_circle_radius(),
+            circle_falloff_start: default_circle_falloff_start(),
+            circle_falloff_end: default_circle_falloff_end(),
+            bulge_amount: default_bulge_amount(),
+            rim_guard: default_rim_guard(),
+            rim_exponent: default_rim_exponent(),
+            rim_warp: default_rim_warp(),
+            spacing_max_px: default_spacing_max_px(),
+            spacing_min_px: default_spacing_min_px(),
+            dot_size: default_dot_size(),
+            outer_dot_scale: default_outer_dot_scale(),
+            edge_softness: default_edge_softness(),
+            chromatic_aberration: default_chromatic_aberration(),
+            scroll_base: default_scroll_base(),
+            scroll_motion_scale: default_scroll_motion_scale(),
+            scroll_motion_floor: default_scroll_motion_floor(),
+            scroll_motion_ceiling: default_scroll_motion_ceiling(),
+            cold_color: default_cold_color(),
+            hot_color: default_hot_color(),
+            color_cycle_rate: default_color_cycle_rate(),
+            inner_alpha: default_inner_alpha(),
+        }
+    }
+}
+
+impl ChromaticBulgeGridShaderState {
+    pub fn from_legacy_params(params: &TrackVisualizerParams) -> Self {
+        Self {
+            motion_rate: params.motion_rate,
+            lattice_density: params.lattice_density as f32,
+            ..Self::default()
         }
     }
 }
@@ -483,6 +593,94 @@ fn default_particle_count() -> u16 {
 
 fn default_lattice_density() -> u16 {
     6
+}
+
+fn default_shader_lattice_density() -> f32 {
+    6.0
+}
+
+fn default_circle_radius() -> f32 {
+    0.24
+}
+
+fn default_circle_falloff_start() -> f32 {
+    0.78
+}
+
+fn default_circle_falloff_end() -> f32 {
+    1.0
+}
+
+fn default_bulge_amount() -> f32 {
+    0.42
+}
+
+fn default_rim_guard() -> f32 {
+    0.55
+}
+
+fn default_rim_exponent() -> f32 {
+    1.8
+}
+
+fn default_rim_warp() -> f32 {
+    0.18
+}
+
+fn default_spacing_max_px() -> f32 {
+    22.0
+}
+
+fn default_spacing_min_px() -> f32 {
+    12.0
+}
+
+fn default_dot_size() -> f32 {
+    0.16
+}
+
+fn default_outer_dot_scale() -> f32 {
+    0.33
+}
+
+fn default_edge_softness() -> f32 {
+    1.0
+}
+
+fn default_chromatic_aberration() -> f32 {
+    0.28
+}
+
+fn default_scroll_base() -> f32 {
+    28.0
+}
+
+fn default_scroll_motion_scale() -> f32 {
+    42.0
+}
+
+fn default_scroll_motion_floor() -> f32 {
+    0.2
+}
+
+fn default_scroll_motion_ceiling() -> f32 {
+    2.8
+}
+
+fn default_cold_color() -> [f32; 3] {
+    [1.0, 1.0, 1.0]
+}
+
+fn default_hot_color() -> [f32; 3] {
+    [1.0, 1.0, 1.0]
+}
+
+fn default_color_cycle_rate() -> f32 {
+    0.16
+}
+
+fn default_inner_alpha() -> f32 {
+    0.9
 }
 
 fn parse_json<T: for<'de> Deserialize<'de>>(path: &str, json: &str) -> Result<T, ArchiveLoadError> {
@@ -798,6 +996,51 @@ mod tests {
         assert_eq!(visualizer.mode, TrackVisualizerMode::ChromaticBulgeGrid);
         assert_eq!(visualizer.params.motion_rate, 0.9);
         assert_eq!(visualizer.params.lattice_density, 10);
+    }
+
+    #[test]
+    fn chromatic_bulge_grid_shader_states_parse_when_present() {
+        let record = readable_record_json_with_visualizer(
+            "one",
+            Some("a.mp3"),
+            &[],
+            Some(
+                r#"{
+                    "mode":"chromatic_bulge_grid",
+                    "params":{
+                        "shader_states":{
+                            "playing":{
+                                "motion_rate":0.7,
+                                "lattice_density":9,
+                                "circle_radius":0.3,
+                                "chromatic_aberration":0.4
+                            },
+                            "idle":{
+                                "motion_rate":0.25,
+                                "lattice_density":4,
+                                "circle_radius":0.18,
+                                "chromatic_aberration":0.1
+                            }
+                        }
+                    }
+                }"#,
+            ),
+        );
+        let store = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
+            .expect("archive store");
+        let states = store
+            .record_by_id("one")
+            .expect("record")
+            .visualizer()
+            .expect("visualizer")
+            .params
+            .shader_states
+            .expect("shader states");
+
+        assert_eq!(states.playing.motion_rate, 0.7);
+        assert_eq!(states.playing.circle_radius, 0.3);
+        assert_eq!(states.idle.motion_rate, 0.25);
+        assert_eq!(states.idle.chromatic_aberration, 0.1);
     }
 
     #[test]
