@@ -72,31 +72,9 @@ vec2 to_tex_uv(vec2 p) {
   return p * 0.5 + 0.5;
 }
 
-float hex_edge(vec2 p, float density) {
-  p *= density;
-  const float hex_w = 1.7320508;
-  vec2 a = mod(p, vec2(hex_w, 2.0)) - vec2(hex_w, 2.0) * 0.5;
-  vec2 b = mod(p - vec2(hex_w * 0.5, 1.0), vec2(hex_w, 2.0)) - vec2(hex_w, 2.0) * 0.5;
-  vec2 gv = dot(a, a) < dot(b, b) ? a : b;
-  return abs(max(abs(gv.x) * 0.8660254 + abs(gv.y) * 0.5, abs(gv.y)) - 0.5);
-}
-
 void main() {
   vec2 base = aspect_uv(v_uv);
   float radius = length(base);
-
-  vec2 uv = base * (1.0 - 0.035 * u_bass);
-  float lattice_rotation = 0.18 * sin(u_time * 0.23) + u_mid * (0.18 + 0.34 * sin(u_time * 0.47));
-  uv = rot2(lattice_rotation) * uv;
-  uv.x += uv.y * 0.18 * u_mid * sin(u_time * 0.31);
-
-  float density = mix(4.0, 12.0, clamp((u_lattice_density - 2.0) / 10.0, 0.0, 1.0));
-  float lattice_width = 0.014 + 0.014 * u_mid + (12.0 - density) * 0.0015;
-  float lattice = 1.0 - smoothstep(
-    lattice_width,
-    lattice_width + 0.018,
-    hex_edge(uv * 1.35, density)
-  );
 
   float ring_count = max(u_ring_count, 1.0);
   float pulse = u_bass * 0.08 * sin(u_time * (2.8 + u_motion_rate * 1.7) + radius * 16.0);
@@ -106,45 +84,25 @@ void main() {
   float rings = 1.0 - smoothstep(ring_width, ring_width + 0.018, ring_lines);
   rings *= smoothstep(1.0, 0.12, radius);
 
-  float sweep_angle = u_time * (0.35 + u_motion_rate * 0.55);
-  float angle = atan(uv.y, uv.x);
-  float angle_delta = abs(atan(sin(angle - sweep_angle), cos(angle - sweep_angle)));
-  float wedge = smoothstep(0.48, 0.0, angle_delta) * smoothstep(1.05, 0.05, radius);
-
-  float spark_grid = 18.0 + 60.0 * u_treble;
-  vec2 spark_time = vec2(floor(u_time * (5.0 + u_motion_rate * 8.0)), floor(u_time * 2.0));
-  vec2 spark_cell = floor((uv + 2.0) * spark_grid + spark_time);
-  float spark_hash = hash12(spark_cell);
-  vec2 spark_local = fract((uv + 2.0) * spark_grid) - 0.5;
-  float spark_shape = 1.0 - smoothstep(0.06, 0.24, dot(spark_local, spark_local));
-  float spark_gate = step(0.988 - 0.08 * u_treble, spark_hash);
-  float sparks = spark_gate * spark_shape * smoothstep(1.0, 0.0, radius);
-
   float shock = 1.0 - smoothstep(0.01, 0.035, abs(radius - (0.26 + u_bass * 0.12 + u_peak * 0.06)));
   shock *= 0.35 + 0.65 * u_peak;
 
-  vec2 prev_uv = to_tex_uv(rot2(0.012 + u_mid * 0.05) * base * (1.0 - (0.008 + 0.016 * u_bass)));
+  vec2 prev_uv = to_tex_uv(base * (1.0 - (0.008 + 0.016 * u_bass)));
   prev_uv = clamp(prev_uv, vec2(0.001), vec2(0.999));
   vec3 prev = texture(u_prev_frame, prev_uv).rgb;
 
   float warning = smoothstep(0.55, 1.0, u_progress);
-  vec3 bg = mix(vec3(0.01, 0.035, 0.025), vec3(0.03, 0.02, 0.015), warning * 0.6);
-  vec3 lattice_color = mix(vec3(0.18, 0.86, 0.88), vec3(0.95, 0.28, 0.18), warning * 0.55 + u_peak * 0.25);
+  vec3 bg = vec3(0.0, 0.0, 0.0);
   vec3 ring_color = mix(vec3(0.86, 0.58, 0.16), vec3(0.95, 0.34, 0.16), warning * 0.45 + u_peak * 0.2);
-  vec3 scan_color = mix(vec3(0.24, 0.94, 0.84), vec3(1.0, 0.36, 0.2), warning * 0.5);
-  vec3 spark_color = mix(vec3(0.72, 0.96, 1.0), vec3(1.0, 0.44, 0.22), warning * 0.7);
 
   vec3 current = bg;
-  current += lattice_color * lattice * (0.28 + u_energy * 0.75);
   current += ring_color * rings * (0.18 + u_bass * 0.82);
-  current += scan_color * wedge * (0.12 + u_energy * 0.35);
-  current += spark_color * sparks * (0.35 + u_treble * 0.85);
-  current += mix(lattice_color, ring_color, 0.5) * shock * 0.45;
+  current += ring_color * shock * 0.45;
 
   float feedback = clamp(0.16 + u_energy * 0.24, 0.16, 0.42);
   vec3 color = mix(current, max(current, prev * 0.93), feedback);
 
-  float edge = clamp(max(lattice, rings) + wedge * 0.5 + sparks * 0.25, 0.0, 1.0);
+  float edge = clamp(rings, 0.0, 1.0);
   float split = edge * u_treble * (0.012 + 0.01 * u_progress);
   vec2 split_px = vec2(split / max(u_resolution.x, 1.0), 0.0);
   vec3 split_sample;
@@ -293,9 +251,6 @@ impl PanelShaderVisualizerLayer {
         self.shared.borrow_mut().pending_request = None;
     }
 
-    pub fn publish_containment_lattice(&self, request: PanelShaderRequest) {
-        self.shared.borrow_mut().pending_request = Some(request);
-    }
 }
 
 impl RenderHook for PanelShaderRenderHook {

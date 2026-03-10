@@ -13,9 +13,7 @@ use ratzilla::{
 use web_sys::{wasm_bindgen::JsCast, window, CanvasRenderingContext2d, HtmlCanvasElement};
 
 const CYAN: Color = Color::Rgb(110, 220, 212);
-const AMBER: Color = Color::Rgb(234, 182, 92);
 const RED: Color = Color::Rgb(240, 104, 96);
-const GREEN: Color = Color::Rgb(130, 208, 132);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct AudioAnalysisSnapshot {
@@ -426,7 +424,6 @@ fn draw_diplomatic_signal_bloom(
     let height = canvas.height();
     let energy_boost = state.energy as f64;
     let bass_pulse = state.bass as f64;
-    let mid_warp = state.mid as f64;
     let treble_shimmer = state.treble as f64;
     let containment = state.progress_ratio as f64;
     let center_x = width * 0.5;
@@ -434,57 +431,19 @@ fn draw_diplomatic_signal_bloom(
     let scale = (width.min(height) / 140.0).max(1.0);
 
     context.save();
-    context.set_fill_style_str("rgb(4, 8, 8)");
+    context.set_fill_style_str("rgb(0, 0, 0)");
     context.fill_rect(0.0, 0.0, width, height);
-    draw_vertical_gradient(context, width, height)?;
 
     for ring in 0..state.ring_count {
         let radius = (14.0 + ring as f64 * 10.0 + bass_pulse * 8.0) * scale;
-        let sweep = (state.phase * (0.8 + ring as f64 * 0.2)).sin() * 0.22;
-        stroke_arc(
+        stroke_circle(
             context,
-            center_x + (-58.0 + ring as f64 * 5.0) * scale,
+            center_x,
             center_y,
             radius,
-            -1.05 + sweep,
-            1.05 + sweep,
             cyan_tone((0.45 + energy_boost * 0.4 + ring as f64 * 0.04) as f32),
             1.4 + energy_boost * 1.5,
-        );
-    }
-
-    for index in 0..state.lattice_density {
-        let offset = (-46.0 + index as f64 * (92.0 / state.lattice_density as f64)) * scale;
-        let bend = mid_warp * 12.0 * (state.phase * 1.3 + index as f64 * 0.7).sin();
-        stroke_line(
-            context,
-            center_x + offset,
-            center_y + (-44.0 - bend) * scale,
-            center_x + offset * -0.65,
-            center_y + (44.0 + bend) * scale,
-            amber_tone((0.35 + state.mid * 0.55) as f32),
-            0.9 + state.mid as f64 * 1.4,
-        );
-        stroke_line(
-            context,
-            center_x + offset,
-            center_y + (44.0 + bend) * scale,
-            center_x + offset * -0.65,
-            center_y + (-44.0 - bend) * scale,
-            amber_tone((0.22 + state.mid * 0.48) as f32),
-            0.6 + state.mid as f64 * 1.0,
-        );
-    }
-
-    let particles = particle_points(state);
-    for (x, y) in particles {
-        fill_circle(
-            context,
-            center_x + x * scale,
-            center_y + y * scale,
-            0.8 + treble_shimmer * 1.6,
-            green_tone((0.4 + state.treble * 0.55) as f32),
-            0.28 + state.treble as f64 * 0.45,
+            0.82,
         );
     }
 
@@ -504,63 +463,12 @@ fn draw_diplomatic_signal_bloom(
         center_x,
         center_y,
         (10.0 + energy_boost * 10.0 + treble_shimmer * 6.0) * scale,
-        amber_tone((0.25 + state.energy * 0.3) as f32),
+        cyan_tone((0.25 + state.energy * 0.3) as f32),
         0.18 + energy_boost * 0.28,
     );
 
     context.restore();
     Ok(())
-}
-
-fn particle_points(state: &DiplomaticSignalBloomState) -> Vec<(f64, f64)> {
-    let mut points = Vec::with_capacity(state.particle_count);
-    let spread = 18.0 + state.treble as f64 * 24.0;
-    let progress_pull = state.progress_ratio as f64 * 12.0;
-    for index in 0..state.particle_count {
-        let t = index as f64 / state.particle_count as f64;
-        let orbit = state.phase * (1.6 + t * 1.8) + t * 12.0;
-        let x = 26.0 + t * 62.0 - progress_pull + orbit.sin() * spread * 0.35;
-        let y = (t * 2.0 - 1.0) * 42.0 + orbit.cos() * spread * 0.22;
-        points.push((x, y));
-    }
-    points
-}
-
-fn draw_vertical_gradient(
-    context: &CanvasRenderingContext2d,
-    width: f64,
-    height: f64,
-) -> Result<(), Error> {
-    let gradient = context.create_linear_gradient(0.0, 0.0, width, height);
-    gradient
-        .add_color_stop(0.0, "rgba(8, 14, 18, 0.95)")
-        .map_err(Error::from)?;
-    gradient
-        .add_color_stop(0.55, "rgba(16, 8, 12, 0.88)")
-        .map_err(Error::from)?;
-    gradient
-        .add_color_stop(1.0, "rgba(6, 6, 10, 0.98)")
-        .map_err(Error::from)?;
-    context.set_fill_style_canvas_gradient(&gradient);
-    context.fill_rect(0.0, 0.0, width, height);
-    Ok(())
-}
-
-fn stroke_arc(
-    context: &CanvasRenderingContext2d,
-    x: f64,
-    y: f64,
-    radius: f64,
-    start: f64,
-    end: f64,
-    color: Color,
-    line_width: f64,
-) {
-    context.begin_path();
-    context.set_stroke_style_str(&css_rgba(color, 0.82));
-    context.set_line_width(line_width);
-    let _ = context.arc(x, y, radius, start, end);
-    context.stroke();
 }
 
 fn stroke_circle(
@@ -593,23 +501,6 @@ fn fill_circle(
     context.fill();
 }
 
-fn stroke_line(
-    context: &CanvasRenderingContext2d,
-    x1: f64,
-    y1: f64,
-    x2: f64,
-    y2: f64,
-    color: Color,
-    line_width: f64,
-) {
-    context.begin_path();
-    context.set_stroke_style_str(&css_rgba(color, 0.58));
-    context.set_line_width(line_width);
-    context.move_to(x1, y1);
-    context.line_to(x2, y2);
-    context.stroke();
-}
-
 fn hsla(hue: f64, saturation: f64, lightness: f64, alpha: f64) -> String {
     format!(
         "hsla({:.1}, {:.1}%, {:.1}%, {:.3})",
@@ -633,24 +524,6 @@ fn cyan_tone(intensity: f32) -> Color {
         scale_channel(48, CYAN.r(), intensity),
         scale_channel(96, CYAN.g(), intensity),
         scale_channel(90, CYAN.b(), intensity),
-    )
-}
-
-fn amber_tone(intensity: f32) -> Color {
-    let intensity = intensity.clamp(0.0, 1.0);
-    Color::Rgb(
-        scale_channel(64, AMBER.r(), intensity),
-        scale_channel(54, AMBER.g(), intensity),
-        scale_channel(18, AMBER.b(), intensity),
-    )
-}
-
-fn green_tone(intensity: f32) -> Color {
-    let intensity = intensity.clamp(0.0, 1.0);
-    Color::Rgb(
-        scale_channel(24, GREEN.r(), intensity),
-        scale_channel(72, GREEN.g(), intensity),
-        scale_channel(34, GREEN.b(), intensity),
     )
 }
 

@@ -1,8 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    archive::{AccessLevel, MediaHealth, RecordDocument, TrackVisualizerMode, WaveformMode},
-    panel_shader_visualizer::{PanelShaderRequest, PanelShaderVisualizerLayer},
+    archive::{AccessLevel, MediaHealth, RecordDocument, WaveformMode},
+    panel_shader_visualizer::PanelShaderVisualizerLayer,
     session::{LogColorRole, RecordPageTab, SessionModel},
     state::{StateActions, StateId, StateMachineError},
     track_visualizer,
@@ -32,7 +32,6 @@ const MAGENTA: Color = Color::Rgb(188, 144, 228);
 pub struct ArchiveState {
     session: Rc<RefCell<SessionModel>>,
     visual_layer: GraphicsCanvasLayer,
-    panel_shader_visualizer: PanelShaderVisualizerLayer,
     visual_runtime: Rc<RefCell<track_visualizer::TrackVisualizerRuntime>>,
     pending_transition: Option<StateId>,
 }
@@ -41,12 +40,11 @@ impl ArchiveState {
     pub fn new(
         session: Rc<RefCell<SessionModel>>,
         visual_layer: GraphicsCanvasLayer,
-        panel_shader_visualizer: PanelShaderVisualizerLayer,
+        _panel_shader_visualizer: PanelShaderVisualizerLayer,
     ) -> Self {
         Self {
             session,
             visual_layer,
-            panel_shader_visualizer,
             visual_runtime: Rc::new(RefCell::new(
                 track_visualizer::TrackVisualizerRuntime::default(),
             )),
@@ -456,30 +454,16 @@ impl ArchiveState {
         frame.render_widget(visual_block, sections[1]);
 
         if let Some(config) = record.visualizer() {
-            if config.mode == TrackVisualizerMode::ContainmentLattice {
-                self.render_waveform_fallback(frame, visual_inner, record, session);
-                self.panel_shader_visualizer
-                    .publish_containment_lattice(PanelShaderRequest {
-                        area: visual_inner,
-                        record_id: record.id.clone(),
-                        analysis: session
-                            .analysis_snapshot()
-                            .unwrap_or_else(|| track_visualizer::AudioAnalysisSnapshot::idle(0.0)),
-                        viewer_tick: session.viewer_tick,
-                        params: config.params.clone(),
-                    });
-            } else {
-                track_visualizer::render_visualizer(
-                    frame,
-                    visual_inner,
-                    self.visual_layer.clone(),
-                    Rc::clone(&self.visual_runtime),
-                    &record.id,
-                    config,
-                    session.analysis_snapshot(),
-                    session.viewer_tick,
-                );
-            }
+            track_visualizer::render_visualizer(
+                frame,
+                visual_inner,
+                self.visual_layer.clone(),
+                Rc::clone(&self.visual_runtime),
+                &record.id,
+                config,
+                session.analysis_snapshot(),
+                session.viewer_tick,
+            );
         } else {
             self.render_waveform_fallback(frame, visual_inner, record, session);
         }
