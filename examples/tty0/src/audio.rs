@@ -7,7 +7,7 @@ use web_sys::{
 };
 
 const FFT_SIZE: u32 = 256;
-const SMOOTHING_TIME_CONSTANT: f64 = 0.80;
+const SMOOTHING_TIME_CONSTANT: f64 = 0.45;
 
 pub struct AudioController {
     element: Option<HtmlAudioElement>,
@@ -36,7 +36,11 @@ struct AudioAnalysisPipeline {
     #[allow(dead_code)]
     source_node: MediaElementAudioSourceNode,
     analyser: AnalyserNode,
-    bins: Vec<u8>,
+    freq_bins: Vec<u8>,
+    time_bins: Vec<u8>,
+    beat_pulse: f32,
+    previous_bass: f32,
+    previous_waveform_peak: f32,
 }
 
 impl AudioController {
@@ -110,8 +114,10 @@ impl AudioController {
             && self.active_source.as_deref() == Some(source);
 
         if !same_record {
-            let audio = HtmlAudioElement::new_with_src(source)
+            let audio = HtmlAudioElement::new()
                 .map_err(|_| "browser audio element could not be created".to_string())?;
+            audio.set_cross_origin(Some("anonymous"));
+            audio.set_src(source);
             audio.set_preload("auto");
             self.analysis_pipeline = AudioAnalysisPipeline::new(&audio).ok();
             self.element = Some(audio);
@@ -278,13 +284,18 @@ impl AudioAnalysisPipeline {
             .connect_with_audio_node(&context.destination())
             .map_err(|_| "analyser could not connect to output".to_string())?;
 
-        let bins = vec![0; analyser.frequency_bin_count() as usize];
+        let freq_bins = vec![0; analyser.frequency_bin_count() as usize];
+        let time_bins = vec![0; analyser.fft_size() as usize];
 
         Ok(Self {
             context,
             source_node,
             analyser,
-            bins,
+            freq_bins,
+            time_bins,
+            beat_pulse: 0.0,
+            previous_bass: 0.0,
+            previous_waveform_peak: 0.0,
         })
     }
 
@@ -296,18 +307,32 @@ impl AudioAnalysisPipeline {
 
     fn sample(&mut self, audio: &HtmlAudioElement) -> AudioAnalysisSnapshot {
         self.resume_if_suspended();
-        if self.bins.len() != self.analyser.frequency_bin_count() as usize {
-            self.bins
+        if self.freq_bins.len() != self.analyser.frequency_bin_count() as usize {
+            self.freq_bins
                 .resize(self.analyser.frequency_bin_count() as usize, 0);
         }
-        self.analyser.get_byte_frequency_data(&mut self.bins);
-        let (energy, bass, mid, treble, peak) = compute_analysis_levels(&self.bins);
+        if self.time_bins.len() != self.analyser.fft_size() as usize {
+            self.time_bins
+                .resize(self.analyser.fft_size() as usize, 128);
+        }
+        self.analyser.get_byte_frequency_data(&mut self.freq_bins);
+        self.analyser.get_byte_time_domain_data(&mut self.time_bins);
+        let (energy, bass, mid, treble, peak, waveform_peak) =
+            compute_analysis_levels(&self.freq_bins, &self.time_bins);
+        let bass_rise = (bass - self.previous_bass).max(0.0);
+        let waveform_rise = (waveform_peak - self.previous_waveform_peak).max(0.0);
+        let beat_impulse =
+            (bass_rise * 3.4 + waveform_rise * 2.2 + bass * 0.18 + peak * 0.10).clamp(0.0, 1.0);
+        self.beat_pulse = (self.beat_pulse * 0.76).max(beat_impulse);
+        self.previous_bass = bass;
+        self.previous_waveform_peak = waveform_peak;
         AudioAnalysisSnapshot {
             energy,
             bass,
             mid,
             treble,
             peak,
+            beat: self.beat_pulse,
             progress_ratio: compute_progress_ratio(audio.current_time(), audio.duration())
                 .unwrap_or_default(),
             is_playing: !audio.paused() && !audio.ended(),
@@ -315,19 +340,27 @@ impl AudioAnalysisPipeline {
     }
 }
 
-fn compute_analysis_levels(bins: &[u8]) -> (f32, f32, f32, f32, f32) {
-    if bins.is_empty() {
-        return (0.0, 0.0, 0.0, 0.0, 0.0);
+fn compute_analysis_levels(freq_bins: &[u8], time_bins: &[u8]) -> (f32, f32, f32, f32, f32, f32) {
+    if freq_bins.is_empty() {
+        return (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     }
 
-    let peak = bins.iter().copied().max().unwrap_or_default() as f32 / 255.0;
-    let bass_end = ((bins.len() as f32 * 0.20).round() as usize).clamp(1, bins.len());
-    let mid_end = ((bins.len() as f32 * 0.65).round() as usize).clamp(bass_end + 1, bins.len());
-    let bass = average_normalized(&bins[..bass_end]);
-    let mid = average_normalized(&bins[bass_end..mid_end]);
-    let treble = average_normalized(&bins[mid_end..]);
-    let energy = average_normalized(bins);
-    (energy, bass, mid, treble, peak)
+    let spectral_peak = freq_bins.iter().copied().max().unwrap_or_default() as f32 / 255.0;
+    let bass_end = ((freq_bins.len() as f32 * 0.20).round() as usize).clamp(1, freq_bins.len());
+    let mid_end =
+        ((freq_bins.len() as f32 * 0.65).round() as usize).clamp(bass_end + 1, freq_bins.len());
+    let bass = average_normalized(&freq_bins[..bass_end]);
+    let mid = average_normalized(&freq_bins[bass_end..mid_end]);
+    let treble = average_normalized(&freq_bins[mid_end..]);
+    let spectral_energy = average_normalized(freq_bins);
+    let waveform_rms = waveform_rms(time_bins);
+    let waveform_peak = waveform_peak(time_bins);
+    let energy = (spectral_energy * 0.95 + waveform_rms * 0.90)
+        .clamp(0.0, 1.0)
+        .max(waveform_peak * 0.85);
+    let bass = (bass * 0.85 + waveform_rms * 0.65).clamp(0.0, 1.0);
+    let peak = spectral_peak.max(waveform_peak).clamp(0.0, 1.0);
+    (energy, bass, mid, treble, peak, waveform_peak)
 }
 
 fn average_normalized(slice: &[u8]) -> f32 {
@@ -336,6 +369,28 @@ fn average_normalized(slice: &[u8]) -> f32 {
     }
     let sum = slice.iter().map(|value| *value as f32).sum::<f32>();
     (sum / slice.len() as f32 / 255.0).clamp(0.0, 1.0)
+}
+
+fn waveform_rms(slice: &[u8]) -> f32 {
+    if slice.is_empty() {
+        return 0.0;
+    }
+
+    let sum_squares = slice
+        .iter()
+        .map(|value| {
+            let centered = (*value as f32 - 128.0) / 128.0;
+            centered * centered
+        })
+        .sum::<f32>();
+    (sum_squares / slice.len() as f32).sqrt().clamp(0.0, 1.0)
+}
+
+fn waveform_peak(slice: &[u8]) -> f32 {
+    slice
+        .iter()
+        .map(|value| ((*value as f32 - 128.0).abs() / 128.0).clamp(0.0, 1.0))
+        .fold(0.0, f32::max)
 }
 
 fn compute_progress_ratio(current: f64, duration: f64) -> Option<f32> {
@@ -367,7 +422,10 @@ fn format_time(current: f32, duration: f32) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{compute_analysis_levels, compute_progress_ratio, AudioController};
+    use super::{
+        compute_analysis_levels, compute_progress_ratio, waveform_peak, waveform_rms,
+        AudioController,
+    };
     use crate::archive::{AccessLevel, MediaPage, RecordDocument, RecordKind};
 
     #[test]
@@ -378,12 +436,23 @@ mod tests {
             .chain(vec![64; 35])
             .collect::<Vec<_>>();
 
-        let (energy, bass, mid, treble, peak) = compute_analysis_levels(&bins);
+        let waveform = vec![128; 128];
+        let (energy, bass, mid, treble, peak, waveform_peak) =
+            compute_analysis_levels(&bins, &waveform);
 
-        assert!((bass - 1.0).abs() < 0.001);
+        assert!(bass > 0.8);
         assert!(mid > treble);
         assert!(energy > 0.4);
         assert!((peak - 1.0).abs() < 0.001);
+        assert_eq!(waveform_peak, 0.0);
+    }
+
+    #[test]
+    fn waveform_helpers_report_activity() {
+        let waveform = vec![128, 255, 0, 255, 0, 128];
+
+        assert!(waveform_rms(&waveform) > 0.5);
+        assert!(waveform_peak(&waveform) > 0.9);
     }
 
     #[test]

@@ -41,6 +41,7 @@ uniform float u_bass;
 uniform float u_mid;
 uniform float u_treble;
 uniform float u_peak;
+uniform float u_beat;
 uniform float u_progress;
 uniform float u_motion_rate;
 uniform float u_lattice_density;
@@ -57,38 +58,75 @@ void main() {
   vec2 frag_px = v_uv * u_resolution;
   vec2 center = 0.5 * u_resolution;
   vec2 lens_delta = frag_px - center;
-  float lens_radius = 0.24 * min(u_resolution.x, u_resolution.y);
+  vec2 radial_axis = length(lens_delta) > 0.0001 ? normalize(lens_delta) : vec2(1.0, 0.0);
+
+  float radius_drive = 1.0 + 0.06 * u_energy + 0.08 * u_peak + 0.52 * u_beat;
+  float lens_radius = 0.24 * min(u_resolution.x, u_resolution.y) * radius_drive;
   float lens_distance = length(lens_delta);
   float normalized_radius = lens_distance / max(lens_radius, 1.0);
   float falloff = 1.0 - smoothstep(0.78, 1.0, normalized_radius);
   float hemisphere = sqrt(max(0.0, 1.0 - normalized_radius * normalized_radius));
-  vec2 split_axis = lens_distance > 0.0001 ? lens_delta / lens_distance : vec2(1.0, 0.0);
+  vec2 sphere_xy = lens_radius > 0.0 ? lens_delta / lens_radius : vec2(0.0);
+  vec3 sphere_normal = normalize(vec3(sphere_xy, max(hemisphere, 0.001)));
 
   float density = clamp((u_lattice_density - 2.0) / 10.0, 0.0, 1.0);
   float spacing_px = mix(22.0, 12.0, density);
   float base_radius_px = spacing_px * 0.16;
   float scroll_px = u_time * (28.0 + 42.0 * clamp(u_motion_rate - 0.2, 0.0, 2.8));
 
-  vec2 sample_px = frag_px;
-  sample_px.x += scroll_px;
-  sample_px += split_axis * (falloff * hemisphere * (10.0 + 18.0 * u_bass));
-
-  float radius_scale = 1.0 + falloff * hemisphere * (0.85 + 0.55 * u_bass + 0.15 * u_mid);
-  float dot_radius_px = base_radius_px * radius_scale;
+  vec2 sphere_offset = frag_px - center;
+  float center_profile = falloff * hemisphere;
+  float bulge_drive = 0.18 + 0.92 * u_bass + 0.18 * u_energy;
+  float magnify = 1.0 - center_profile * (0.20 + 0.44 * bulge_drive);
+  vec2 warped_screen_px = center + sphere_offset * magnify;
+  vec2 rim_direction = sphere_normal.xy / max(sphere_normal.z, 0.55);
+  float rim_profile = falloff * pow(clamp(1.0 - sphere_normal.z, 0.0, 1.0), 1.8);
+  float rim_warp = rim_profile * (0.12 + 0.78 * u_bass + 0.10 * u_peak);
+  vec2 warped_sample_px = warped_screen_px + rim_direction * rim_warp;
+  warped_sample_px.x += scroll_px;
+  float dot_radius_px = base_radius_px;
   float edge_px = 1.1 - min(u_peak, 1.0) * 0.25;
-  float split_px = falloff * (0.6 + 2.4 * u_treble + 0.8 * u_peak);
+  float visible = falloff * smoothstep(0.0, 0.06 + 0.08 * u_peak + 0.06 * u_bass, hemisphere);
+  visible *= 0.64 + 0.20 * u_energy + 0.16 * u_peak + 0.36 * u_beat;
 
-  float mask_white = dot_mask(sample_px, spacing_px, dot_radius_px, edge_px);
-  float mask_r = dot_mask(sample_px + split_axis * split_px, spacing_px, dot_radius_px, edge_px);
-  float mask_g = mask_white;
-  float mask_b = dot_mask(sample_px - split_axis * split_px, spacing_px, dot_radius_px, edge_px);
+  float chroma_drive = falloff * (0.10 + 1.85 * u_treble + 0.22 * u_peak);
+  vec2 chroma_offset = radial_axis * chroma_drive;
 
-  vec3 white_core = vec3(mask_white);
-  vec3 aberrated = vec3(mask_r, mask_g, mask_b);
-  float aberration_mix = clamp(falloff * (0.18 + 0.32 * u_treble + 0.12 * u_peak), 0.0, 0.55);
-  vec3 color = mix(white_core, aberrated, aberration_mix);
-  color *= 0.72 + 0.28 * u_energy;
-  color *= 0.96 + 0.04 * smoothstep(0.7, 1.0, u_progress);
+  float mask_g = dot_mask(warped_sample_px, spacing_px, dot_radius_px, edge_px) * visible;
+  float mask_r = dot_mask(
+    warped_sample_px + chroma_offset,
+    spacing_px,
+    dot_radius_px,
+    edge_px
+  ) * visible;
+  float mask_b = dot_mask(
+    warped_sample_px - chroma_offset,
+    spacing_px,
+    dot_radius_px,
+    edge_px
+  ) * visible;
+
+  vec3 normal_color = vec3(
+    0.5 + 0.5 * sphere_normal.x,
+    0.5 + 0.5 * sphere_normal.y,
+    sphere_normal.z
+  );
+  vec3 cold_color = vec3(
+    0.22 + 0.48 * sphere_normal.z,
+    0.38 + 0.42 * (0.5 + 0.5 * sphere_normal.y),
+    0.82 + 0.18 * (0.5 + 0.5 * sphere_normal.x)
+  );
+  vec3 hot_color = vec3(
+    0.96 - 0.18 * sphere_normal.z,
+    0.18 + 0.55 * (0.5 + 0.5 * sphere_normal.x),
+    0.34 + 0.34 * (0.5 + 0.5 * sphere_normal.y)
+  );
+  float color_drive = clamp(0.10 + 0.95 * u_mid + 0.18 * smoothstep(0.0, 1.0, u_progress), 0.0, 1.0);
+  vec3 base_color = mix(cold_color, hot_color, color_drive);
+
+  vec3 color = vec3(mask_r, mask_g, mask_b) * base_color;
+  color += vec3(mask_r, mask_g, mask_b) * (0.14 * u_peak + 0.10 * u_energy);
+  color *= 0.68 + 0.24 * u_energy + 0.14 * u_peak + 0.32 * u_beat;
 
   out_color = vec4(clamp(color, 0.0, 1.0), 1.0);
 }
@@ -158,6 +196,7 @@ struct UniformSet {
     mid: f32,
     treble: f32,
     peak: f32,
+    beat: f32,
     progress: f32,
     motion_rate: f32,
     lattice_density: f32,
@@ -183,6 +222,7 @@ struct SceneUniformLocations {
     mid: glow::UniformLocation,
     treble: glow::UniformLocation,
     peak: glow::UniformLocation,
+    beat: glow::UniformLocation,
     progress: glow::UniformLocation,
     motion_rate: glow::UniformLocation,
     lattice_density: glow::UniformLocation,
@@ -408,6 +448,7 @@ impl PanelShaderRuntime {
             gl.uniform_1_f32(Some(&resources.scene_uniforms.mid), uniforms.mid);
             gl.uniform_1_f32(Some(&resources.scene_uniforms.treble), uniforms.treble);
             gl.uniform_1_f32(Some(&resources.scene_uniforms.peak), uniforms.peak);
+            gl.uniform_1_f32(Some(&resources.scene_uniforms.beat), uniforms.beat);
             gl.uniform_1_f32(Some(&resources.scene_uniforms.progress), uniforms.progress);
             gl.uniform_1_f32(
                 Some(&resources.scene_uniforms.motion_rate),
@@ -526,6 +567,7 @@ impl UniformSet {
             treble: (request.analysis.treble * treble_gain * (0.7 + spark_budget * 0.45))
                 .clamp(0.0, 1.0),
             peak: request.analysis.peak.clamp(0.0, 1.0),
+            beat: request.analysis.beat.clamp(0.0, 1.0),
             progress: request.analysis.progress_ratio.clamp(0.0, 1.0),
             motion_rate,
             lattice_density: request.params.lattice_density.clamp(2, 12) as f32,
@@ -557,6 +599,7 @@ impl RuntimeResources {
                 mid: uniform_location(gl, scene_program, "u_mid")?,
                 treble: uniform_location(gl, scene_program, "u_treble")?,
                 peak: uniform_location(gl, scene_program, "u_peak")?,
+                beat: uniform_location(gl, scene_program, "u_beat")?,
                 progress: uniform_location(gl, scene_program, "u_progress")?,
                 motion_rate: uniform_location(gl, scene_program, "u_motion_rate")?,
                 lattice_density: uniform_location(gl, scene_program, "u_lattice_density")?,
@@ -738,6 +781,7 @@ mod tests {
                 mid: 2.0,
                 treble: 2.0,
                 peak: 1.4,
+                beat: 1.4,
                 progress_ratio: 1.4,
                 is_playing: true,
             },
@@ -794,6 +838,7 @@ mod tests {
         assert_eq!(uniforms.mid, 1.0);
         assert_eq!(uniforms.treble, 1.0);
         assert_eq!(uniforms.peak, 1.0);
+        assert_eq!(uniforms.beat, 1.0);
         assert_eq!(uniforms.progress, 1.0);
         assert_eq!(uniforms.motion_rate, 3.0);
         assert_eq!(uniforms.lattice_density, 12.0);

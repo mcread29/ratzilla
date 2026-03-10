@@ -26,6 +26,7 @@ pub struct AudioAnalysisSnapshot {
     pub mid: f32,
     pub treble: f32,
     pub peak: f32,
+    pub beat: f32,
     pub progress_ratio: f32,
     pub is_playing: bool,
 }
@@ -64,6 +65,7 @@ struct DiplomaticSignalBloomState {
     mid: f32,
     treble: f32,
     peak: f32,
+    beat: f32,
     progress_ratio: f32,
     phase: f64,
     ring_count: usize,
@@ -154,6 +156,7 @@ pub fn decay_snapshot_toward_idle(
         mid: decay(snapshot.mid),
         treble: decay(snapshot.treble),
         peak: decay(snapshot.peak),
+        beat: (snapshot.beat * 0.78).clamp(0.0, 1.0),
         progress_ratio: progress_ratio.clamp(0.0, 1.0),
         is_playing: false,
     }
@@ -371,6 +374,7 @@ fn resolve_scene_state(
                 mid: (analysis.mid * params.mid_gain).clamp(0.0, 1.0),
                 treble: (analysis.treble * params.treble_gain).clamp(0.0, 1.0),
                 peak: analysis.peak.clamp(0.0, 1.0),
+                beat: analysis.beat.clamp(0.0, 1.0),
                 progress_ratio: analysis.progress_ratio.clamp(0.0, 1.0),
                 phase: viewer_tick as f64 / 1000.0 * params.motion_rate as f64,
                 ring_count: params.ring_count,
@@ -387,6 +391,7 @@ fn resolve_scene_state(
                     mid: (analysis.mid * params.mid_gain).clamp(0.0, 1.0),
                     treble: (analysis.treble * params.treble_gain).clamp(0.0, 1.0),
                     peak: analysis.peak.clamp(0.0, 1.0),
+                    beat: analysis.beat.clamp(0.0, 1.0),
                     progress_ratio: analysis.progress_ratio.clamp(0.0, 1.0),
                     is_playing: analysis.is_playing,
                 },
@@ -693,6 +698,7 @@ mod tests {
             mid: 0.6,
             treble: 0.4,
             peak: 0.9,
+            beat: 1.0,
             progress_ratio: 0.7,
             is_playing: true,
         };
@@ -703,6 +709,7 @@ mod tests {
         assert!(decayed.bass < snapshot.bass);
         assert!(decayed.mid < snapshot.mid);
         assert!(decayed.treble < snapshot.treble);
+        assert!(decayed.beat < snapshot.beat);
         assert!(!decayed.is_playing);
         assert_eq!(decayed.progress_ratio, 0.7);
     }
