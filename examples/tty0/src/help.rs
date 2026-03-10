@@ -121,6 +121,7 @@ impl HelpOverlay {
             body_line("Left side: record index and recovered shelves."),
             body_line("Center: selected record, page tabs, and active document surface."),
             body_line("Right side: metadata, playback state, and live archive residue."),
+            body_line("Mounted tracks may expose reactive visual evidence on the media page."),
             body_line("Read each record as evidence, not as a complete archive."),
             blank_line(),
             section_heading("navigation"),

@@ -5,6 +5,7 @@ use crate::{
     audio::{AudioController, PlaybackView},
     session_logs::{SessionLogContext, SessionLogGenerator},
     state::StateId,
+    track_visualizer::AudioAnalysisSnapshot,
 };
 use tachyonfx::Duration;
 use web_time::{SystemTime, UNIX_EPOCH};
@@ -187,6 +188,10 @@ impl SessionModel {
 
     pub fn playback_view(&self) -> PlaybackView {
         self.audio.view_for(self.current_record())
+    }
+
+    pub fn analysis_snapshot(&self) -> Option<AudioAnalysisSnapshot> {
+        self.audio.analysis_snapshot_for(self.current_record())
     }
 
     pub fn tick(&mut self, elapsed: Duration) {

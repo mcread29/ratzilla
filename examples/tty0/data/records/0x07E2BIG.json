@@ -96,6 +96,19 @@
     "artifact_note": "Mounted audio is a stitched composite from the last intact translation relay before containment became irreversible.",
     "transcript_excerpt": "Their envoys said our factories were elegant in isolation and catastrophic in aggregate. They asked for one century of restraint.",
     "waveform_mode": "spectrum",
+    "visualizer": {
+      "mode": "diplomatic_signal_bloom",
+      "params": {
+        "motion_rate": 1.15,
+        "energy_gain": 1.2,
+        "bass_gain": 1.35,
+        "mid_gain": 1.05,
+        "treble_gain": 1.15,
+        "ring_count": 5,
+        "particle_count": 64,
+        "lattice_density": 7
+      }
+    },
     "corruption_reason": null
   }
 }

@@ -112,6 +112,8 @@ pub struct MediaPage {
     pub artifact_note: String,
     pub transcript_excerpt: String,
     pub waveform_mode: WaveformMode,
+    #[serde(default)]
+    pub visualizer: Option<TrackVisualizerConfig>,
     pub corruption_reason: Option<String>,
 }
 
@@ -120,6 +122,39 @@ pub struct AudioArtifact {
     pub path: String,
     pub title: String,
     pub duration_hint: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct TrackVisualizerConfig {
+    pub mode: TrackVisualizerMode,
+    #[serde(default)]
+    pub params: TrackVisualizerParams,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TrackVisualizerMode {
+    DiplomaticSignalBloom,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct TrackVisualizerParams {
+    #[serde(default = "default_motion_rate")]
+    pub motion_rate: f32,
+    #[serde(default = "default_energy_gain")]
+    pub energy_gain: f32,
+    #[serde(default = "default_bass_gain")]
+    pub bass_gain: f32,
+    #[serde(default = "default_mid_gain")]
+    pub mid_gain: f32,
+    #[serde(default = "default_treble_gain")]
+    pub treble_gain: f32,
+    #[serde(default = "default_ring_count")]
+    pub ring_count: u16,
+    #[serde(default = "default_particle_count")]
+    pub particle_count: u16,
+    #[serde(default = "default_lattice_density")]
+    pub lattice_density: u16,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -329,6 +364,10 @@ impl RecordDocument {
             .map(|audio| audio.path.as_str())
     }
 
+    pub fn visualizer(&self) -> Option<&TrackVisualizerConfig> {
+        self.media_page.visualizer.as_ref()
+    }
+
     pub fn badge_label(&self) -> &'static str {
         match self.access_level {
             AccessLevel::Readable => match self.media_health() {
@@ -385,6 +424,61 @@ impl MediaHealth {
     }
 }
 
+impl TrackVisualizerMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::DiplomaticSignalBloom => "diplomatic signal bloom",
+        }
+    }
+}
+
+impl Default for TrackVisualizerParams {
+    fn default() -> Self {
+        Self {
+            motion_rate: default_motion_rate(),
+            energy_gain: default_energy_gain(),
+            bass_gain: default_bass_gain(),
+            mid_gain: default_mid_gain(),
+            treble_gain: default_treble_gain(),
+            ring_count: default_ring_count(),
+            particle_count: default_particle_count(),
+            lattice_density: default_lattice_density(),
+        }
+    }
+}
+
+fn default_motion_rate() -> f32 {
+    1.0
+}
+
+fn default_energy_gain() -> f32 {
+    1.1
+}
+
+fn default_bass_gain() -> f32 {
+    1.25
+}
+
+fn default_mid_gain() -> f32 {
+    1.0
+}
+
+fn default_treble_gain() -> f32 {
+    1.1
+}
+
+fn default_ring_count() -> u16 {
+    4
+}
+
+fn default_particle_count() -> u16 {
+    48
+}
+
+fn default_lattice_density() -> u16 {
+    6
+}
+
 fn parse_json<T: for<'de> Deserialize<'de>>(path: &str, json: &str) -> Result<T, ArchiveLoadError> {
     serde_json::from_str(json).map_err(|source| ArchiveLoadError::Json {
         path: path.to_string(),
@@ -407,7 +501,7 @@ fn validate_unique_category_ids(manifest: &ArchiveManifestDoc) -> Result<(), Arc
 
 #[cfg(test)]
 mod tests {
-    use super::{ArchiveLoadError, ArchiveLoader, MediaHealth};
+    use super::{ArchiveLoadError, ArchiveLoader, MediaHealth, TrackVisualizerMode};
 
     const MANIFEST: &str = r#"{
       "categories": [
@@ -421,12 +515,24 @@ mod tests {
     }"#;
 
     fn readable_record_json(id: &str, audio_path: Option<&str>, related: &[&str]) -> String {
+        readable_record_json_with_visualizer(id, audio_path, related, None)
+    }
+
+    fn readable_record_json_with_visualizer(
+        id: &str,
+        audio_path: Option<&str>,
+        related: &[&str],
+        visualizer: Option<&str>,
+    ) -> String {
         let audio = match audio_path {
             Some(path) => format!(
                 "{{\"path\":\"{path}\",\"title\":\"Artifact\",\"duration_hint\":\"03:12\"}}"
             ),
             None => "null".to_string(),
         };
+        let visualizer = visualizer
+            .map(|visualizer| format!(",\"visualizer\":{visualizer}"))
+            .unwrap_or_default();
         let related = related
             .iter()
             .map(|id| format!("\"{id}\""))
@@ -492,7 +598,7 @@ mod tests {
                 "audio": {audio},
                 "artifact_note": "artifact",
                 "transcript_excerpt": "excerpt",
-                "waveform_mode": "waveform",
+                "waveform_mode": "waveform"{visualizer},
                 "corruption_reason": "missing source"
               }}
             }}"#
@@ -617,5 +723,65 @@ mod tests {
         assert_eq!(entry.category_label, "witnesses");
         assert_eq!(entry.category_path, "/recovered/humanity/witnesses");
         assert_eq!(store.record_at(0).expect("flat record").id, "one");
+    }
+
+    #[test]
+    fn visualizer_config_parses_when_present() {
+        let record = readable_record_json_with_visualizer(
+            "one",
+            Some("a.mp3"),
+            &[],
+            Some(
+                r#"{"mode":"diplomatic_signal_bloom","params":{"motion_rate":1.5,"ring_count":5}}"#,
+            ),
+        );
+        let store = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
+            .expect("archive store");
+        let visualizer = store
+            .record_by_id("one")
+            .expect("record")
+            .visualizer()
+            .expect("visualizer");
+
+        assert_eq!(visualizer.mode, TrackVisualizerMode::DiplomaticSignalBloom);
+        assert_eq!(visualizer.params.motion_rate, 1.5);
+        assert_eq!(visualizer.params.ring_count, 5);
+    }
+
+    #[test]
+    fn missing_visualizer_defaults_to_none() {
+        let record = readable_record_json("one", Some("a.mp3"), &[]);
+        let store = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
+            .expect("archive store");
+
+        assert!(store
+            .record_by_id("one")
+            .expect("record")
+            .visualizer()
+            .is_none());
+    }
+
+    #[test]
+    fn missing_visualizer_params_use_defaults() {
+        let record = readable_record_json_with_visualizer(
+            "one",
+            Some("a.mp3"),
+            &[],
+            Some(r#"{"mode":"diplomatic_signal_bloom"}"#),
+        );
+        let store = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
+            .expect("archive store");
+        let params = &store
+            .record_by_id("one")
+            .expect("record")
+            .visualizer()
+            .expect("visualizer")
+            .params;
+
+        assert_eq!(params.motion_rate, 1.0);
+        assert_eq!(params.energy_gain, 1.1);
+        assert_eq!(params.ring_count, 4);
+        assert_eq!(params.particle_count, 48);
+        assert_eq!(params.lattice_density, 6);
     }
 }

@@ -4,6 +4,7 @@ use crate::{
     archive::{AccessLevel, MediaHealth, RecordDocument, WaveformMode},
     session::{LogColorRole, RecordPageTab, SessionModel},
     state::{StateActions, StateId, StateMachineError},
+    track_visualizer,
 };
 use ratzilla::event::KeyCode;
 use ratzilla::ratatui::{
@@ -13,6 +14,7 @@ use ratzilla::ratatui::{
     widgets::{Block, BorderType, List, ListItem, ListState, Paragraph, Wrap},
     Frame,
 };
+use ratzilla::widgets::GraphicsCanvasLayer;
 use tachyonfx::Duration;
 
 const BG: Color = Color::Black;
@@ -28,19 +30,24 @@ const MAGENTA: Color = Color::Rgb(188, 144, 228);
 
 pub struct ArchiveState {
     session: Rc<RefCell<SessionModel>>,
+    visual_layer: GraphicsCanvasLayer,
     pending_transition: Option<StateId>,
 }
 
 impl ArchiveState {
-    pub fn new(session: Rc<RefCell<SessionModel>>) -> Self {
+    pub fn new(session: Rc<RefCell<SessionModel>>, visual_layer: GraphicsCanvasLayer) -> Self {
         Self {
             session,
+            visual_layer,
             pending_transition: None,
         }
     }
 
-    pub fn create(session: Rc<RefCell<SessionModel>>) -> Box<dyn StateActions> {
-        Box::new(Self::new(session))
+    pub fn create(
+        session: Rc<RefCell<SessionModel>>,
+        visual_layer: GraphicsCanvasLayer,
+    ) -> Box<dyn StateActions> {
+        Box::new(Self::new(session, visual_layer))
     }
 }
 
@@ -361,12 +368,17 @@ impl ArchiveState {
         }
 
         let record = session.current_record();
+        if session.active_page == RecordPageTab::Media {
+            self.render_media_page(frame, area, &session, record);
+            return;
+        }
+
         let lines = match session.active_page {
             RecordPageTab::Overview => build_overview_lines(record),
             RecordPageTab::Dossier => build_dossier_lines(record),
             RecordPageTab::Timeline => build_timeline_lines(record),
             RecordPageTab::Notes => build_notes_lines(record),
-            RecordPageTab::Media => build_media_lines(record, &session),
+            RecordPageTab::Media => unreachable!("media page is handled separately"),
         };
 
         frame.render_widget(
@@ -379,6 +391,93 @@ impl ArchiveState {
                         .title(format!(" {} ", session.active_page.label()))
                         .border_style(Style::default().fg(BORDER)),
                 ),
+            area,
+        );
+    }
+
+    fn render_media_page(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        session: &SessionModel,
+        record: &RecordDocument,
+    ) {
+        if record.media_health() == MediaHealth::Corrupted {
+            frame.render_widget(
+                Paragraph::new(build_media_lines(record, session, area.width, area.height))
+                    .wrap(Wrap { trim: false })
+                    .style(Style::default().bg(BG))
+                    .block(
+                        Block::bordered()
+                            .title(" media ")
+                            .border_style(Style::default().fg(BORDER)),
+                    ),
+                area,
+            );
+            return;
+        }
+
+        let text_height = area.height.saturating_sub(10).clamp(11, 14);
+        let sections =
+            Layout::vertical([Constraint::Length(text_height), Constraint::Min(8)]).split(area);
+        let detail_lines = build_media_detail_lines(record);
+
+        frame.render_widget(
+            Paragraph::new(detail_lines)
+                .wrap(Wrap { trim: false })
+                .style(Style::default().bg(BG).fg(TEXT))
+                .block(
+                    Block::bordered()
+                        .title(" media artifact ")
+                        .border_style(Style::default().fg(BORDER)),
+                ),
+            sections[0],
+        );
+
+        let visual_block = Block::bordered()
+            .title(record.visualizer().map_or_else(
+                || " waveform fallback ".to_string(),
+                |config| format!(" visual // {} ", config.mode.label()),
+            ))
+            .border_style(Style::default().fg(BORDER));
+        let visual_inner = visual_block.inner(sections[1]);
+        frame.render_widget(visual_block, sections[1]);
+
+        if let Some(config) = record.visualizer() {
+            track_visualizer::render_visualizer(
+                frame,
+                visual_inner,
+                self.visual_layer.clone(),
+                config,
+                session.analysis_snapshot(),
+                session.viewer_tick,
+            );
+        } else {
+            self.render_waveform_fallback(frame, visual_inner, record, session);
+        }
+    }
+
+    fn render_waveform_fallback(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        record: &RecordDocument,
+        session: &SessionModel,
+    ) {
+        let width = area.width.saturating_sub(4).max(8) as usize;
+        let height = area.height.saturating_sub(3).max(4) as usize;
+        let lines = match record.media_page.waveform_mode {
+            WaveformMode::Spectrum => build_music_lines(width, height, session.viewer_tick),
+            _ => build_waveform_lines(width, height, session.viewer_tick),
+        }
+        .into_iter()
+        .map(|line| Line::from(Span::styled(line, Style::default().fg(MAGENTA))))
+        .collect::<Vec<_>>();
+
+        frame.render_widget(
+            Paragraph::new(lines)
+                .wrap(Wrap { trim: false })
+                .style(Style::default().bg(BG)),
             area,
         );
     }
@@ -479,8 +578,9 @@ impl ArchiveState {
             return;
         }
 
+        let record = session.current_record();
         let playback = session.playback_view();
-        let lines = vec![
+        let mut lines = vec![
             Line::from(Span::styled(
                 playback.state_label,
                 Style::default().fg(if playback.is_playing { GREEN } else { AMBER }),
@@ -495,12 +595,33 @@ impl ArchiveState {
                     .progress_label
                     .unwrap_or_else(|| "progress: --:-- / --:--".to_string()),
             ),
+            Line::from(playback.progress_ratio.map_or_else(
+                || "reactivity: idle baseline".to_string(),
+                |ratio| format!("reactivity: {:>3.0}% progress", ratio * 100.0),
+            )),
+            Line::from(match (playback.elapsed_secs, playback.duration_secs) {
+                (Some(elapsed), Some(duration)) => {
+                    format!("clock: {:>5.1}s / {:>5.1}s", elapsed, duration)
+                }
+                _ => "clock: awaiting duration lock".to_string(),
+            }),
+            Line::from(if record.visualizer().is_some() {
+                "visual: reactive procedural scene"
+            } else if record.media_health() == MediaHealth::Mounted {
+                "visual: waveform fallback"
+            } else {
+                "visual: unavailable"
+            }),
             Line::from(if playback.is_actionable {
                 "control: press P to play/pause"
             } else {
                 "control: media surface corrupted"
             }),
         ];
+
+        if let Some(config) = record.visualizer() {
+            lines.insert(3, Line::from(format!("mode: {}", config.mode.label())));
+        }
 
         frame.render_widget(
             Paragraph::new(lines)
@@ -668,53 +789,89 @@ fn build_notes_lines(record: &RecordDocument) -> Vec<Line<'static>> {
     lines
 }
 
-fn build_media_lines(record: &RecordDocument, session: &SessionModel) -> Vec<Line<'static>> {
+fn build_media_detail_lines(record: &RecordDocument) -> Vec<Line<'static>> {
+    let audio = record.media_page.audio.as_ref().expect("mounted audio");
+    let mut lines = vec![
+        Line::from(Span::styled(
+            "Mounted transport",
+            Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(vec![
+            Span::styled("title ", Style::default().fg(DIM)),
+            Span::styled(audio.title.clone(), Style::default().fg(TEXT)),
+        ]),
+        Line::from(vec![
+            Span::styled("duration ", Style::default().fg(DIM)),
+            Span::styled(audio.duration_hint.clone(), Style::default().fg(AMBER)),
+        ]),
+        Line::from(vec![
+            Span::styled("path ", Style::default().fg(DIM)),
+            Span::styled(audio.path.clone(), Style::default().fg(TEXT)),
+        ]),
+        Line::from(vec![
+            Span::styled("mode ", Style::default().fg(DIM)),
+            Span::styled(
+                record.visualizer().map_or_else(
+                    || record.media_page.waveform_mode.label(),
+                    |config| config.mode.label(),
+                ),
+                Style::default().fg(AMBER),
+            ),
+        ]),
+        Line::from(Span::styled(
+            record.media_page.artifact_note.clone(),
+            Style::default().fg(TEXT),
+        )),
+        Line::from(vec![
+            Span::styled("excerpt ", Style::default().fg(CYAN)),
+            Span::styled(
+                record.media_page.transcript_excerpt.clone(),
+                Style::default().fg(DIM),
+            ),
+        ]),
+    ];
+
+    if let Some(config) = record.visualizer() {
+        lines.push(Line::from(vec![
+            Span::styled("params ", Style::default().fg(DIM)),
+            Span::styled(
+                format!(
+                    "rings {} • particles {} • lattice {}",
+                    config.params.ring_count,
+                    config.params.particle_count,
+                    config.params.lattice_density
+                ),
+                Style::default().fg(TEXT),
+            ),
+        ]));
+    }
+
+    lines
+}
+
+fn build_media_lines(
+    record: &RecordDocument,
+    session: &SessionModel,
+    width: u16,
+    height: u16,
+) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
 
     match record.media_health() {
         MediaHealth::Mounted => {
-            let audio = record.media_page.audio.as_ref().expect("mounted audio");
-            lines.push(Line::from(Span::styled(
-                "Mounted transport",
-                Style::default().fg(CYAN).add_modifier(Modifier::BOLD),
-            )));
-            lines.push(Line::from(vec![
-                Span::styled("title ", Style::default().fg(DIM)),
-                Span::styled(audio.title.clone(), Style::default().fg(TEXT)),
-            ]));
-            lines.push(Line::from(vec![
-                Span::styled("duration ", Style::default().fg(DIM)),
-                Span::styled(audio.duration_hint.clone(), Style::default().fg(AMBER)),
-            ]));
-            lines.push(Line::from(vec![
-                Span::styled("path ", Style::default().fg(DIM)),
-                Span::styled(audio.path.clone(), Style::default().fg(TEXT)),
-            ]));
+            lines.extend(build_media_detail_lines(record));
             lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled(
-                record.media_page.artifact_note.clone(),
-                Style::default().fg(TEXT),
-            )));
-            lines.push(Line::from(""));
-            lines.push(Line::from(vec![
-                Span::styled("excerpt ", Style::default().fg(CYAN)),
-                Span::styled(
-                    record.media_page.transcript_excerpt.clone(),
-                    Style::default().fg(DIM),
-                ),
-            ]));
-            lines.push(Line::from(vec![
-                Span::styled("mode ", Style::default().fg(CYAN)),
-                Span::styled(
-                    record.media_page.waveform_mode.label(),
-                    Style::default().fg(AMBER),
-                ),
-            ]));
-            lines.push(Line::from(""));
-
             let visual = match record.media_page.waveform_mode {
-                WaveformMode::Spectrum => build_music_lines(56, 8, session.viewer_tick),
-                _ => build_waveform_lines(56, 8, session.viewer_tick),
+                WaveformMode::Spectrum => build_music_lines(
+                    width.saturating_sub(4).max(8) as usize,
+                    height.saturating_sub(12).max(4) as usize,
+                    session.viewer_tick,
+                ),
+                _ => build_waveform_lines(
+                    width.saturating_sub(4).max(8) as usize,
+                    height.saturating_sub(12).max(4) as usize,
+                    session.viewer_tick,
+                ),
             };
             for line in visual {
                 lines.push(Line::from(Span::styled(line, Style::default().fg(MAGENTA))));

@@ -9,7 +9,7 @@ use crate::{
     state::{StateId, StateMachine},
     terminal_state::TerminalState,
 };
-use ratzilla::{event::KeyCode, ratatui::Frame};
+use ratzilla::{event::KeyCode, ratatui::Frame, widgets::GraphicsCanvasLayer};
 
 pub struct App {
     help_overlay: HelpOverlay,
@@ -18,7 +18,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(visual_layer: GraphicsCanvasLayer) -> Self {
         let archive = Rc::new(
             ArchiveLoader::load_embedded().expect("tty0 embedded archive must load successfully"),
         );
@@ -26,7 +26,10 @@ impl App {
 
         let mut states = HashMap::new();
         states.insert(StateId::Intro, IntroState::create(Rc::clone(&session)));
-        states.insert(StateId::Archive, ArchiveState::create(Rc::clone(&session)));
+        states.insert(
+            StateId::Archive,
+            ArchiveState::create(Rc::clone(&session), visual_layer),
+        );
         states.insert(StateId::Terminal, TerminalState::create(session));
 
         let mut state_machine = StateMachine::new(states, StateId::Intro);

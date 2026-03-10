@@ -12,7 +12,7 @@ tachyonfx.workspace = true
 web-time.workspace = true
 wasm-bindgen.workspace = true
 rand = { workspace = true, features = ["small_rng"] }
-web-sys = { workspace = true, features = ["HtmlAudioElement", "HtmlMediaElement", "Storage", "Window"] }
+web-sys = { workspace = true, features = ["AnalyserNode", "AudioContext", "AudioContextState", "AudioDestinationNode", "AudioNode", "BaseAudioContext", "CanvasGradient", "HtmlAudioElement", "HtmlMediaElement", "MediaElementAudioSourceNode", "Storage", "Window"] }
 thiserror = "2.0.18"
 glow = "0.16"
 serde = { version = "1.0", features = ["derive"] }
