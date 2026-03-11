@@ -15,6 +15,7 @@ members = [
     "tauri",
     "text_area",
     "tty0",
+    "tty0-vfx-core",
     "tty0-save-bridge",
     "user_input",
     "unicode",
@@ -23,6 +24,7 @@ members = [
 ]
 exclude = [
     "tauri/src-tauri",
+    "tty0-vfx-editor/src-tauri",
 ]
 
 [workspace.dependencies]

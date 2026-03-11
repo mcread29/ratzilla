@@ -272,34 +272,40 @@ pub struct ClipPlacement {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct ChromaticBulgeGridClipAuthoring {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub lanes: Vec<ClipLaneAuthoring>,
+    pub tracks: Vec<ClipParamTrack>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-pub struct ClipLaneAuthoring {
+pub struct ClipParamTrack {
     pub lane: ChromaticBulgeGridLaneId,
-    pub mode: ClipLaneAuthoringMode,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<ClipTweenStep>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ClipTweenStep {
+    pub to: ClipTweenValue,
+    pub duration_beats: f32,
+    #[serde(default)]
+    pub ease: ClipTweenEase,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum ClipTweenValue {
+    Float(f32),
+    Color([f32; 3]),
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum ClipLaneAuthoringMode {
-    Shape(ClipShapeAuthoring),
-    Custom,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-pub struct ClipShapeAuthoring {
-    pub shape: ClipShape,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub depth: Option<f32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub target_color: Option<[f32; 3]>,
-    #[serde(default)]
-    pub offset_beats: f32,
-    pub width_beats: f32,
-    #[serde(default)]
-    pub ease: ClipShapeEase,
+pub enum ClipTweenEase {
+    Hold,
+    #[default]
+    Linear,
+    SineIn,
+    SineOut,
+    SineInOut,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -328,28 +334,6 @@ pub enum ChromaticBulgeGridLaneId {
     HotColor,
     ColorCycleRate,
     InnerAlpha,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ClipShape {
-    Pulse,
-    Rise,
-    Fall,
-    Triangle,
-    Stutter,
-    Flash,
-    Fade,
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ClipShapeEase {
-    Hold,
-    #[default]
-    Linear,
-    EaseOut,
-    EaseInOut,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
@@ -1011,7 +995,9 @@ impl ChromaticBulgeGridClipTimeline {
         }
         for placement in &mut normalized.arrangement {
             placement.start_beat = placement.start_beat.max(0.0);
-            placement.track = placement.track.min(3);
+            placement.track = placement
+                .track
+                .min((ChromaticBulgeGridLaneId::ALL.len().saturating_sub(1)) as u8);
             placement.repeats = placement.repeats.max(1);
         }
         normalized
@@ -1093,6 +1079,14 @@ impl ChromaticBulgeGridClip {
     }
 
     pub fn authored_lanes(&self) -> HashSet<ChromaticBulgeGridLaneId> {
+        if let Some(authoring) = &self.authoring {
+            return authoring
+                .tracks
+                .iter()
+                .filter(|track| !track.steps.is_empty())
+                .map(|track| track.lane)
+                .collect();
+        }
         let mut lanes = HashSet::new();
         if !self.lanes.motion_rate.is_empty() {
             lanes.insert(ChromaticBulgeGridLaneId::MotionRate);
@@ -1176,29 +1170,56 @@ impl ClipPlacement {
 pub fn legacy_automation_to_timeline(
     automation: &ChromaticBulgeGridAutomation,
 ) -> ChromaticBulgeGridClipTimeline {
+    let total_beats = automation.total_beats();
+    let lane_clips = automation
+        .lanes
+        .non_empty_lane_ids()
+        .into_iter()
+        .enumerate()
+        .map(|(index, lane)| ChromaticBulgeGridClip {
+            id: format!("imported_{}", lane.label()),
+            name: format!("Imported {}", lane.label()),
+            length_beats: total_beats,
+            color: default_clip_color_for_index(index),
+            authoring: None,
+            lanes: automation.lanes.only_lane(lane),
+        })
+        .collect::<Vec<_>>();
+    let clips = if lane_clips.is_empty() {
+        vec![ChromaticBulgeGridClip {
+            id: "imported_timeline".to_string(),
+            name: "Imported Timeline".to_string(),
+            length_beats: total_beats,
+            color: default_clip_color(),
+            authoring: None,
+            lanes: automation.lanes.clone(),
+        }]
+    } else {
+        lane_clips
+    };
+    let arrangement = clips
+        .iter()
+        .filter_map(|clip| {
+            let lane = clip.primary_lane()?;
+            Some(ClipPlacement {
+                clip_id: clip.id.clone(),
+                start_beat: 0.0,
+                track: lane.track_index(),
+                repeats: 1,
+            })
+        })
+        .collect::<Vec<_>>();
     ChromaticBulgeGridClipTimeline {
         bpm: automation.bpm,
         measures: automation.measures,
         beats_per_measure: automation.beats_per_measure,
-        clips: vec![ChromaticBulgeGridClip {
-            id: "imported_timeline".to_string(),
-            name: "Imported Timeline".to_string(),
-            length_beats: automation.total_beats(),
-            color: default_clip_color(),
-            authoring: None,
-            lanes: automation.lanes.clone(),
-        }],
-        arrangement: vec![ClipPlacement {
-            clip_id: "imported_timeline".to_string(),
-            start_beat: 0.0,
-            track: 0,
-            repeats: 1,
-        }],
+        clips,
+        arrangement,
     }
 }
 
 impl ChromaticBulgeGridAutomationLanes {
-    fn sort_all(&mut self) {
+    pub(crate) fn sort_all(&mut self) {
         sort_float_keyframes(&mut self.motion_rate);
         sort_float_keyframes(&mut self.lattice_density);
         sort_float_keyframes(&mut self.circle_radius);
@@ -1280,6 +1301,101 @@ impl ChromaticBulgeGridAutomationLanes {
         .filter(|used| *used)
         .count()
     }
+
+    pub fn non_empty_lane_ids(&self) -> Vec<ChromaticBulgeGridLaneId> {
+        ChromaticBulgeGridLaneId::ALL
+            .into_iter()
+            .filter(|lane| self.lane_has_values(*lane))
+            .collect()
+    }
+
+    pub fn lane_has_values(&self, lane: ChromaticBulgeGridLaneId) -> bool {
+        match lane {
+            ChromaticBulgeGridLaneId::MotionRate => !self.motion_rate.is_empty(),
+            ChromaticBulgeGridLaneId::LatticeDensity => !self.lattice_density.is_empty(),
+            ChromaticBulgeGridLaneId::CircleRadius => !self.circle_radius.is_empty(),
+            ChromaticBulgeGridLaneId::CircleFalloffStart => !self.circle_falloff_start.is_empty(),
+            ChromaticBulgeGridLaneId::CircleFalloffEnd => !self.circle_falloff_end.is_empty(),
+            ChromaticBulgeGridLaneId::BulgeAmount => !self.bulge_amount.is_empty(),
+            ChromaticBulgeGridLaneId::RimGuard => !self.rim_guard.is_empty(),
+            ChromaticBulgeGridLaneId::RimExponent => !self.rim_exponent.is_empty(),
+            ChromaticBulgeGridLaneId::RimWarp => !self.rim_warp.is_empty(),
+            ChromaticBulgeGridLaneId::SpacingMaxPx => !self.spacing_max_px.is_empty(),
+            ChromaticBulgeGridLaneId::SpacingMinPx => !self.spacing_min_px.is_empty(),
+            ChromaticBulgeGridLaneId::DotSize => !self.dot_size.is_empty(),
+            ChromaticBulgeGridLaneId::OuterDotScale => !self.outer_dot_scale.is_empty(),
+            ChromaticBulgeGridLaneId::EdgeSoftness => !self.edge_softness.is_empty(),
+            ChromaticBulgeGridLaneId::ChromaticAberration => !self.chromatic_aberration.is_empty(),
+            ChromaticBulgeGridLaneId::ScrollBase => !self.scroll_base.is_empty(),
+            ChromaticBulgeGridLaneId::ScrollMotionScale => !self.scroll_motion_scale.is_empty(),
+            ChromaticBulgeGridLaneId::ScrollMotionFloor => !self.scroll_motion_floor.is_empty(),
+            ChromaticBulgeGridLaneId::ScrollMotionCeiling => !self.scroll_motion_ceiling.is_empty(),
+            ChromaticBulgeGridLaneId::ColdColor => !self.cold_color.is_empty(),
+            ChromaticBulgeGridLaneId::HotColor => !self.hot_color.is_empty(),
+            ChromaticBulgeGridLaneId::ColorCycleRate => !self.color_cycle_rate.is_empty(),
+            ChromaticBulgeGridLaneId::InnerAlpha => !self.inner_alpha.is_empty(),
+        }
+    }
+
+    pub fn only_lane(&self, lane: ChromaticBulgeGridLaneId) -> Self {
+        let mut subset = Self::default();
+        match lane {
+            ChromaticBulgeGridLaneId::MotionRate => subset.motion_rate = self.motion_rate.clone(),
+            ChromaticBulgeGridLaneId::LatticeDensity => {
+                subset.lattice_density = self.lattice_density.clone()
+            }
+            ChromaticBulgeGridLaneId::CircleRadius => {
+                subset.circle_radius = self.circle_radius.clone()
+            }
+            ChromaticBulgeGridLaneId::CircleFalloffStart => {
+                subset.circle_falloff_start = self.circle_falloff_start.clone()
+            }
+            ChromaticBulgeGridLaneId::CircleFalloffEnd => {
+                subset.circle_falloff_end = self.circle_falloff_end.clone()
+            }
+            ChromaticBulgeGridLaneId::BulgeAmount => {
+                subset.bulge_amount = self.bulge_amount.clone()
+            }
+            ChromaticBulgeGridLaneId::RimGuard => subset.rim_guard = self.rim_guard.clone(),
+            ChromaticBulgeGridLaneId::RimExponent => {
+                subset.rim_exponent = self.rim_exponent.clone()
+            }
+            ChromaticBulgeGridLaneId::RimWarp => subset.rim_warp = self.rim_warp.clone(),
+            ChromaticBulgeGridLaneId::SpacingMaxPx => {
+                subset.spacing_max_px = self.spacing_max_px.clone()
+            }
+            ChromaticBulgeGridLaneId::SpacingMinPx => {
+                subset.spacing_min_px = self.spacing_min_px.clone()
+            }
+            ChromaticBulgeGridLaneId::DotSize => subset.dot_size = self.dot_size.clone(),
+            ChromaticBulgeGridLaneId::OuterDotScale => {
+                subset.outer_dot_scale = self.outer_dot_scale.clone()
+            }
+            ChromaticBulgeGridLaneId::EdgeSoftness => {
+                subset.edge_softness = self.edge_softness.clone()
+            }
+            ChromaticBulgeGridLaneId::ChromaticAberration => {
+                subset.chromatic_aberration = self.chromatic_aberration.clone()
+            }
+            ChromaticBulgeGridLaneId::ScrollBase => subset.scroll_base = self.scroll_base.clone(),
+            ChromaticBulgeGridLaneId::ScrollMotionScale => {
+                subset.scroll_motion_scale = self.scroll_motion_scale.clone()
+            }
+            ChromaticBulgeGridLaneId::ScrollMotionFloor => {
+                subset.scroll_motion_floor = self.scroll_motion_floor.clone()
+            }
+            ChromaticBulgeGridLaneId::ScrollMotionCeiling => {
+                subset.scroll_motion_ceiling = self.scroll_motion_ceiling.clone()
+            }
+            ChromaticBulgeGridLaneId::ColdColor => subset.cold_color = self.cold_color.clone(),
+            ChromaticBulgeGridLaneId::HotColor => subset.hot_color = self.hot_color.clone(),
+            ChromaticBulgeGridLaneId::ColorCycleRate => {
+                subset.color_cycle_rate = self.color_cycle_rate.clone()
+            }
+            ChromaticBulgeGridLaneId::InnerAlpha => subset.inner_alpha = self.inner_alpha.clone(),
+        }
+        subset
+    }
 }
 
 fn default_motion_rate() -> f32 {
@@ -1299,7 +1415,48 @@ fn default_repeat_count() -> u32 {
 }
 
 fn default_clip_color() -> [f32; 3] {
-    [110.0 / 255.0, 220.0 / 255.0, 212.0 / 255.0]
+    default_clip_color_for_index(0)
+}
+
+fn default_clip_color_for_index(index: usize) -> [f32; 3] {
+    const PALETTE: [[f32; 3]; 6] = [
+        [110.0 / 255.0, 220.0 / 255.0, 212.0 / 255.0],
+        [229.0 / 255.0, 145.0 / 255.0, 87.0 / 255.0],
+        [140.0 / 255.0, 186.0 / 255.0, 245.0 / 255.0],
+        [219.0 / 255.0, 176.0 / 255.0, 89.0 / 255.0],
+        [176.0 / 255.0, 217.0 / 255.0, 125.0 / 255.0],
+        [232.0 / 255.0, 128.0 / 255.0, 150.0 / 255.0],
+    ];
+    PALETTE[index % PALETTE.len()]
+}
+
+impl ChromaticBulgeGridLaneId {
+    pub fn from_track_index(track: u8) -> Option<Self> {
+        Self::ALL.get(track as usize).copied()
+    }
+
+    pub fn track_index(self) -> u8 {
+        Self::ALL
+            .iter()
+            .position(|candidate| *candidate == self)
+            .unwrap_or(0) as u8
+    }
+}
+
+impl ChromaticBulgeGridClip {
+    pub fn primary_lane(&self) -> Option<ChromaticBulgeGridLaneId> {
+        if let Some(authoring) = &self.authoring {
+            if let Some(track) = authoring.tracks.first() {
+                return Some(track.lane);
+            }
+        }
+        let lanes = self.lanes.non_empty_lane_ids();
+        if lanes.len() == 1 {
+            lanes.into_iter().next()
+        } else {
+            None
+        }
+    }
 }
 
 fn default_energy_gain() -> f32 {
@@ -1579,7 +1736,7 @@ fn validate_clip_timeline(
                 placement.clip_id
             )));
         }
-        if placement.track > 3 {
+        if placement.track >= ChromaticBulgeGridLaneId::ALL.len() as u8 {
             return Err(ArchiveLoadError::Validation(format!(
                 "record {record_id} has invalid placement track for {}",
                 placement.clip_id
@@ -1643,56 +1800,65 @@ fn validate_clip_authoring(
     authoring: &ChromaticBulgeGridClipAuthoring,
 ) -> Result<(), ArchiveLoadError> {
     let mut unique = HashSet::new();
-    for lane in &authoring.lanes {
-        if !unique.insert(lane.lane) {
+    let mut any_track_end = 0.0f32;
+    for track in &authoring.tracks {
+        if !unique.insert(track.lane) {
             return Err(ArchiveLoadError::Validation(format!(
                 "record {record_id} has duplicate authoring lane {} in clip {}",
-                lane.lane.label(),
+                track.lane.label(),
                 clip.id
             )));
         }
-        if matches!(lane.mode, ClipLaneAuthoringMode::Custom) {
-            continue;
-        }
-        let ClipLaneAuthoringMode::Shape(shape) = &lane.mode else {
-            continue;
-        };
-        if !shape.offset_beats.is_finite()
-            || shape.offset_beats < 0.0
-            || shape.offset_beats > clip.length_beats
-        {
-            return Err(ArchiveLoadError::Validation(format!(
-                "record {record_id} has invalid authoring offset for clip {} lane {}",
-                clip.id,
-                lane.lane.label()
-            )));
-        }
-        if !shape.width_beats.is_finite()
-            || shape.width_beats <= 0.0
-            || shape.width_beats > clip.length_beats
-            || shape.offset_beats + shape.width_beats > clip.length_beats + 0.0001
-        {
-            return Err(ArchiveLoadError::Validation(format!(
-                "record {record_id} has invalid authoring width for clip {} lane {}",
-                clip.id,
-                lane.lane.label()
-            )));
-        }
-        if lane.lane.is_color() {
-            if shape.target_color.is_none() {
+        let mut cursor = 0.0f32;
+        for (index, step) in track.steps.iter().enumerate() {
+            if !step.duration_beats.is_finite() || step.duration_beats < 0.0 {
                 return Err(ArchiveLoadError::Validation(format!(
-                    "record {record_id} missing target_color for clip {} lane {}",
+                    "record {record_id} has invalid step duration for clip {} lane {} step {}",
                     clip.id,
-                    lane.lane.label()
+                    track.lane.label(),
+                    index + 1
                 )));
             }
-        } else if shape.depth.is_none() {
-            return Err(ArchiveLoadError::Validation(format!(
-                "record {record_id} missing depth for clip {} lane {}",
-                clip.id,
-                lane.lane.label()
-            )));
+            match (&step.to, track.lane.is_color()) {
+                (ClipTweenValue::Float(value), false) => {
+                    if !value.is_finite() {
+                        return Err(ArchiveLoadError::Validation(format!(
+                            "record {record_id} has invalid float tween value for clip {} lane {} step {}",
+                            clip.id,
+                            track.lane.label(),
+                            index + 1
+                        )));
+                    }
+                }
+                (ClipTweenValue::Color(value), true) => {
+                    if value.iter().any(|channel| !channel.is_finite()) {
+                        return Err(ArchiveLoadError::Validation(format!(
+                            "record {record_id} has invalid color tween value for clip {} lane {} step {}",
+                            clip.id,
+                            track.lane.label(),
+                            index + 1
+                        )));
+                    }
+                }
+                (ClipTweenValue::Float(_), true) | (ClipTweenValue::Color(_), false) => {
+                    return Err(ArchiveLoadError::Validation(format!(
+                        "record {record_id} has mismatched tween value type for clip {} lane {} step {}",
+                        clip.id,
+                        track.lane.label(),
+                        index + 1
+                    )));
+                }
+            }
+            cursor += step.duration_beats.max(0.0);
         }
+        any_track_end = any_track_end.max(cursor);
+    }
+
+    if any_track_end > clip.length_beats + 0.0001 {
+        return Err(ArchiveLoadError::Validation(format!(
+            "record {record_id} has authored steps beyond clip length for clip {}",
+            clip.id
+        )));
     }
     Ok(())
 }
