@@ -86,12 +86,13 @@ impl StateActions for ArchiveState {
 
     fn handle_key(&mut self, key: KeyCode) -> Result<(), StateMachineError> {
         let mut session = self.session.borrow_mut();
+        if self.visualizer_editor.is_open() {
+            self.visualizer_editor.handle_key(key, &mut session);
+            return Ok(());
+        }
         if matches!(key, KeyCode::Char('e') | KeyCode::Char('E')) {
             let record = session.current_record().clone();
             self.visualizer_editor.toggle_for_record(&record);
-            return Ok(());
-        }
-        if self.visualizer_editor.handle_key(key.clone(), &mut session) {
             return Ok(());
         }
         match key {

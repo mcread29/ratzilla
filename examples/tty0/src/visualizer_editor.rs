@@ -384,7 +384,7 @@ impl VisualizerEditorOverlay {
         }
 
         match key {
-            KeyCode::Esc | KeyCode::Char('e') | KeyCode::Char('E') => {
+            KeyCode::Esc => {
                 self.is_open = false;
                 true
             }
@@ -405,11 +405,6 @@ impl VisualizerEditorOverlay {
             KeyCode::Char('3') => {
                 self.tab = EditorTab::Export;
                 self.focus_area = EditorFocusArea::Export;
-                true
-            }
-            KeyCode::Char('p') | KeyCode::Char('P') => {
-                let should_play = !session.playback_clock().is_playing;
-                session.set_playback(should_play);
                 true
             }
             KeyCode::Char('s') | KeyCode::Char('S') => {
