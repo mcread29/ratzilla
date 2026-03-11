@@ -131,6 +131,8 @@ pub struct TrackVisualizerConfig {
     pub params: TrackVisualizerParams,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub automation: Option<ChromaticBulgeGridAutomation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeline: Option<ChromaticBulgeGridClipTimeline>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -232,6 +234,37 @@ pub struct ChromaticBulgeGridAutomation {
     pub lanes: ChromaticBulgeGridAutomationLanes,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ChromaticBulgeGridClipTimeline {
+    pub bpm: f32,
+    pub measures: u32,
+    #[serde(default = "default_beats_per_measure")]
+    pub beats_per_measure: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub clips: Vec<ChromaticBulgeGridClip>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arrangement: Vec<ClipPlacement>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ChromaticBulgeGridClip {
+    pub id: String,
+    pub name: String,
+    pub length_beats: f32,
+    #[serde(default = "default_clip_color")]
+    pub color: [f32; 3],
+    #[serde(default)]
+    pub lanes: ChromaticBulgeGridAutomationLanes,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ClipPlacement {
+    pub clip_id: String,
+    pub start_beat: f32,
+    #[serde(default = "default_repeat_count")]
+    pub repeats: u32,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 pub struct ChromaticBulgeGridAutomationLanes {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -309,8 +342,10 @@ pub enum InterpolationMode {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlaybackClock {
     pub current_time_secs: f32,
+    pub visual_time_secs: f32,
     pub duration_secs: Option<f32>,
     pub is_playing: bool,
+    pub timeline_preview: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -657,8 +692,10 @@ impl Default for PlaybackClock {
     fn default() -> Self {
         Self {
             current_time_secs: 0.0,
+            visual_time_secs: 0.0,
             duration_secs: None,
             is_playing: false,
+            timeline_preview: false,
         }
     }
 }
@@ -705,9 +742,14 @@ impl TrackVisualizerConfig {
     pub fn normalized_for_export(&self) -> Self {
         let mut normalized = self.clone();
         normalized.params = normalized.params.normalized();
-        normalized.automation = normalized
-            .automation
-            .map(|automation| automation.normalized());
+        if let Some(timeline) = normalized.timeline.take() {
+            normalized.timeline = Some(timeline.normalized());
+            normalized.automation = None;
+        } else {
+            normalized.automation = normalized
+                .automation
+                .map(|automation| automation.normalized());
+        }
         normalized
     }
 
@@ -722,24 +764,37 @@ impl TrackVisualizerConfig {
                 idle: state,
             }
         });
-        let current_beat = (playback.current_time_secs.max(0.0)
-            * self
-                .automation
-                .as_ref()
-                .map_or(default_bpm(), |automation| automation.bpm.max(0.0)))
-            / 60.0;
+        let bpm = self
+            .timeline
+            .as_ref()
+            .map(|timeline| timeline.bpm)
+            .or_else(|| self.automation.as_ref().map(|automation| automation.bpm))
+            .unwrap_or_else(default_bpm)
+            .max(1.0);
+        let current_beat = playback.current_time_secs.max(0.0) * bpm / 60.0;
+        let base = if playback.is_playing {
+            states.playing
+        } else {
+            states.idle
+        };
 
-        if !playback.is_playing {
-            return ChromaticBulgeGridResolvedState {
-                uniforms: states.idle.clamp(),
-                current_beat,
-            };
-        }
-
-        let mut uniforms = states.playing;
-        if let Some(automation) = &self.automation {
-            uniforms = automation.apply_to_state(uniforms, current_beat);
-        }
+        let uniforms = if let Some(timeline) = &self.timeline {
+            if playback.is_playing || playback.timeline_preview {
+                timeline
+                    .resolve_state_at_beat(base, current_beat)
+                    .unwrap_or(base)
+            } else {
+                base
+            }
+        } else if let Some(automation) = &self.automation {
+            if playback.is_playing {
+                automation.apply_to_state(base, current_beat)
+            } else {
+                base
+            }
+        } else {
+            base
+        };
 
         ChromaticBulgeGridResolvedState {
             uniforms: uniforms.clamp(),
@@ -792,60 +847,111 @@ impl ChromaticBulgeGridAutomation {
         base: ChromaticBulgeGridShaderState,
         beat: f32,
     ) -> ChromaticBulgeGridShaderState {
-        let lanes = &self.normalized().lanes;
-        ChromaticBulgeGridShaderState {
-            motion_rate: sample_float_lane(&lanes.motion_rate, beat, base.motion_rate),
-            lattice_density: sample_float_lane(&lanes.lattice_density, beat, base.lattice_density),
-            circle_radius: sample_float_lane(&lanes.circle_radius, beat, base.circle_radius),
-            circle_falloff_start: sample_float_lane(
-                &lanes.circle_falloff_start,
-                beat,
-                base.circle_falloff_start,
-            ),
-            circle_falloff_end: sample_float_lane(
-                &lanes.circle_falloff_end,
-                beat,
-                base.circle_falloff_end,
-            ),
-            bulge_amount: sample_float_lane(&lanes.bulge_amount, beat, base.bulge_amount),
-            rim_guard: sample_float_lane(&lanes.rim_guard, beat, base.rim_guard),
-            rim_exponent: sample_float_lane(&lanes.rim_exponent, beat, base.rim_exponent),
-            rim_warp: sample_float_lane(&lanes.rim_warp, beat, base.rim_warp),
-            spacing_max_px: sample_float_lane(&lanes.spacing_max_px, beat, base.spacing_max_px),
-            spacing_min_px: sample_float_lane(&lanes.spacing_min_px, beat, base.spacing_min_px),
-            dot_size: sample_float_lane(&lanes.dot_size, beat, base.dot_size),
-            outer_dot_scale: sample_float_lane(&lanes.outer_dot_scale, beat, base.outer_dot_scale),
-            edge_softness: sample_float_lane(&lanes.edge_softness, beat, base.edge_softness),
-            chromatic_aberration: sample_float_lane(
-                &lanes.chromatic_aberration,
-                beat,
-                base.chromatic_aberration,
-            ),
-            scroll_base: sample_float_lane(&lanes.scroll_base, beat, base.scroll_base),
-            scroll_motion_scale: sample_float_lane(
-                &lanes.scroll_motion_scale,
-                beat,
-                base.scroll_motion_scale,
-            ),
-            scroll_motion_floor: sample_float_lane(
-                &lanes.scroll_motion_floor,
-                beat,
-                base.scroll_motion_floor,
-            ),
-            scroll_motion_ceiling: sample_float_lane(
-                &lanes.scroll_motion_ceiling,
-                beat,
-                base.scroll_motion_ceiling,
-            ),
-            cold_color: sample_color_lane(&lanes.cold_color, beat, base.cold_color),
-            hot_color: sample_color_lane(&lanes.hot_color, beat, base.hot_color),
-            color_cycle_rate: sample_float_lane(
-                &lanes.color_cycle_rate,
-                beat,
-                base.color_cycle_rate,
-            ),
-            inner_alpha: sample_float_lane(&lanes.inner_alpha, beat, base.inner_alpha),
+        apply_lanes_to_state(base, &self.normalized().lanes, beat)
+    }
+}
+
+impl ChromaticBulgeGridClipTimeline {
+    pub fn normalized(&self) -> Self {
+        let mut normalized = self.clone();
+        normalized.bpm = normalized.bpm.max(1.0);
+        normalized.measures = normalized.measures.max(1);
+        normalized.beats_per_measure = normalized.beats_per_measure.max(1);
+        for clip in &mut normalized.clips {
+            clip.length_beats = clip.length_beats.max(0.0001);
+            clip.color = clamp_color(clip.color);
+            clip.lanes.sort_all();
         }
+        for placement in &mut normalized.arrangement {
+            placement.start_beat = placement.start_beat.max(0.0);
+            placement.repeats = placement.repeats.max(1);
+        }
+        normalized
+    }
+
+    pub fn total_beats(&self) -> f32 {
+        self.measures.max(1) as f32 * self.beats_per_measure.max(1) as f32
+    }
+
+    pub fn duration_secs(&self) -> f32 {
+        self.total_beats() * 60.0 / self.bpm.max(1.0)
+    }
+
+    pub fn clip_by_id(&self, clip_id: &str) -> Option<&ChromaticBulgeGridClip> {
+        self.clips.iter().find(|clip| clip.id == clip_id)
+    }
+
+    pub fn resolve_state_at_beat(
+        &self,
+        base: ChromaticBulgeGridShaderState,
+        beat: f32,
+    ) -> Option<ChromaticBulgeGridShaderState> {
+        let (clip, local_beat) = self.active_clip_at_beat(beat)?;
+        Some(clip.apply_to_state(base, local_beat))
+    }
+
+    pub fn active_clip_at_beat(&self, beat: f32) -> Option<(&ChromaticBulgeGridClip, f32)> {
+        let beat = beat.max(0.0);
+        for placement in &self.arrangement {
+            let clip = self.clip_by_id(&placement.clip_id)?;
+            let end = placement.end_beat(clip);
+            if beat >= placement.start_beat && beat < end {
+                let local = if clip.length_beats <= 0.0 {
+                    0.0
+                } else {
+                    ((beat - placement.start_beat) % clip.length_beats)
+                        .clamp(0.0, clip.length_beats)
+                };
+                return Some((clip, local));
+            }
+        }
+        None
+    }
+
+    pub fn has_authored_content(&self) -> bool {
+        !self.clips.is_empty() || !self.arrangement.is_empty()
+    }
+}
+
+impl ChromaticBulgeGridClip {
+    pub fn apply_to_state(
+        &self,
+        base: ChromaticBulgeGridShaderState,
+        local_beat: f32,
+    ) -> ChromaticBulgeGridShaderState {
+        apply_lanes_to_state(
+            base,
+            &self.lanes,
+            local_beat.clamp(0.0, self.length_beats.max(0.0)),
+        )
+    }
+}
+
+impl ClipPlacement {
+    pub fn end_beat(&self, clip: &ChromaticBulgeGridClip) -> f32 {
+        self.start_beat + clip.length_beats * self.repeats.max(1) as f32
+    }
+}
+
+pub fn legacy_automation_to_timeline(
+    automation: &ChromaticBulgeGridAutomation,
+) -> ChromaticBulgeGridClipTimeline {
+    ChromaticBulgeGridClipTimeline {
+        bpm: automation.bpm,
+        measures: automation.measures,
+        beats_per_measure: automation.beats_per_measure,
+        clips: vec![ChromaticBulgeGridClip {
+            id: "imported_timeline".to_string(),
+            name: "Imported Timeline".to_string(),
+            length_beats: automation.total_beats(),
+            color: default_clip_color(),
+            lanes: automation.lanes.clone(),
+        }],
+        arrangement: vec![ClipPlacement {
+            clip_id: "imported_timeline".to_string(),
+            start_beat: 0.0,
+            repeats: 1,
+        }],
     }
 }
 
@@ -875,6 +981,63 @@ impl ChromaticBulgeGridAutomationLanes {
         sort_float_keyframes(&mut self.color_cycle_rate);
         sort_float_keyframes(&mut self.inner_alpha);
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.motion_rate.is_empty()
+            && self.lattice_density.is_empty()
+            && self.circle_radius.is_empty()
+            && self.circle_falloff_start.is_empty()
+            && self.circle_falloff_end.is_empty()
+            && self.bulge_amount.is_empty()
+            && self.rim_guard.is_empty()
+            && self.rim_exponent.is_empty()
+            && self.rim_warp.is_empty()
+            && self.spacing_max_px.is_empty()
+            && self.spacing_min_px.is_empty()
+            && self.dot_size.is_empty()
+            && self.outer_dot_scale.is_empty()
+            && self.edge_softness.is_empty()
+            && self.chromatic_aberration.is_empty()
+            && self.scroll_base.is_empty()
+            && self.scroll_motion_scale.is_empty()
+            && self.scroll_motion_floor.is_empty()
+            && self.scroll_motion_ceiling.is_empty()
+            && self.cold_color.is_empty()
+            && self.hot_color.is_empty()
+            && self.color_cycle_rate.is_empty()
+            && self.inner_alpha.is_empty()
+    }
+
+    pub fn automated_lane_count(&self) -> usize {
+        [
+            !self.motion_rate.is_empty(),
+            !self.lattice_density.is_empty(),
+            !self.circle_radius.is_empty(),
+            !self.circle_falloff_start.is_empty(),
+            !self.circle_falloff_end.is_empty(),
+            !self.bulge_amount.is_empty(),
+            !self.rim_guard.is_empty(),
+            !self.rim_exponent.is_empty(),
+            !self.rim_warp.is_empty(),
+            !self.spacing_max_px.is_empty(),
+            !self.spacing_min_px.is_empty(),
+            !self.dot_size.is_empty(),
+            !self.outer_dot_scale.is_empty(),
+            !self.edge_softness.is_empty(),
+            !self.chromatic_aberration.is_empty(),
+            !self.scroll_base.is_empty(),
+            !self.scroll_motion_scale.is_empty(),
+            !self.scroll_motion_floor.is_empty(),
+            !self.scroll_motion_ceiling.is_empty(),
+            !self.cold_color.is_empty(),
+            !self.hot_color.is_empty(),
+            !self.color_cycle_rate.is_empty(),
+            !self.inner_alpha.is_empty(),
+        ]
+        .into_iter()
+        .filter(|used| *used)
+        .count()
+    }
 }
 
 fn default_motion_rate() -> f32 {
@@ -887,6 +1050,14 @@ fn default_bpm() -> f32 {
 
 fn default_beats_per_measure() -> u32 {
     4
+}
+
+fn default_repeat_count() -> u32 {
+    1
+}
+
+fn default_clip_color() -> [f32; 3] {
+    [110.0 / 255.0, 220.0 / 255.0, 212.0 / 255.0]
 }
 
 fn default_energy_gain() -> f32 {
@@ -1030,15 +1201,37 @@ fn validate_record_visualizer(record: &RecordDocument) -> Result<(), ArchiveLoad
         return Ok(());
     };
 
-    if let Some(automation) = &visualizer.automation {
+    let has_automation = visualizer
+        .automation
+        .as_ref()
+        .is_some_and(|automation| !automation.lanes.is_empty());
+    let has_timeline = visualizer
+        .timeline
+        .as_ref()
+        .is_some_and(ChromaticBulgeGridClipTimeline::has_authored_content);
+    if has_automation && has_timeline {
+        return Err(ArchiveLoadError::Validation(format!(
+            "record {} contains both automation and timeline",
+            record.id
+        )));
+    }
+
+    if visualizer.automation.is_some() || visualizer.timeline.is_some() {
         if visualizer.mode != TrackVisualizerMode::ChromaticBulgeGrid {
             return Err(ArchiveLoadError::Validation(format!(
-                "record {} uses automation on unsupported visualizer mode {}",
+                "record {} uses automation/timeline on unsupported visualizer mode {}",
                 record.id,
                 visualizer.mode.label()
             )));
         }
+    }
+
+    if let Some(automation) = &visualizer.automation {
         validate_automation(record.id.as_str(), automation)?;
+    }
+
+    if let Some(timeline) = &visualizer.timeline {
+        validate_clip_timeline(record.id.as_str(), timeline)?;
     }
 
     Ok(())
@@ -1064,120 +1257,399 @@ fn validate_automation(
         )));
     }
 
-    validate_float_lane(record_id, "motion_rate", &automation.lanes.motion_rate)?;
+    validate_automation_lanes(record_id, "automation", &automation.lanes, None)?;
+    Ok(())
+}
+
+fn validate_clip_timeline(
+    record_id: &str,
+    timeline: &ChromaticBulgeGridClipTimeline,
+) -> Result<(), ArchiveLoadError> {
+    if !timeline.bpm.is_finite() || timeline.bpm <= 0.0 {
+        return Err(ArchiveLoadError::Validation(format!(
+            "record {record_id} has invalid timeline bpm"
+        )));
+    }
+    if timeline.measures == 0 {
+        return Err(ArchiveLoadError::Validation(format!(
+            "record {record_id} has invalid timeline measures"
+        )));
+    }
+    if timeline.beats_per_measure == 0 {
+        return Err(ArchiveLoadError::Validation(format!(
+            "record {record_id} has invalid timeline beats_per_measure"
+        )));
+    }
+
+    let total_beats = timeline.total_beats();
+    let mut clip_ids = HashSet::new();
+    for clip in &timeline.clips {
+        if clip.id.trim().is_empty() {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} has clip with empty id"
+            )));
+        }
+        if !clip_ids.insert(clip.id.as_str()) {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} has duplicate clip id {}",
+                clip.id
+            )));
+        }
+        if clip.name.trim().is_empty() {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} has empty clip name for {}",
+                clip.id
+            )));
+        }
+        if !clip.length_beats.is_finite() || clip.length_beats <= 0.0 {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} has invalid length_beats for clip {}",
+                clip.id
+            )));
+        }
+        validate_automation_lanes(
+            record_id,
+            format!("clip {}", clip.id).as_str(),
+            &clip.lanes,
+            Some(clip.length_beats),
+        )?;
+    }
+
+    let mut spans = Vec::<(f32, f32, &str)>::new();
+    for placement in &timeline.arrangement {
+        if placement.clip_id.trim().is_empty() {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} has placement with empty clip_id"
+            )));
+        }
+        let Some(clip) = timeline.clip_by_id(&placement.clip_id) else {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} placement references missing clip {}",
+                placement.clip_id
+            )));
+        };
+        if !placement.start_beat.is_finite() || placement.start_beat < 0.0 {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} has invalid placement start_beat for {}",
+                placement.clip_id
+            )));
+        }
+        if placement.repeats == 0 {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} has invalid placement repeats for {}",
+                placement.clip_id
+            )));
+        }
+        let end = placement.end_beat(clip);
+        if end > total_beats + 0.0001 {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} placement for {} extends beyond total timeline beats",
+                placement.clip_id
+            )));
+        }
+        spans.push((placement.start_beat, end, placement.clip_id.as_str()));
+    }
+
+    spans.sort_by(|left, right| left.0.total_cmp(&right.0));
+    for window in spans.windows(2) {
+        if window[0].1 > window[1].0 + 0.0001 {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} has overlapping placements between {} and {}",
+                window[0].2, window[1].2
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_automation_lanes(
+    record_id: &str,
+    lane_prefix: &str,
+    lanes: &ChromaticBulgeGridAutomationLanes,
+    max_beat: Option<f32>,
+) -> Result<(), ArchiveLoadError> {
     validate_float_lane(
         record_id,
+        lane_prefix,
+        "motion_rate",
+        &lanes.motion_rate,
+        max_beat,
+    )?;
+    validate_float_lane(
+        record_id,
+        lane_prefix,
         "lattice_density",
-        &automation.lanes.lattice_density,
+        &lanes.lattice_density,
+        max_beat,
     )?;
-    validate_float_lane(record_id, "circle_radius", &automation.lanes.circle_radius)?;
     validate_float_lane(
         record_id,
+        lane_prefix,
+        "circle_radius",
+        &lanes.circle_radius,
+        max_beat,
+    )?;
+    validate_float_lane(
+        record_id,
+        lane_prefix,
         "circle_falloff_start",
-        &automation.lanes.circle_falloff_start,
+        &lanes.circle_falloff_start,
+        max_beat,
     )?;
     validate_float_lane(
         record_id,
+        lane_prefix,
         "circle_falloff_end",
-        &automation.lanes.circle_falloff_end,
+        &lanes.circle_falloff_end,
+        max_beat,
     )?;
-    validate_float_lane(record_id, "bulge_amount", &automation.lanes.bulge_amount)?;
-    validate_float_lane(record_id, "rim_guard", &automation.lanes.rim_guard)?;
-    validate_float_lane(record_id, "rim_exponent", &automation.lanes.rim_exponent)?;
-    validate_float_lane(record_id, "rim_warp", &automation.lanes.rim_warp)?;
     validate_float_lane(
         record_id,
+        lane_prefix,
+        "bulge_amount",
+        &lanes.bulge_amount,
+        max_beat,
+    )?;
+    validate_float_lane(
+        record_id,
+        lane_prefix,
+        "rim_guard",
+        &lanes.rim_guard,
+        max_beat,
+    )?;
+    validate_float_lane(
+        record_id,
+        lane_prefix,
+        "rim_exponent",
+        &lanes.rim_exponent,
+        max_beat,
+    )?;
+    validate_float_lane(
+        record_id,
+        lane_prefix,
+        "rim_warp",
+        &lanes.rim_warp,
+        max_beat,
+    )?;
+    validate_float_lane(
+        record_id,
+        lane_prefix,
         "spacing_max_px",
-        &automation.lanes.spacing_max_px,
+        &lanes.spacing_max_px,
+        max_beat,
     )?;
     validate_float_lane(
         record_id,
+        lane_prefix,
         "spacing_min_px",
-        &automation.lanes.spacing_min_px,
+        &lanes.spacing_min_px,
+        max_beat,
     )?;
-    validate_float_lane(record_id, "dot_size", &automation.lanes.dot_size)?;
     validate_float_lane(
         record_id,
+        lane_prefix,
+        "dot_size",
+        &lanes.dot_size,
+        max_beat,
+    )?;
+    validate_float_lane(
+        record_id,
+        lane_prefix,
         "outer_dot_scale",
-        &automation.lanes.outer_dot_scale,
+        &lanes.outer_dot_scale,
+        max_beat,
     )?;
-    validate_float_lane(record_id, "edge_softness", &automation.lanes.edge_softness)?;
     validate_float_lane(
         record_id,
+        lane_prefix,
+        "edge_softness",
+        &lanes.edge_softness,
+        max_beat,
+    )?;
+    validate_float_lane(
+        record_id,
+        lane_prefix,
         "chromatic_aberration",
-        &automation.lanes.chromatic_aberration,
+        &lanes.chromatic_aberration,
+        max_beat,
     )?;
-    validate_float_lane(record_id, "scroll_base", &automation.lanes.scroll_base)?;
     validate_float_lane(
         record_id,
+        lane_prefix,
+        "scroll_base",
+        &lanes.scroll_base,
+        max_beat,
+    )?;
+    validate_float_lane(
+        record_id,
+        lane_prefix,
         "scroll_motion_scale",
-        &automation.lanes.scroll_motion_scale,
+        &lanes.scroll_motion_scale,
+        max_beat,
     )?;
     validate_float_lane(
         record_id,
+        lane_prefix,
         "scroll_motion_floor",
-        &automation.lanes.scroll_motion_floor,
+        &lanes.scroll_motion_floor,
+        max_beat,
     )?;
     validate_float_lane(
         record_id,
+        lane_prefix,
         "scroll_motion_ceiling",
-        &automation.lanes.scroll_motion_ceiling,
+        &lanes.scroll_motion_ceiling,
+        max_beat,
     )?;
-    validate_color_lane(record_id, "cold_color", &automation.lanes.cold_color)?;
-    validate_color_lane(record_id, "hot_color", &automation.lanes.hot_color)?;
+    validate_color_lane(
+        record_id,
+        lane_prefix,
+        "cold_color",
+        &lanes.cold_color,
+        max_beat,
+    )?;
+    validate_color_lane(
+        record_id,
+        lane_prefix,
+        "hot_color",
+        &lanes.hot_color,
+        max_beat,
+    )?;
     validate_float_lane(
         record_id,
+        lane_prefix,
         "color_cycle_rate",
-        &automation.lanes.color_cycle_rate,
+        &lanes.color_cycle_rate,
+        max_beat,
     )?;
-    validate_float_lane(record_id, "inner_alpha", &automation.lanes.inner_alpha)?;
+    validate_float_lane(
+        record_id,
+        lane_prefix,
+        "inner_alpha",
+        &lanes.inner_alpha,
+        max_beat,
+    )?;
     Ok(())
 }
 
 fn validate_float_lane(
     record_id: &str,
+    lane_prefix: &str,
     lane_name: &str,
     keyframes: &[FloatKeyframe],
+    max_beat: Option<f32>,
 ) -> Result<(), ArchiveLoadError> {
     validate_duplicate_beats(
         record_id,
+        lane_prefix,
         lane_name,
         keyframes.iter().map(|keyframe| keyframe.beat),
+        max_beat,
     )
 }
 
 fn validate_color_lane(
     record_id: &str,
+    lane_prefix: &str,
     lane_name: &str,
     keyframes: &[ColorKeyframe],
+    max_beat: Option<f32>,
 ) -> Result<(), ArchiveLoadError> {
     validate_duplicate_beats(
         record_id,
+        lane_prefix,
         lane_name,
         keyframes.iter().map(|keyframe| keyframe.beat),
+        max_beat,
     )
 }
 
 fn validate_duplicate_beats(
     record_id: &str,
+    lane_prefix: &str,
     lane_name: &str,
     beats: impl Iterator<Item = f32>,
+    max_beat: Option<f32>,
 ) -> Result<(), ArchiveLoadError> {
     let mut unique = Vec::<f32>::new();
     for beat in beats {
         if !beat.is_finite() || beat < 0.0 {
             return Err(ArchiveLoadError::Validation(format!(
-                "record {record_id} has invalid beat in lane {lane_name}"
+                "record {record_id} has invalid beat in {lane_prefix} lane {lane_name}"
             )));
+        }
+        if let Some(limit) = max_beat {
+            if beat > limit + 0.0001 {
+                return Err(ArchiveLoadError::Validation(format!(
+                    "record {record_id} has beat {beat} beyond clip length in {lane_prefix} lane {lane_name}"
+                )));
+            }
         }
         if unique.iter().any(|seen| (seen - beat).abs() < 0.0001) {
             return Err(ArchiveLoadError::Validation(format!(
-                "record {record_id} has duplicate beat {beat} in lane {lane_name}"
+                "record {record_id} has duplicate beat {beat} in {lane_prefix} lane {lane_name}"
             )));
         }
         unique.push(beat);
     }
     Ok(())
+}
+
+fn apply_lanes_to_state(
+    base: ChromaticBulgeGridShaderState,
+    lanes: &ChromaticBulgeGridAutomationLanes,
+    beat: f32,
+) -> ChromaticBulgeGridShaderState {
+    ChromaticBulgeGridShaderState {
+        motion_rate: sample_float_lane(&lanes.motion_rate, beat, base.motion_rate),
+        lattice_density: sample_float_lane(&lanes.lattice_density, beat, base.lattice_density),
+        circle_radius: sample_float_lane(&lanes.circle_radius, beat, base.circle_radius),
+        circle_falloff_start: sample_float_lane(
+            &lanes.circle_falloff_start,
+            beat,
+            base.circle_falloff_start,
+        ),
+        circle_falloff_end: sample_float_lane(
+            &lanes.circle_falloff_end,
+            beat,
+            base.circle_falloff_end,
+        ),
+        bulge_amount: sample_float_lane(&lanes.bulge_amount, beat, base.bulge_amount),
+        rim_guard: sample_float_lane(&lanes.rim_guard, beat, base.rim_guard),
+        rim_exponent: sample_float_lane(&lanes.rim_exponent, beat, base.rim_exponent),
+        rim_warp: sample_float_lane(&lanes.rim_warp, beat, base.rim_warp),
+        spacing_max_px: sample_float_lane(&lanes.spacing_max_px, beat, base.spacing_max_px),
+        spacing_min_px: sample_float_lane(&lanes.spacing_min_px, beat, base.spacing_min_px),
+        dot_size: sample_float_lane(&lanes.dot_size, beat, base.dot_size),
+        outer_dot_scale: sample_float_lane(&lanes.outer_dot_scale, beat, base.outer_dot_scale),
+        edge_softness: sample_float_lane(&lanes.edge_softness, beat, base.edge_softness),
+        chromatic_aberration: sample_float_lane(
+            &lanes.chromatic_aberration,
+            beat,
+            base.chromatic_aberration,
+        ),
+        scroll_base: sample_float_lane(&lanes.scroll_base, beat, base.scroll_base),
+        scroll_motion_scale: sample_float_lane(
+            &lanes.scroll_motion_scale,
+            beat,
+            base.scroll_motion_scale,
+        ),
+        scroll_motion_floor: sample_float_lane(
+            &lanes.scroll_motion_floor,
+            beat,
+            base.scroll_motion_floor,
+        ),
+        scroll_motion_ceiling: sample_float_lane(
+            &lanes.scroll_motion_ceiling,
+            beat,
+            base.scroll_motion_ceiling,
+        ),
+        cold_color: sample_color_lane(&lanes.cold_color, beat, base.cold_color),
+        hot_color: sample_color_lane(&lanes.hot_color, beat, base.hot_color),
+        color_cycle_rate: sample_float_lane(&lanes.color_cycle_rate, beat, base.color_cycle_rate),
+        inner_alpha: sample_float_lane(&lanes.inner_alpha, beat, base.inner_alpha),
+    }
 }
 
 fn sample_float_lane(keyframes: &[FloatKeyframe], beat: f32, base: f32) -> f32 {
@@ -1652,6 +2124,55 @@ mod tests {
     }
 
     #[test]
+    fn chromatic_bulge_grid_timeline_parses_when_present() {
+        let record = readable_record_json_with_visualizer(
+            "one",
+            Some("a.mp3"),
+            &[],
+            Some(
+                r#"{
+                    "mode":"chromatic_bulge_grid",
+                    "timeline":{
+                        "bpm":132.0,
+                        "measures":8,
+                        "beats_per_measure":4,
+                        "clips":[
+                            {
+                                "id":"pulse",
+                                "name":"Pulse",
+                                "length_beats":1.0,
+                                "lanes":{
+                                    "circle_radius":[
+                                        {"beat":0.0,"value":0.24,"interpolation":"hold"},
+                                        {"beat":1.0,"value":0.31,"interpolation":"linear"}
+                                    ]
+                                }
+                            }
+                        ],
+                        "arrangement":[
+                            {"clip_id":"pulse","start_beat":4.0,"repeats":4}
+                        ]
+                    }
+                }"#,
+            ),
+        );
+        let store = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
+            .expect("archive store");
+        let timeline = store
+            .record_by_id("one")
+            .expect("record")
+            .visualizer()
+            .expect("visualizer")
+            .timeline
+            .as_ref()
+            .expect("timeline");
+
+        assert_eq!(timeline.bpm, 132.0);
+        assert_eq!(timeline.clips.len(), 1);
+        assert_eq!(timeline.arrangement.len(), 1);
+    }
+
+    #[test]
     fn rejects_duplicate_automation_beats_in_same_lane() {
         let record = readable_record_json_with_visualizer(
             "one",
@@ -1681,6 +2202,257 @@ mod tests {
             error,
             ArchiveLoadError::Validation(message)
             if message.contains("duplicate beat") && message.contains("circle_radius")
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_timeline_clip_ids() {
+        let record = readable_record_json_with_visualizer(
+            "one",
+            Some("a.mp3"),
+            &[],
+            Some(
+                r#"{
+                    "mode":"chromatic_bulge_grid",
+                    "timeline":{
+                        "bpm":120.0,
+                        "measures":8,
+                        "beats_per_measure":4,
+                        "clips":[
+                            {"id":"dup","name":"One","length_beats":1.0},
+                            {"id":"dup","name":"Two","length_beats":2.0}
+                        ]
+                    }
+                }"#,
+            ),
+        );
+        let error = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
+            .expect_err("duplicate clip ids should fail");
+
+        assert!(matches!(
+            error,
+            ArchiveLoadError::Validation(message)
+            if message.contains("duplicate clip id")
+        ));
+    }
+
+    #[test]
+    fn rejects_timeline_placement_referencing_missing_clip_id() {
+        let record = readable_record_json_with_visualizer(
+            "one",
+            Some("a.mp3"),
+            &[],
+            Some(
+                r#"{
+                    "mode":"chromatic_bulge_grid",
+                    "timeline":{
+                        "bpm":120.0,
+                        "measures":8,
+                        "beats_per_measure":4,
+                        "clips":[
+                            {"id":"pulse","name":"Pulse","length_beats":1.0}
+                        ],
+                        "arrangement":[
+                            {"clip_id":"missing","start_beat":0.0,"repeats":1}
+                        ]
+                    }
+                }"#,
+            ),
+        );
+        let error = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
+            .expect_err("missing clip reference should fail");
+
+        assert!(matches!(
+            error,
+            ArchiveLoadError::Validation(message)
+            if message.contains("missing clip")
+        ));
+    }
+
+    #[test]
+    fn rejects_timeline_clip_keyframes_outside_clip_length() {
+        let record = readable_record_json_with_visualizer(
+            "one",
+            Some("a.mp3"),
+            &[],
+            Some(
+                r#"{
+                    "mode":"chromatic_bulge_grid",
+                    "timeline":{
+                        "bpm":120.0,
+                        "measures":8,
+                        "beats_per_measure":4,
+                        "clips":[
+                            {
+                                "id":"pulse",
+                                "name":"Pulse",
+                                "length_beats":1.0,
+                                "lanes":{
+                                    "circle_radius":[
+                                        {"beat":1.5,"value":0.31,"interpolation":"hold"}
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }"#,
+            ),
+        );
+        let error = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
+            .expect_err("out of bounds keyframe should fail");
+
+        assert!(matches!(
+            error,
+            ArchiveLoadError::Validation(message)
+            if message.contains("beyond clip length")
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_timeline_local_beats_in_same_lane() {
+        let record = readable_record_json_with_visualizer(
+            "one",
+            Some("a.mp3"),
+            &[],
+            Some(
+                r#"{
+                    "mode":"chromatic_bulge_grid",
+                    "timeline":{
+                        "bpm":120.0,
+                        "measures":8,
+                        "beats_per_measure":4,
+                        "clips":[
+                            {
+                                "id":"pulse",
+                                "name":"Pulse",
+                                "length_beats":2.0,
+                                "lanes":{
+                                    "circle_radius":[
+                                        {"beat":0.5,"value":0.24,"interpolation":"hold"},
+                                        {"beat":0.5,"value":0.31,"interpolation":"linear"}
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }"#,
+            ),
+        );
+        let error = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
+            .expect_err("duplicate local beats should fail");
+
+        assert!(matches!(
+            error,
+            ArchiveLoadError::Validation(message)
+            if message.contains("duplicate beat") && message.contains("clip pulse")
+        ));
+    }
+
+    #[test]
+    fn rejects_overlapping_timeline_placements() {
+        let record = readable_record_json_with_visualizer(
+            "one",
+            Some("a.mp3"),
+            &[],
+            Some(
+                r#"{
+                    "mode":"chromatic_bulge_grid",
+                    "timeline":{
+                        "bpm":120.0,
+                        "measures":8,
+                        "beats_per_measure":4,
+                        "clips":[
+                            {"id":"a","name":"A","length_beats":4.0},
+                            {"id":"b","name":"B","length_beats":4.0}
+                        ],
+                        "arrangement":[
+                            {"clip_id":"a","start_beat":0.0,"repeats":1},
+                            {"clip_id":"b","start_beat":3.0,"repeats":1}
+                        ]
+                    }
+                }"#,
+            ),
+        );
+        let error = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
+            .expect_err("overlap should fail");
+
+        assert!(matches!(
+            error,
+            ArchiveLoadError::Validation(message)
+            if message.contains("overlapping placements")
+        ));
+    }
+
+    #[test]
+    fn rejects_timeline_placement_extending_beyond_total_beats() {
+        let record = readable_record_json_with_visualizer(
+            "one",
+            Some("a.mp3"),
+            &[],
+            Some(
+                r#"{
+                    "mode":"chromatic_bulge_grid",
+                    "timeline":{
+                        "bpm":120.0,
+                        "measures":1,
+                        "beats_per_measure":4,
+                        "clips":[
+                            {"id":"pulse","name":"Pulse","length_beats":2.0}
+                        ],
+                        "arrangement":[
+                            {"clip_id":"pulse","start_beat":3.0,"repeats":1}
+                        ]
+                    }
+                }"#,
+            ),
+        );
+        let error = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
+            .expect_err("placement past total beats should fail");
+
+        assert!(matches!(
+            error,
+            ArchiveLoadError::Validation(message)
+            if message.contains("extends beyond total timeline beats")
+        ));
+    }
+
+    #[test]
+    fn rejects_visualizer_with_both_automation_and_timeline() {
+        let record = readable_record_json_with_visualizer(
+            "one",
+            Some("a.mp3"),
+            &[],
+            Some(
+                r#"{
+                    "mode":"chromatic_bulge_grid",
+                    "automation":{
+                        "bpm":120.0,
+                        "measures":8,
+                        "beats_per_measure":4,
+                        "lanes":{
+                            "circle_radius":[
+                                {"beat":0.0,"value":0.24,"interpolation":"hold"}
+                            ]
+                        }
+                    },
+                    "timeline":{
+                        "bpm":120.0,
+                        "measures":8,
+                        "beats_per_measure":4,
+                        "clips":[
+                            {"id":"pulse","name":"Pulse","length_beats":1.0}
+                        ]
+                    }
+                }"#,
+            ),
+        );
+        let error = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
+            .expect_err("dual schema should fail");
+
+        assert!(matches!(
+            error,
+            ArchiveLoadError::Validation(message)
+            if message.contains("both automation and timeline")
         ));
     }
 
@@ -1718,22 +2490,29 @@ mod tests {
                     ..Default::default()
                 },
             }),
+            timeline: None,
         };
 
         let before = config.resolve_chromatic_bulge_grid(super::PlaybackClock {
             current_time_secs: 1.0,
+            visual_time_secs: 1.0,
             duration_secs: None,
             is_playing: true,
+            timeline_preview: false,
         });
         let held = config.resolve_chromatic_bulge_grid(super::PlaybackClock {
             current_time_secs: 2.5,
+            visual_time_secs: 2.5,
             duration_secs: None,
             is_playing: true,
+            timeline_preview: false,
         });
         let interpolated = config.resolve_chromatic_bulge_grid(super::PlaybackClock {
             current_time_secs: 4.5,
+            visual_time_secs: 4.5,
             duration_secs: None,
             is_playing: true,
+            timeline_preview: false,
         });
 
         assert!((before.uniforms.circle_radius - 0.24).abs() < 0.001);
@@ -1775,15 +2554,367 @@ mod tests {
                     ..Default::default()
                 },
             }),
+            timeline: None,
         };
 
         let resolved = config.resolve_chromatic_bulge_grid(super::PlaybackClock {
             current_time_secs: 2.0,
+            visual_time_secs: 2.0,
             duration_secs: None,
             is_playing: true,
+            timeline_preview: false,
         });
 
         assert_eq!(resolved.uniforms.cold_color, [0.5, 0.25, 0.125]);
+    }
+
+    #[test]
+    fn timeline_base_state_is_returned_before_first_active_placement() {
+        let config = TrackVisualizerConfig {
+            mode: TrackVisualizerMode::ChromaticBulgeGrid,
+            params: TrackVisualizerParams {
+                shader_states: Some(super::ChromaticBulgeGridShaderStates {
+                    playing: super::ChromaticBulgeGridShaderState {
+                        circle_radius: 0.18,
+                        ..Default::default()
+                    },
+                    idle: Default::default(),
+                }),
+                ..Default::default()
+            },
+            automation: None,
+            timeline: Some(super::ChromaticBulgeGridClipTimeline {
+                bpm: 120.0,
+                measures: 8,
+                beats_per_measure: 4,
+                clips: vec![super::ChromaticBulgeGridClip {
+                    id: "pulse".to_string(),
+                    name: "Pulse".to_string(),
+                    length_beats: 1.0,
+                    color: [1.0, 1.0, 1.0],
+                    lanes: super::ChromaticBulgeGridAutomationLanes {
+                        circle_radius: vec![super::FloatKeyframe {
+                            beat: 0.0,
+                            value: 0.5,
+                            interpolation: super::InterpolationMode::Hold,
+                        }],
+                        ..Default::default()
+                    },
+                }],
+                arrangement: vec![super::ClipPlacement {
+                    clip_id: "pulse".to_string(),
+                    start_beat: 4.0,
+                    repeats: 1,
+                }],
+            }),
+        };
+
+        let resolved = config.resolve_chromatic_bulge_grid(super::PlaybackClock {
+            current_time_secs: 1.0,
+            visual_time_secs: 1.0,
+            duration_secs: None,
+            is_playing: true,
+            timeline_preview: false,
+        });
+
+        assert!((resolved.uniforms.circle_radius - 0.18).abs() < 0.001);
+    }
+
+    #[test]
+    fn timeline_single_placement_samples_local_clip_beats_correctly() {
+        let config = TrackVisualizerConfig {
+            mode: TrackVisualizerMode::ChromaticBulgeGrid,
+            params: TrackVisualizerParams {
+                shader_states: Some(super::ChromaticBulgeGridShaderStates {
+                    playing: super::ChromaticBulgeGridShaderState {
+                        circle_radius: 0.24,
+                        ..Default::default()
+                    },
+                    idle: Default::default(),
+                }),
+                ..Default::default()
+            },
+            automation: None,
+            timeline: Some(super::ChromaticBulgeGridClipTimeline {
+                bpm: 60.0,
+                measures: 8,
+                beats_per_measure: 4,
+                clips: vec![super::ChromaticBulgeGridClip {
+                    id: "pulse".to_string(),
+                    name: "Pulse".to_string(),
+                    length_beats: 2.0,
+                    color: [1.0, 1.0, 1.0],
+                    lanes: super::ChromaticBulgeGridAutomationLanes {
+                        circle_radius: vec![
+                            super::FloatKeyframe {
+                                beat: 0.0,
+                                value: 0.3,
+                                interpolation: super::InterpolationMode::Linear,
+                            },
+                            super::FloatKeyframe {
+                                beat: 2.0,
+                                value: 0.5,
+                                interpolation: super::InterpolationMode::Linear,
+                            },
+                        ],
+                        ..Default::default()
+                    },
+                }],
+                arrangement: vec![super::ClipPlacement {
+                    clip_id: "pulse".to_string(),
+                    start_beat: 4.0,
+                    repeats: 1,
+                }],
+            }),
+        };
+
+        let resolved = config.resolve_chromatic_bulge_grid(super::PlaybackClock {
+            current_time_secs: 5.0,
+            visual_time_secs: 5.0,
+            duration_secs: None,
+            is_playing: true,
+            timeline_preview: false,
+        });
+
+        assert!((resolved.uniforms.circle_radius - 0.4).abs() < 0.001);
+    }
+
+    #[test]
+    fn repeated_timeline_placement_wraps_local_beat_correctly() {
+        let config = TrackVisualizerConfig {
+            mode: TrackVisualizerMode::ChromaticBulgeGrid,
+            params: TrackVisualizerParams {
+                shader_states: Some(super::ChromaticBulgeGridShaderStates {
+                    playing: super::ChromaticBulgeGridShaderState {
+                        circle_radius: 0.24,
+                        ..Default::default()
+                    },
+                    idle: Default::default(),
+                }),
+                ..Default::default()
+            },
+            automation: None,
+            timeline: Some(super::ChromaticBulgeGridClipTimeline {
+                bpm: 60.0,
+                measures: 8,
+                beats_per_measure: 4,
+                clips: vec![super::ChromaticBulgeGridClip {
+                    id: "pulse".to_string(),
+                    name: "Pulse".to_string(),
+                    length_beats: 2.0,
+                    color: [1.0, 1.0, 1.0],
+                    lanes: super::ChromaticBulgeGridAutomationLanes {
+                        circle_radius: vec![
+                            super::FloatKeyframe {
+                                beat: 0.0,
+                                value: 0.3,
+                                interpolation: super::InterpolationMode::Linear,
+                            },
+                            super::FloatKeyframe {
+                                beat: 2.0,
+                                value: 0.5,
+                                interpolation: super::InterpolationMode::Linear,
+                            },
+                        ],
+                        ..Default::default()
+                    },
+                }],
+                arrangement: vec![super::ClipPlacement {
+                    clip_id: "pulse".to_string(),
+                    start_beat: 4.0,
+                    repeats: 2,
+                }],
+            }),
+        };
+
+        let resolved = config.resolve_chromatic_bulge_grid(super::PlaybackClock {
+            current_time_secs: 7.0,
+            visual_time_secs: 7.0,
+            duration_secs: None,
+            is_playing: true,
+            timeline_preview: false,
+        });
+
+        assert!((resolved.uniforms.circle_radius - 0.4).abs() < 0.001);
+    }
+
+    #[test]
+    fn imported_legacy_automation_timeline_matches_legacy_output() {
+        let legacy = super::ChromaticBulgeGridAutomation {
+            bpm: 120.0,
+            measures: 8,
+            beats_per_measure: 4,
+            lanes: super::ChromaticBulgeGridAutomationLanes {
+                circle_radius: vec![
+                    super::FloatKeyframe {
+                        beat: 0.0,
+                        value: 0.3,
+                        interpolation: super::InterpolationMode::Linear,
+                    },
+                    super::FloatKeyframe {
+                        beat: 8.0,
+                        value: 0.5,
+                        interpolation: super::InterpolationMode::Linear,
+                    },
+                ],
+                ..Default::default()
+            },
+        };
+        let base_states = super::ChromaticBulgeGridShaderStates {
+            playing: super::ChromaticBulgeGridShaderState {
+                circle_radius: 0.24,
+                ..Default::default()
+            },
+            idle: super::ChromaticBulgeGridShaderState {
+                circle_radius: 0.18,
+                ..Default::default()
+            },
+        };
+        let legacy_config = TrackVisualizerConfig {
+            mode: TrackVisualizerMode::ChromaticBulgeGrid,
+            params: TrackVisualizerParams {
+                shader_states: Some(base_states),
+                ..Default::default()
+            },
+            automation: Some(legacy.clone()),
+            timeline: None,
+        };
+        let timeline_config = TrackVisualizerConfig {
+            mode: TrackVisualizerMode::ChromaticBulgeGrid,
+            params: TrackVisualizerParams {
+                shader_states: Some(base_states),
+                ..Default::default()
+            },
+            automation: None,
+            timeline: Some(super::legacy_automation_to_timeline(&legacy)),
+        };
+
+        for secs in [0.0_f32, 1.5, 2.75, 4.0] {
+            let playback = super::PlaybackClock {
+                current_time_secs: secs,
+                visual_time_secs: secs,
+                duration_secs: None,
+                is_playing: true,
+                timeline_preview: false,
+            };
+            let legacy_resolved = legacy_config.resolve_chromatic_bulge_grid(playback);
+            let timeline_resolved = timeline_config.resolve_chromatic_bulge_grid(playback);
+            assert!(
+                (legacy_resolved.uniforms.circle_radius - timeline_resolved.uniforms.circle_radius)
+                    .abs()
+                    < 0.001
+            );
+        }
+    }
+
+    #[test]
+    fn paused_timeline_without_preview_uses_base_idle_state() {
+        let config = TrackVisualizerConfig {
+            mode: TrackVisualizerMode::ChromaticBulgeGrid,
+            params: TrackVisualizerParams {
+                shader_states: Some(super::ChromaticBulgeGridShaderStates {
+                    playing: super::ChromaticBulgeGridShaderState {
+                        circle_radius: 0.40,
+                        ..Default::default()
+                    },
+                    idle: super::ChromaticBulgeGridShaderState {
+                        circle_radius: 0.18,
+                        ..Default::default()
+                    },
+                }),
+                ..Default::default()
+            },
+            automation: None,
+            timeline: Some(super::ChromaticBulgeGridClipTimeline {
+                bpm: 120.0,
+                measures: 8,
+                beats_per_measure: 4,
+                clips: vec![super::ChromaticBulgeGridClip {
+                    id: "pulse".to_string(),
+                    name: "Pulse".to_string(),
+                    length_beats: 1.0,
+                    color: [1.0, 1.0, 1.0],
+                    lanes: super::ChromaticBulgeGridAutomationLanes {
+                        circle_radius: vec![super::FloatKeyframe {
+                            beat: 0.0,
+                            value: 0.5,
+                            interpolation: super::InterpolationMode::Hold,
+                        }],
+                        ..Default::default()
+                    },
+                }],
+                arrangement: vec![super::ClipPlacement {
+                    clip_id: "pulse".to_string(),
+                    start_beat: 0.0,
+                    repeats: 1,
+                }],
+            }),
+        };
+
+        let resolved = config.resolve_chromatic_bulge_grid(super::PlaybackClock {
+            current_time_secs: 0.0,
+            visual_time_secs: 0.0,
+            duration_secs: None,
+            is_playing: false,
+            timeline_preview: false,
+        });
+
+        assert!((resolved.uniforms.circle_radius - 0.18).abs() < 0.001);
+    }
+
+    #[test]
+    fn paused_timeline_preview_applies_clip_state() {
+        let config = TrackVisualizerConfig {
+            mode: TrackVisualizerMode::ChromaticBulgeGrid,
+            params: TrackVisualizerParams {
+                shader_states: Some(super::ChromaticBulgeGridShaderStates {
+                    playing: super::ChromaticBulgeGridShaderState {
+                        circle_radius: 0.40,
+                        ..Default::default()
+                    },
+                    idle: super::ChromaticBulgeGridShaderState {
+                        circle_radius: 0.18,
+                        ..Default::default()
+                    },
+                }),
+                ..Default::default()
+            },
+            automation: None,
+            timeline: Some(super::ChromaticBulgeGridClipTimeline {
+                bpm: 120.0,
+                measures: 8,
+                beats_per_measure: 4,
+                clips: vec![super::ChromaticBulgeGridClip {
+                    id: "pulse".to_string(),
+                    name: "Pulse".to_string(),
+                    length_beats: 1.0,
+                    color: [1.0, 1.0, 1.0],
+                    lanes: super::ChromaticBulgeGridAutomationLanes {
+                        circle_radius: vec![super::FloatKeyframe {
+                            beat: 0.0,
+                            value: 0.5,
+                            interpolation: super::InterpolationMode::Hold,
+                        }],
+                        ..Default::default()
+                    },
+                }],
+                arrangement: vec![super::ClipPlacement {
+                    clip_id: "pulse".to_string(),
+                    start_beat: 0.0,
+                    repeats: 1,
+                }],
+            }),
+        };
+
+        let resolved = config.resolve_chromatic_bulge_grid(super::PlaybackClock {
+            current_time_secs: 0.0,
+            visual_time_secs: 0.0,
+            duration_secs: None,
+            is_playing: false,
+            timeline_preview: true,
+        });
+
+        assert!((resolved.uniforms.circle_radius - 0.5).abs() < 0.001);
     }
 
     #[test]
@@ -1816,12 +2947,15 @@ mod tests {
                     ..Default::default()
                 },
             }),
+            timeline: None,
         };
 
         let resolved = config.resolve_chromatic_bulge_grid(super::PlaybackClock {
             current_time_secs: 10.0,
+            visual_time_secs: 10.0,
             duration_secs: None,
             is_playing: false,
+            timeline_preview: false,
         });
 
         assert!((resolved.uniforms.circle_radius - 0.18).abs() < 0.001);

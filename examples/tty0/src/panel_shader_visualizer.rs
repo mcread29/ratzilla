@@ -678,7 +678,7 @@ impl UniformSet {
 
         Self {
             resolution: (width as f32, height as f32),
-            time: request.playback.current_time_secs.max(0.0),
+            time: request.playback.visual_time_secs.max(0.0),
             motion_rate: shader_state.motion_rate.clamp(0.2, 3.0),
             lattice_density,
             circle_radius: shader_state.circle_radius.clamp(0.05, 0.48),
@@ -956,8 +956,10 @@ mod tests {
             record_id: "0x07E2BIG".to_string(),
             playback: PlaybackClock {
                 current_time_secs: 1.25,
+                visual_time_secs: 1.25,
                 duration_secs: Some(99.0),
                 is_playing: true,
+                timeline_preview: false,
             },
             shader_state: ChromaticBulgeGridShaderState {
                 motion_rate: 8.0,
@@ -1014,7 +1016,7 @@ mod tests {
     #[test]
     fn uniform_set_uses_request_playback_clock_for_time() {
         let mut request = request();
-        request.playback.current_time_secs = 4.5;
+        request.playback.visual_time_secs = 4.5;
         request.shader_state.motion_rate = 0.05;
         request.shader_state.lattice_density = 1.0;
         request.shader_state.circle_radius = 0.12;

@@ -5,6 +5,7 @@ use crate::{
 use web_sys::{
     AnalyserNode, AudioContext, AudioContextState, HtmlAudioElement, MediaElementAudioSourceNode,
 };
+use web_time::Instant;
 
 const FFT_SIZE: u32 = 256;
 const SMOOTHING_TIME_CONSTANT: f64 = 0.45;
@@ -16,6 +17,8 @@ pub struct AudioController {
     last_error: Option<String>,
     analysis_pipeline: Option<AudioAnalysisPipeline>,
     analysis_snapshot: Option<AudioAnalysisSnapshot>,
+    visual_anchor_secs: f32,
+    visual_anchor_instant: Option<Instant>,
 }
 
 #[derive(Clone, Debug)]
@@ -52,6 +55,8 @@ impl AudioController {
             last_error: None,
             analysis_pipeline: None,
             analysis_snapshot: None,
+            visual_anchor_secs: 0.0,
+            visual_anchor_instant: Some(Instant::now()),
         }
     }
 
@@ -65,6 +70,7 @@ impl AudioController {
         self.active_source = None;
         self.analysis_pipeline = None;
         self.analysis_snapshot = None;
+        self.reset_visual_clock(0.0);
     }
 
     pub fn sync(&mut self) {
@@ -75,6 +81,7 @@ impl AudioController {
 
         if audio.ended() {
             let _ = audio.set_current_time(0.0);
+            self.reset_visual_clock(0.0);
             self.analysis_snapshot = Some(AudioAnalysisSnapshot::idle(0.0));
             return;
         }
@@ -114,16 +121,18 @@ impl AudioController {
         }
 
         if audio.paused() || audio.ended() {
-            let _ = audio.set_current_time(if audio.ended() {
-                0.0
-            } else {
-                audio.current_time()
-            });
+            let restarted_from_end = audio.ended();
+            if restarted_from_end {
+                let _ = audio.set_current_time(0.0);
+            }
             let _ = audio.play().map_err(|_| {
                 let message = "browser blocked playback or transport failed".to_string();
                 self.last_error = Some(message.clone());
                 message
             })?;
+            if restarted_from_end {
+                self.reset_visual_clock(0.0);
+            }
             self.last_error = None;
             Ok(true)
         } else {
@@ -143,19 +152,22 @@ impl AudioController {
             return Ok(());
         };
         if audio.paused() || audio.ended() {
+            let restarted_from_end = audio.ended();
             if let Some(pipeline) = &self.analysis_pipeline {
                 pipeline.resume_if_suspended();
             }
-            let _ = audio.set_current_time(if audio.ended() {
-                0.0
-            } else {
-                audio.current_time()
-            });
+            if restarted_from_end {
+                let _ = audio.set_current_time(0.0);
+            }
             let _ = audio.play().map_err(|_| {
                 let message = "browser blocked playback or transport failed".to_string();
                 self.last_error = Some(message.clone());
                 message
             })?;
+            if restarted_from_end {
+                self.reset_visual_clock(0.0);
+            }
+            self.last_error = None;
         }
         Ok(())
     }
@@ -170,6 +182,7 @@ impl AudioController {
                 self.last_error = Some(message.clone());
                 message
             })?;
+            self.last_error = None;
         }
         Ok(())
     }
@@ -186,6 +199,7 @@ impl AudioController {
             None => secs.max(0.0),
         };
         let _ = audio.set_current_time(target as f64);
+        self.reset_visual_clock(target);
         self.sync();
     }
 
@@ -215,23 +229,34 @@ impl AudioController {
         self.active_source = Some(source.to_string());
         self.analysis_snapshot = Some(AudioAnalysisSnapshot::idle(0.0));
         self.last_error = None;
+        self.reset_visual_clock(0.0);
         Ok(())
     }
 
     pub fn playback_clock_for(&self, record: &RecordDocument) -> PlaybackClock {
         let is_active = self.active_record_id.as_deref() == Some(record.id.as_str());
         if !is_active {
-            return PlaybackClock::default();
+            return PlaybackClock {
+                visual_time_secs: self.visual_time_secs(),
+                ..PlaybackClock::default()
+            };
         }
 
         let Some(audio) = &self.element else {
-            return PlaybackClock::default();
+            return PlaybackClock {
+                visual_time_secs: self.visual_time_secs(),
+                ..PlaybackClock::default()
+            };
         };
 
+        let current_time_secs = audio.current_time().max(0.0) as f32;
+        let is_playing = !audio.paused() && !audio.ended();
         PlaybackClock {
-            current_time_secs: audio.current_time().max(0.0) as f32,
+            current_time_secs,
+            visual_time_secs: self.visual_time_secs(),
             duration_secs: sanitize_duration(audio.duration()),
-            is_playing: !audio.paused() && !audio.ended(),
+            is_playing,
+            timeline_preview: false,
         }
     }
 
@@ -337,6 +362,19 @@ impl AudioController {
         } else {
             None
         }
+    }
+
+    fn reset_visual_clock(&mut self, secs: f32) {
+        self.visual_anchor_secs = secs.max(0.0);
+        self.visual_anchor_instant = Some(Instant::now());
+    }
+
+    fn visual_time_secs(&self) -> f32 {
+        let elapsed = self
+            .visual_anchor_instant
+            .map(|instant| instant.elapsed().as_secs_f32())
+            .unwrap_or_default();
+        self.visual_anchor_secs + elapsed
     }
 }
 
@@ -498,50 +536,16 @@ fn format_time(current: f32, duration: f32) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::{thread, time::Duration};
+
     use super::{
         compute_analysis_levels, compute_progress_ratio, waveform_peak, waveform_rms,
         AudioController,
     };
     use crate::archive::{AccessLevel, MediaPage, RecordDocument, RecordKind};
 
-    #[test]
-    fn analysis_normalization_uses_expected_band_ranges() {
-        let bins = vec![255; 20]
-            .into_iter()
-            .chain(vec![128; 45])
-            .chain(vec![64; 35])
-            .collect::<Vec<_>>();
-
-        let waveform = vec![128; 128];
-        let (energy, bass, mid, treble, peak, waveform_peak) =
-            compute_analysis_levels(&bins, &waveform);
-
-        assert!(bass > 0.8);
-        assert!(mid > treble);
-        assert!(energy > 0.4);
-        assert!((peak - 1.0).abs() < 0.001);
-        assert_eq!(waveform_peak, 0.0);
-    }
-
-    #[test]
-    fn waveform_helpers_report_activity() {
-        let waveform = vec![128, 255, 0, 255, 0, 128];
-
-        assert!(waveform_rms(&waveform) > 0.5);
-        assert!(waveform_peak(&waveform) > 0.9);
-    }
-
-    #[test]
-    fn progress_ratio_is_computed_for_valid_duration() {
-        let progress = compute_progress_ratio(45.0, 180.0).expect("progress");
-        assert!((progress - 0.25).abs() < 0.001);
-        assert!(compute_progress_ratio(10.0, 0.0).is_none());
-    }
-
-    #[test]
-    fn controller_exposes_no_analysis_snapshot_when_no_track_is_active() {
-        let controller = AudioController::new();
-        let record = RecordDocument {
+    fn record_without_audio() -> RecordDocument {
+        RecordDocument {
             id: "0x07".to_string(),
             category_id: "transmissions".to_string(),
             kind: RecordKind::Transmission,
@@ -580,8 +584,62 @@ mod tests {
                 visualizer: None,
                 corruption_reason: Some("missing".to_string()),
             },
-        };
+        }
+    }
+
+    #[test]
+    fn analysis_normalization_uses_expected_band_ranges() {
+        let bins = vec![255; 20]
+            .into_iter()
+            .chain(vec![128; 45])
+            .chain(vec![64; 35])
+            .collect::<Vec<_>>();
+
+        let waveform = vec![128; 128];
+        let (energy, bass, mid, treble, peak, waveform_peak) =
+            compute_analysis_levels(&bins, &waveform);
+
+        assert!(bass > 0.8);
+        assert!(mid > treble);
+        assert!(energy > 0.4);
+        assert!((peak - 1.0).abs() < 0.001);
+        assert_eq!(waveform_peak, 0.0);
+    }
+
+    #[test]
+    fn waveform_helpers_report_activity() {
+        let waveform = vec![128, 255, 0, 255, 0, 128];
+
+        assert!(waveform_rms(&waveform) > 0.5);
+        assert!(waveform_peak(&waveform) > 0.9);
+    }
+
+    #[test]
+    fn progress_ratio_is_computed_for_valid_duration() {
+        let progress = compute_progress_ratio(45.0, 180.0).expect("progress");
+        assert!((progress - 0.25).abs() < 0.001);
+        assert!(compute_progress_ratio(10.0, 0.0).is_none());
+    }
+
+    #[test]
+    fn controller_exposes_no_analysis_snapshot_when_no_track_is_active() {
+        let controller = AudioController::new();
+        let record = record_without_audio();
 
         assert!(controller.analysis_snapshot_for(&record).is_none());
+    }
+
+    #[test]
+    fn inactive_playback_clock_keeps_visual_time_advancing() {
+        let controller = AudioController::new();
+        let record = record_without_audio();
+
+        let first = controller.playback_clock_for(&record);
+        thread::sleep(Duration::from_millis(10));
+        let second = controller.playback_clock_for(&record);
+
+        assert_eq!(first.current_time_secs, 0.0);
+        assert_eq!(second.current_time_secs, 0.0);
+        assert!(second.visual_time_secs > first.visual_time_secs);
     }
 }

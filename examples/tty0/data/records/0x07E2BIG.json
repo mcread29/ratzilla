@@ -3368,10 +3368,10 @@
             "rim_exponent": 2.200000047683716,
             "rim_guard": 0.6200000047683716,
             "rim_warp": 0.07999999821186066,
-            "scroll_base": 9.0,
+            "scroll_base": 28.0,
             "scroll_motion_ceiling": 2.799999952316284,
             "scroll_motion_floor": 0.20000000298023224,
-            "scroll_motion_scale": 18.0,
+            "scroll_motion_scale": 42.0,
             "spacing_max_px": 24.0,
             "spacing_min_px": 14.0
           },

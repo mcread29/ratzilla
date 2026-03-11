@@ -620,6 +620,7 @@ mod tests {
             mode,
             params,
             automation: None,
+            timeline: None,
         }
     }
 

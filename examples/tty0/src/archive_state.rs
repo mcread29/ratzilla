@@ -486,6 +486,9 @@ impl ArchiveState {
         frame.render_widget(visual_block, sections[1]);
 
         let preview_visualizer = self.visualizer_editor.preview_visualizer(record);
+        let preview_playback = self
+            .visualizer_editor
+            .preview_playback_clock(record, session.playback_clock());
         if let Some(config) = preview_visualizer.as_ref() {
             track_visualizer::render_visualizer(
                 frame,
@@ -496,7 +499,7 @@ impl ArchiveState {
                 &record.id,
                 config,
                 session.analysis_snapshot(),
-                session.playback_clock(),
+                preview_playback,
                 session.viewer_tick,
             );
         } else {
