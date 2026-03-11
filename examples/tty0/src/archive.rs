@@ -253,6 +253,8 @@ pub struct ChromaticBulgeGridClip {
     pub length_beats: f32,
     #[serde(default = "default_clip_color")]
     pub color: [f32; 3],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authoring: Option<ChromaticBulgeGridClipAuthoring>,
     #[serde(default)]
     pub lanes: ChromaticBulgeGridAutomationLanes,
 }
@@ -261,8 +263,93 @@ pub struct ChromaticBulgeGridClip {
 pub struct ClipPlacement {
     pub clip_id: String,
     pub start_beat: f32,
+    #[serde(default)]
+    pub track: u8,
     #[serde(default = "default_repeat_count")]
     pub repeats: u32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ChromaticBulgeGridClipAuthoring {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lanes: Vec<ClipLaneAuthoring>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ClipLaneAuthoring {
+    pub lane: ChromaticBulgeGridLaneId,
+    pub mode: ClipLaneAuthoringMode,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ClipLaneAuthoringMode {
+    Shape(ClipShapeAuthoring),
+    Custom,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ClipShapeAuthoring {
+    pub shape: ClipShape,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub depth: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_color: Option<[f32; 3]>,
+    #[serde(default)]
+    pub offset_beats: f32,
+    pub width_beats: f32,
+    #[serde(default)]
+    pub ease: ClipShapeEase,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum ChromaticBulgeGridLaneId {
+    MotionRate,
+    LatticeDensity,
+    CircleRadius,
+    CircleFalloffStart,
+    CircleFalloffEnd,
+    BulgeAmount,
+    RimGuard,
+    RimExponent,
+    RimWarp,
+    SpacingMaxPx,
+    SpacingMinPx,
+    DotSize,
+    OuterDotScale,
+    EdgeSoftness,
+    ChromaticAberration,
+    ScrollBase,
+    ScrollMotionScale,
+    ScrollMotionFloor,
+    ScrollMotionCeiling,
+    ColdColor,
+    HotColor,
+    ColorCycleRate,
+    InnerAlpha,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ClipShape {
+    Pulse,
+    Rise,
+    Fall,
+    Triangle,
+    Stutter,
+    Flash,
+    Fade,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ClipShapeEase {
+    Hold,
+    #[default]
+    Linear,
+    EaseOut,
+    EaseInOut,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
@@ -633,6 +720,66 @@ impl TrackVisualizerMode {
     }
 }
 
+impl ChromaticBulgeGridLaneId {
+    pub const ALL: [Self; 23] = [
+        Self::MotionRate,
+        Self::LatticeDensity,
+        Self::CircleRadius,
+        Self::CircleFalloffStart,
+        Self::CircleFalloffEnd,
+        Self::BulgeAmount,
+        Self::RimGuard,
+        Self::RimExponent,
+        Self::RimWarp,
+        Self::SpacingMaxPx,
+        Self::SpacingMinPx,
+        Self::DotSize,
+        Self::OuterDotScale,
+        Self::EdgeSoftness,
+        Self::ChromaticAberration,
+        Self::ScrollBase,
+        Self::ScrollMotionScale,
+        Self::ScrollMotionFloor,
+        Self::ScrollMotionCeiling,
+        Self::ColdColor,
+        Self::HotColor,
+        Self::ColorCycleRate,
+        Self::InnerAlpha,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::MotionRate => "motion_rate",
+            Self::LatticeDensity => "lattice_density",
+            Self::CircleRadius => "circle_radius",
+            Self::CircleFalloffStart => "circle_falloff_start",
+            Self::CircleFalloffEnd => "circle_falloff_end",
+            Self::BulgeAmount => "bulge_amount",
+            Self::RimGuard => "rim_guard",
+            Self::RimExponent => "rim_exponent",
+            Self::RimWarp => "rim_warp",
+            Self::SpacingMaxPx => "spacing_max_px",
+            Self::SpacingMinPx => "spacing_min_px",
+            Self::DotSize => "dot_size",
+            Self::OuterDotScale => "outer_dot_scale",
+            Self::EdgeSoftness => "edge_softness",
+            Self::ChromaticAberration => "chromatic_aberration",
+            Self::ScrollBase => "scroll_base",
+            Self::ScrollMotionScale => "scroll_motion_scale",
+            Self::ScrollMotionFloor => "scroll_motion_floor",
+            Self::ScrollMotionCeiling => "scroll_motion_ceiling",
+            Self::ColdColor => "cold_color",
+            Self::HotColor => "hot_color",
+            Self::ColorCycleRate => "color_cycle_rate",
+            Self::InnerAlpha => "inner_alpha",
+        }
+    }
+
+    pub fn is_color(self) -> bool {
+        matches!(self, Self::ColdColor | Self::HotColor)
+    }
+}
+
 impl Default for TrackVisualizerParams {
     fn default() -> Self {
         Self {
@@ -864,6 +1011,7 @@ impl ChromaticBulgeGridClipTimeline {
         }
         for placement in &mut normalized.arrangement {
             placement.start_beat = placement.start_beat.max(0.0);
+            placement.track = placement.track.min(3);
             placement.repeats = placement.repeats.max(1);
         }
         normalized
@@ -886,14 +1034,28 @@ impl ChromaticBulgeGridClipTimeline {
         base: ChromaticBulgeGridShaderState,
         beat: f32,
     ) -> Option<ChromaticBulgeGridShaderState> {
-        let (clip, local_beat) = self.active_clip_at_beat(beat)?;
-        Some(clip.apply_to_state(base, local_beat))
+        let active = self.active_clips_at_beat(beat);
+        if active.is_empty() {
+            return None;
+        }
+        let mut state = base;
+        for (clip, local_beat) in active {
+            state = clip.apply_to_state(state, local_beat);
+        }
+        Some(state)
     }
 
     pub fn active_clip_at_beat(&self, beat: f32) -> Option<(&ChromaticBulgeGridClip, f32)> {
+        self.active_clips_at_beat(beat).into_iter().next()
+    }
+
+    pub fn active_clips_at_beat(&self, beat: f32) -> Vec<(&ChromaticBulgeGridClip, f32)> {
         let beat = beat.max(0.0);
+        let mut active = Vec::new();
         for placement in &self.arrangement {
-            let clip = self.clip_by_id(&placement.clip_id)?;
+            let Some(clip) = self.clip_by_id(&placement.clip_id) else {
+                continue;
+            };
             let end = placement.end_beat(clip);
             if beat >= placement.start_beat && beat < end {
                 let local = if clip.length_beats <= 0.0 {
@@ -902,10 +1064,14 @@ impl ChromaticBulgeGridClipTimeline {
                     ((beat - placement.start_beat) % clip.length_beats)
                         .clamp(0.0, clip.length_beats)
                 };
-                return Some((clip, local));
+                active.push((placement.track, placement.start_beat, clip, local));
             }
         }
-        None
+        active.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.total_cmp(&right.1)));
+        active
+            .into_iter()
+            .map(|(_, _, clip, local)| (clip, local))
+            .collect()
     }
 
     pub fn has_authored_content(&self) -> bool {
@@ -924,6 +1090,80 @@ impl ChromaticBulgeGridClip {
             &self.lanes,
             local_beat.clamp(0.0, self.length_beats.max(0.0)),
         )
+    }
+
+    pub fn authored_lanes(&self) -> HashSet<ChromaticBulgeGridLaneId> {
+        let mut lanes = HashSet::new();
+        if !self.lanes.motion_rate.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::MotionRate);
+        }
+        if !self.lanes.lattice_density.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::LatticeDensity);
+        }
+        if !self.lanes.circle_radius.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::CircleRadius);
+        }
+        if !self.lanes.circle_falloff_start.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::CircleFalloffStart);
+        }
+        if !self.lanes.circle_falloff_end.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::CircleFalloffEnd);
+        }
+        if !self.lanes.bulge_amount.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::BulgeAmount);
+        }
+        if !self.lanes.rim_guard.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::RimGuard);
+        }
+        if !self.lanes.rim_exponent.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::RimExponent);
+        }
+        if !self.lanes.rim_warp.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::RimWarp);
+        }
+        if !self.lanes.spacing_max_px.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::SpacingMaxPx);
+        }
+        if !self.lanes.spacing_min_px.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::SpacingMinPx);
+        }
+        if !self.lanes.dot_size.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::DotSize);
+        }
+        if !self.lanes.outer_dot_scale.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::OuterDotScale);
+        }
+        if !self.lanes.edge_softness.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::EdgeSoftness);
+        }
+        if !self.lanes.chromatic_aberration.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::ChromaticAberration);
+        }
+        if !self.lanes.scroll_base.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::ScrollBase);
+        }
+        if !self.lanes.scroll_motion_scale.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::ScrollMotionScale);
+        }
+        if !self.lanes.scroll_motion_floor.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::ScrollMotionFloor);
+        }
+        if !self.lanes.scroll_motion_ceiling.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::ScrollMotionCeiling);
+        }
+        if !self.lanes.cold_color.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::ColdColor);
+        }
+        if !self.lanes.hot_color.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::HotColor);
+        }
+        if !self.lanes.color_cycle_rate.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::ColorCycleRate);
+        }
+        if !self.lanes.inner_alpha.is_empty() {
+            lanes.insert(ChromaticBulgeGridLaneId::InnerAlpha);
+        }
+        lanes
     }
 }
 
@@ -945,11 +1185,13 @@ pub fn legacy_automation_to_timeline(
             name: "Imported Timeline".to_string(),
             length_beats: automation.total_beats(),
             color: default_clip_color(),
+            authoring: None,
             lanes: automation.lanes.clone(),
         }],
         arrangement: vec![ClipPlacement {
             clip_id: "imported_timeline".to_string(),
             start_beat: 0.0,
+            track: 0,
             repeats: 1,
         }],
     }
@@ -1313,9 +1555,12 @@ fn validate_clip_timeline(
             &clip.lanes,
             Some(clip.length_beats),
         )?;
+        if let Some(authoring) = &clip.authoring {
+            validate_clip_authoring(record_id, clip, authoring)?;
+        }
     }
 
-    let mut spans = Vec::<(f32, f32, &str)>::new();
+    let mut spans = Vec::<(f32, f32, u8, &str, HashSet<ChromaticBulgeGridLaneId>)>::new();
     for placement in &timeline.arrangement {
         if placement.clip_id.trim().is_empty() {
             return Err(ArchiveLoadError::Validation(format!(
@@ -1334,6 +1579,12 @@ fn validate_clip_timeline(
                 placement.clip_id
             )));
         }
+        if placement.track > 3 {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} has invalid placement track for {}",
+                placement.clip_id
+            )));
+        }
         if placement.repeats == 0 {
             return Err(ArchiveLoadError::Validation(format!(
                 "record {record_id} has invalid placement repeats for {}",
@@ -1347,19 +1598,102 @@ fn validate_clip_timeline(
                 placement.clip_id
             )));
         }
-        spans.push((placement.start_beat, end, placement.clip_id.as_str()));
+        spans.push((
+            placement.start_beat,
+            end,
+            placement.track,
+            placement.clip_id.as_str(),
+            clip.authored_lanes(),
+        ));
     }
 
-    spans.sort_by(|left, right| left.0.total_cmp(&right.0));
-    for window in spans.windows(2) {
-        if window[0].1 > window[1].0 + 0.0001 {
+    spans.sort_by(|left, right| left.0.total_cmp(&right.0).then(left.2.cmp(&right.2)));
+    for (index, left) in spans.iter().enumerate() {
+        for right in spans.iter().skip(index + 1) {
+            if right.0 >= left.1 - 0.0001 {
+                break;
+            }
+            if left.2 == right.2 {
+                return Err(ArchiveLoadError::Validation(format!(
+                    "record {record_id} has overlapping placements on track {} between {} and {}",
+                    left.2, left.3, right.3
+                )));
+            }
+            if !left.4.is_disjoint(&right.4) {
+                let overlap = left
+                    .4
+                    .intersection(&right.4)
+                    .map(|lane| lane.label())
+                    .collect::<Vec<_>>()
+                    .join(", ");
             return Err(ArchiveLoadError::Validation(format!(
-                "record {record_id} has overlapping placements between {} and {}",
-                window[0].2, window[1].2
+                        "record {record_id} has overlapping placements with shared lanes ({overlap}) between {} and {}",
+                        left.3, right.3
             )));
+            }
         }
     }
 
+    Ok(())
+}
+
+fn validate_clip_authoring(
+    record_id: &str,
+    clip: &ChromaticBulgeGridClip,
+    authoring: &ChromaticBulgeGridClipAuthoring,
+) -> Result<(), ArchiveLoadError> {
+    let mut unique = HashSet::new();
+    for lane in &authoring.lanes {
+        if !unique.insert(lane.lane) {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} has duplicate authoring lane {} in clip {}",
+                lane.lane.label(),
+                clip.id
+            )));
+        }
+        if matches!(lane.mode, ClipLaneAuthoringMode::Custom) {
+            continue;
+        }
+        let ClipLaneAuthoringMode::Shape(shape) = &lane.mode else {
+            continue;
+        };
+        if !shape.offset_beats.is_finite()
+            || shape.offset_beats < 0.0
+            || shape.offset_beats > clip.length_beats
+        {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} has invalid authoring offset for clip {} lane {}",
+                clip.id,
+                lane.lane.label()
+            )));
+        }
+        if !shape.width_beats.is_finite()
+            || shape.width_beats <= 0.0
+            || shape.width_beats > clip.length_beats
+            || shape.offset_beats + shape.width_beats > clip.length_beats + 0.0001
+        {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} has invalid authoring width for clip {} lane {}",
+                clip.id,
+                lane.lane.label()
+            )));
+        }
+        if lane.lane.is_color() {
+            if shape.target_color.is_none() {
+                return Err(ArchiveLoadError::Validation(format!(
+                    "record {record_id} missing target_color for clip {} lane {}",
+                    clip.id,
+                    lane.lane.label()
+                )));
+            }
+        } else if shape.depth.is_none() {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} missing depth for clip {} lane {}",
+                clip.id,
+                lane.lane.label()
+            )));
+        }
+    }
     Ok(())
 }
 
@@ -2592,6 +2926,7 @@ mod tests {
                     name: "Pulse".to_string(),
                     length_beats: 1.0,
                     color: [1.0, 1.0, 1.0],
+                    authoring: None,
                     lanes: super::ChromaticBulgeGridAutomationLanes {
                         circle_radius: vec![super::FloatKeyframe {
                             beat: 0.0,
@@ -2604,6 +2939,7 @@ mod tests {
                 arrangement: vec![super::ClipPlacement {
                     clip_id: "pulse".to_string(),
                     start_beat: 4.0,
+                    track: 0,
                     repeats: 1,
                 }],
             }),
@@ -2644,6 +2980,7 @@ mod tests {
                     name: "Pulse".to_string(),
                     length_beats: 2.0,
                     color: [1.0, 1.0, 1.0],
+                    authoring: None,
                     lanes: super::ChromaticBulgeGridAutomationLanes {
                         circle_radius: vec![
                             super::FloatKeyframe {
@@ -2663,6 +3000,7 @@ mod tests {
                 arrangement: vec![super::ClipPlacement {
                     clip_id: "pulse".to_string(),
                     start_beat: 4.0,
+                    track: 0,
                     repeats: 1,
                 }],
             }),
@@ -2703,6 +3041,7 @@ mod tests {
                     name: "Pulse".to_string(),
                     length_beats: 2.0,
                     color: [1.0, 1.0, 1.0],
+                    authoring: None,
                     lanes: super::ChromaticBulgeGridAutomationLanes {
                         circle_radius: vec![
                             super::FloatKeyframe {
@@ -2722,6 +3061,7 @@ mod tests {
                 arrangement: vec![super::ClipPlacement {
                     clip_id: "pulse".to_string(),
                     start_beat: 4.0,
+                    track: 0,
                     repeats: 2,
                 }],
             }),
@@ -2834,6 +3174,7 @@ mod tests {
                     name: "Pulse".to_string(),
                     length_beats: 1.0,
                     color: [1.0, 1.0, 1.0],
+                    authoring: None,
                     lanes: super::ChromaticBulgeGridAutomationLanes {
                         circle_radius: vec![super::FloatKeyframe {
                             beat: 0.0,
@@ -2846,6 +3187,7 @@ mod tests {
                 arrangement: vec![super::ClipPlacement {
                     clip_id: "pulse".to_string(),
                     start_beat: 0.0,
+                    track: 0,
                     repeats: 1,
                 }],
             }),
@@ -2889,6 +3231,7 @@ mod tests {
                     name: "Pulse".to_string(),
                     length_beats: 1.0,
                     color: [1.0, 1.0, 1.0],
+                    authoring: None,
                     lanes: super::ChromaticBulgeGridAutomationLanes {
                         circle_radius: vec![super::FloatKeyframe {
                             beat: 0.0,
@@ -2901,6 +3244,7 @@ mod tests {
                 arrangement: vec![super::ClipPlacement {
                     clip_id: "pulse".to_string(),
                     start_beat: 0.0,
+                    track: 0,
                     repeats: 1,
                 }],
             }),

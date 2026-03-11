@@ -2,13 +2,16 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     archive::{
-        legacy_automation_to_timeline, ChromaticBulgeGridAutomationLanes, ChromaticBulgeGridClip,
-        ChromaticBulgeGridClipTimeline, ChromaticBulgeGridShaderState,
-        ChromaticBulgeGridShaderStates, ClipPlacement, ColorKeyframe, FloatKeyframe,
-        InterpolationMode, PlaybackClock, RecordDocument, TrackVisualizerConfig,
-        TrackVisualizerMode,
+        legacy_automation_to_timeline, ChromaticBulgeGridAutomationLanes,
+        ChromaticBulgeGridClip, ChromaticBulgeGridClipAuthoring, ChromaticBulgeGridClipTimeline,
+        ChromaticBulgeGridLaneId, ChromaticBulgeGridShaderState,
+        ChromaticBulgeGridShaderStates, ClipLaneAuthoring, ClipLaneAuthoringMode,
+        ClipPlacement, ClipShape, ClipShapeAuthoring, ClipShapeEase, ColorKeyframe,
+        FloatKeyframe, InterpolationMode, PlaybackClock, RecordDocument,
+        TrackVisualizerConfig, TrackVisualizerMode,
     },
     session::SessionModel,
+    visualizer_sequence::compile_authoring_lanes,
 };
 use ratzilla::event::KeyCode;
 use ratzilla::ratatui::{
@@ -47,6 +50,7 @@ pub struct VisualizerEditorOverlay {
     lane_index: usize,
     keyframe_index: usize,
     inspector_field: InspectorField,
+    modal: Option<EditorModal>,
     numeric_input: Option<NumericInputState>,
     text_input: Option<TextInputState>,
     status_message: Rc<RefCell<Option<String>>>,
@@ -91,7 +95,7 @@ pub enum EditorFocusArea {
     StateParams,
     ClipLibrary,
     Arrangement,
-    ClipLanes,
+    ClipRows,
     ClipGraph,
     ClipInspector,
     Export,
@@ -100,8 +104,75 @@ pub enum EditorFocusArea {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EditorTab {
     State,
-    Clips,
+    Song,
     Export,
+}
+
+#[derive(Clone)]
+enum EditorModal {
+    NewClip(NewClipDialog),
+    Placement(PlacementDialog),
+    RowEditor(RowEditorDialog),
+}
+
+#[derive(Clone)]
+struct NewClipDialog {
+    name: String,
+    length_preset: ClipLengthPreset,
+    field_index: usize,
+}
+
+impl Default for NewClipDialog {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            length_preset: ClipLengthPreset::OneBeat,
+            field_index: 0,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct PlacementDialog {
+    track: u8,
+    start_beat: f32,
+    bars: u32,
+    repeats: u32,
+    editing_existing: bool,
+    field_index: usize,
+}
+
+#[derive(Clone)]
+struct RowEditorDialog {
+    lane: LaneId,
+    mode: RowDialogMode,
+    field_index: usize,
+    shape: ClipShape,
+    depth: f32,
+    target_color: [f32; 3],
+    offset_beats: f32,
+    width_beats: f32,
+    ease: ClipShapeEase,
+}
+
+#[derive(Clone)]
+struct RowSummary {
+    mode_label: String,
+    summary: String,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RowDialogMode {
+    Shape,
+    Custom,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ClipLengthPreset {
+    OneBeat,
+    TwoBeats,
+    OneBar,
+    TwoBars,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -229,6 +300,7 @@ impl VisualizerEditorOverlay {
             lane_index: 0,
             keyframe_index: 0,
             inspector_field: InspectorField::LengthBeats,
+            modal: None,
             numeric_input: None,
             text_input: None,
             status_message: Rc::new(RefCell::new(None)),
@@ -269,6 +341,7 @@ impl VisualizerEditorOverlay {
 
         if self.is_open {
             self.is_open = false;
+            self.modal = None;
             self.numeric_input = None;
             self.text_input = None;
             return;
@@ -285,8 +358,9 @@ impl VisualizerEditorOverlay {
 
         self.drafts.ensure(record);
         self.is_open = true;
-        self.tab = EditorTab::Clips;
+        self.tab = EditorTab::Song;
         self.focus_area = EditorFocusArea::ClipLibrary;
+        self.modal = None;
         self.numeric_input = None;
         self.text_input = None;
         self.sync_selection(record.id.as_str());
@@ -299,6 +373,9 @@ impl VisualizerEditorOverlay {
         self.flush_save_feedback();
 
         let record_id = session.current_record().id.clone();
+        if self.modal.is_some() {
+            return self.handle_modal_key(key, session, &record_id);
+        }
         if self.text_input.is_some() {
             return self.handle_text_key(key, &record_id);
         }
@@ -321,7 +398,7 @@ impl VisualizerEditorOverlay {
                 true
             }
             KeyCode::Char('2') => {
-                self.tab = EditorTab::Clips;
+                self.tab = EditorTab::Song;
                 self.focus_area = EditorFocusArea::ClipLibrary;
                 true
             }
@@ -348,14 +425,14 @@ impl VisualizerEditorOverlay {
                 true
             }
             KeyCode::Left
-                if self.tab == EditorTab::Clips
+                if self.tab == EditorTab::Song
                     && self.focus_area != EditorFocusArea::ClipGraph =>
             {
                 self.scrub_beats(session, -0.25);
                 true
             }
             KeyCode::Right
-                if self.tab == EditorTab::Clips
+                if self.tab == EditorTab::Song
                     && self.focus_area != EditorFocusArea::ClipGraph =>
             {
                 self.scrub_beats(session, 0.25);
@@ -414,10 +491,11 @@ impl VisualizerEditorOverlay {
         self.render_tabs(frame, layout[1]);
         match self.tab {
             EditorTab::State => self.render_state_tab(frame, layout[2], draft),
-            EditorTab::Clips => self.render_clips_tab(frame, layout[2], draft, session),
+            EditorTab::Song => self.render_song_tab(frame, layout[2], draft, session),
             EditorTab::Export => self.render_export_tab(frame, layout[2], draft),
         }
         self.render_footer(frame, layout[3], draft);
+        self.render_modal(frame, inner, draft);
     }
 
     fn render_header(
@@ -473,7 +551,7 @@ impl VisualizerEditorOverlay {
     fn render_tabs(&self, frame: &mut Frame, area: Rect) {
         let labels = [
             ("1 State", EditorTab::State),
-            ("2 Clips", EditorTab::Clips),
+            ("2 Song", EditorTab::Song),
             ("3 Export", EditorTab::Export),
         ]
         .into_iter()
@@ -549,7 +627,7 @@ impl VisualizerEditorOverlay {
         );
     }
 
-    fn render_clips_tab(
+    fn render_song_tab(
         &self,
         frame: &mut Frame,
         area: Rect,
@@ -562,7 +640,14 @@ impl VisualizerEditorOverlay {
         let right =
             Layout::vertical([Constraint::Percentage(40), Constraint::Fill(1)]).split(layout[1]);
         self.render_arrangement(frame, right[0], draft, session);
-        self.render_clip_editor(frame, right[1], draft, session);
+        if matches!(
+            self.focus_area,
+            EditorFocusArea::ClipGraph | EditorFocusArea::ClipInspector
+        ) {
+            self.render_advanced_clip_editor(frame, right[1], draft, session);
+        } else {
+            self.render_selected_clip_rows(frame, right[1], draft, session);
+        }
     }
 
     fn render_clip_library(
@@ -609,7 +694,7 @@ impl VisualizerEditorOverlay {
             List::new(items)
                 .block(
                     Block::bordered()
-                        .title(" clip library ")
+                        .title(" clips ")
                         .border_style(Style::default().fg(
                             if self.focus_area == EditorFocusArea::ClipLibrary {
                                 CYAN
@@ -644,8 +729,8 @@ impl VisualizerEditorOverlay {
 
         if timeline.arrangement.is_empty() {
             lines.push(Line::from(""));
-            lines.push(Line::from("no placements on the arrangement lane"));
-            lines.push(Line::from("A add placement of selected clip at playhead"));
+            lines.push(Line::from("no placements on song tracks"));
+            lines.push(Line::from("P place selected clip from the playhead"));
         } else {
             lines.extend(build_arrangement_grid(
                 draft,
@@ -673,7 +758,73 @@ impl VisualizerEditorOverlay {
         );
     }
 
-    fn render_clip_editor(
+    fn render_selected_clip_rows(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        draft: &ChromaticBulgeGridEditorDraft,
+        _session: &SessionModel,
+    ) {
+        let Some(clip) = draft.selected_clip() else {
+            frame.render_widget(
+                Paragraph::new("no clip selected")
+                    .style(Style::default().bg(Color::Rgb(12, 18, 20)).fg(TEXT))
+                    .block(Block::bordered().title(" selected clip ").border_style(
+                        Style::default().fg(if self.focus_area == EditorFocusArea::ClipRows {
+                            CYAN
+                        } else {
+                            BORDER
+                        }),
+                    )),
+                area,
+            );
+            return;
+        };
+
+        let mut lines = vec![
+            Line::from(format!(
+                "{}  {:.2} beats  {} placements  touched {}",
+                clip.name,
+                clip.length_beats,
+                draft.placement_count_for_clip(&clip.id),
+                clip.authored_lanes()
+                    .into_iter()
+                    .map(|lane| lane.label())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+            Line::from("Space enable/disable  Enter edit row  K advanced custom  P place"),
+            Line::from(""),
+        ];
+
+        for (index, lane) in LaneId::ALL.iter().enumerate() {
+            let row = draft.row_summary(*lane);
+            let marker = if index == self.lane_index { ">" } else { " " };
+            lines.push(Line::from(format!(
+                "{} {:<20} {:<8} {}",
+                marker,
+                lane.label(),
+                row.mode_label,
+                row.summary
+            )));
+        }
+
+        frame.render_widget(
+            Paragraph::new(lines)
+                .wrap(Wrap { trim: false })
+                .style(Style::default().bg(Color::Rgb(12, 18, 20)).fg(TEXT))
+                .block(Block::bordered().title(" selected clip ").border_style(
+                    Style::default().fg(if self.focus_area == EditorFocusArea::ClipRows {
+                        CYAN
+                    } else {
+                        BORDER
+                    }),
+                )),
+            area,
+        );
+    }
+
+    fn render_advanced_clip_editor(
         &self,
         frame: &mut Frame,
         area: Rect,
@@ -713,9 +864,9 @@ impl VisualizerEditorOverlay {
             List::new(items)
                 .block(
                     Block::bordered()
-                        .title(" clip lanes ")
+                        .title(" custom lane rows ")
                         .border_style(Style::default().fg(
-                            if self.focus_area == EditorFocusArea::ClipLanes {
+                            if self.focus_area == EditorFocusArea::ClipRows {
                                 CYAN
                             } else {
                                 BORDER
@@ -917,10 +1068,10 @@ impl VisualizerEditorOverlay {
         } else if let Some(input) = &self.numeric_input {
             format!("editing {} = {}", input.target.label(), input.buffer)
         } else {
-            self.status_message.borrow().clone().unwrap_or_else(|| {
-                "Tab focus  P play/pause  S save  E close  arrows scrub / edit based on focus"
-                    .to_string()
-            })
+            self.status_message
+                .borrow()
+                .clone()
+                .unwrap_or_else(|| self.default_status_message(draft))
         };
         let lines = vec![Line::from(vec![
             Span::styled(status, Style::default().fg(AMBER)),
@@ -942,6 +1093,409 @@ impl VisualizerEditorOverlay {
         );
     }
 
+    fn default_status_message(&self, _draft: &ChromaticBulgeGridEditorDraft) -> String {
+        match self.focus_area {
+            EditorFocusArea::ClipLibrary => format!(
+                "N new clip  D duplicate  R rename  Delete remove"
+            ),
+            EditorFocusArea::Arrangement => {
+                "P place clip  G move placement  -/= repeats  Y swap placement clip"
+                    .to_string()
+            }
+            EditorFocusArea::ClipRows => {
+                "Up/Down row  Space enable  Enter edit row  K custom mode".to_string()
+            }
+            EditorFocusArea::ClipGraph => {
+                "Left/Right move cursor  N new key  Y clone  G move key  I interp".to_string()
+            }
+            _ => "Tab focus  P play/pause  S save  E close  arrows scrub / edit based on focus"
+                .to_string(),
+        }
+    }
+
+    fn open_placement_dialog(
+        &mut self,
+        session: &SessionModel,
+        record_id: &str,
+        editing_existing: bool,
+    ) {
+        let Some(draft) = self.drafts.draft_for(record_id) else {
+            return;
+        };
+        let Some(clip) = draft.selected_clip() else {
+            self.set_status("no selected clip");
+            return;
+        };
+        let beat = self.current_global_beat_for_record(session, record_id).max(0.0);
+        let (track, start_beat, repeats) = if editing_existing {
+            if let Some(placement) = draft.selected_placement() {
+                (placement.track, placement.start_beat, placement.repeats)
+            } else {
+                (0, beat, 1)
+            }
+        } else {
+            (0, beat, 1)
+        };
+        let bars = repeats_to_bars(repeats, clip.length_beats, draft.timeline().beats_per_measure);
+        self.modal = Some(EditorModal::Placement(PlacementDialog {
+            track,
+            start_beat,
+            bars,
+            repeats,
+            editing_existing,
+            field_index: 0,
+        }));
+    }
+
+    fn open_row_dialog(&mut self, record_id: &str) {
+        let lane = self.selected_lane();
+        let Some(draft) = self.drafts.draft_for(record_id) else {
+            return;
+        };
+        let dialog = draft.row_editor_dialog(lane);
+        self.modal = Some(EditorModal::RowEditor(dialog));
+    }
+
+    fn handle_modal_key(
+        &mut self,
+        key: KeyCode,
+        _session: &mut SessionModel,
+        record_id: &str,
+    ) -> bool {
+        let Some(mut modal) = self.modal.take() else {
+            return false;
+        };
+        let keep_open = match &mut modal {
+            EditorModal::NewClip(dialog) => self.handle_new_clip_modal_key(key, record_id, dialog),
+            EditorModal::Placement(dialog) => {
+                self.handle_placement_modal_key(key, record_id, dialog)
+            }
+            EditorModal::RowEditor(dialog) => self.handle_row_modal_key(key, record_id, dialog),
+        };
+        if keep_open && self.modal.is_none() {
+            self.modal = Some(modal);
+        }
+        keep_open
+    }
+
+    fn handle_new_clip_modal_key(
+        &mut self,
+        key: KeyCode,
+        record_id: &str,
+        dialog: &mut NewClipDialog,
+    ) -> bool {
+        match key {
+            KeyCode::Esc => return false,
+            KeyCode::Up => dialog.field_index = dialog.field_index.saturating_sub(1),
+            KeyCode::Down => dialog.field_index = (dialog.field_index + 1).min(1),
+            KeyCode::Left | KeyCode::Right if dialog.field_index == 1 => {
+                dialog.length_preset = dialog.length_preset.next();
+            }
+            KeyCode::Backspace if dialog.field_index == 0 => {
+                dialog.name.pop();
+            }
+            KeyCode::Char(ch) if dialog.field_index == 0 && (ch.is_ascii_graphic() || ch == ' ') => {
+                dialog.name.push(ch);
+            }
+            KeyCode::Enter => {
+                let name = dialog.name.trim();
+                if name.is_empty() {
+                    self.set_status("clip name required");
+                    return true;
+                }
+                if let Some(draft) = self.drafts.draft_mut(record_id) {
+                    let created = draft.create_clip(name, dialog.length_preset.length_beats(draft.timeline().beats_per_measure));
+                    self.set_status(format!("created {}", created));
+                }
+                self.focus_area = EditorFocusArea::ClipRows;
+                self.sync_selection(record_id);
+                return false;
+            }
+            _ => {}
+        }
+        true
+    }
+
+    fn handle_placement_modal_key(
+        &mut self,
+        key: KeyCode,
+        record_id: &str,
+        dialog: &mut PlacementDialog,
+    ) -> bool {
+        match key {
+            KeyCode::Esc => return false,
+            KeyCode::Up => dialog.field_index = dialog.field_index.saturating_sub(1),
+            KeyCode::Down => dialog.field_index = (dialog.field_index + 1).min(3),
+            KeyCode::Left | KeyCode::Char('-') => self.nudge_placement_dialog(record_id, dialog, -1.0),
+            KeyCode::Right | KeyCode::Char('=') => self.nudge_placement_dialog(record_id, dialog, 1.0),
+            KeyCode::Enter => {
+                if let Some(draft) = self.drafts.draft_mut(record_id) {
+                    let result = if dialog.editing_existing {
+                        draft.update_selected_placement(dialog.track, dialog.start_beat, dialog.repeats)
+                    } else {
+                        draft.add_placement(dialog.track, dialog.start_beat, dialog.repeats)
+                    };
+                    match result {
+                        Ok(()) => self.set_status("placement saved"),
+                        Err(message) => {
+                            self.set_status(message);
+                            return true;
+                        }
+                    }
+                }
+                self.sync_selection(record_id);
+                return false;
+            }
+            _ => {}
+        }
+        true
+    }
+
+    fn nudge_placement_dialog(
+        &mut self,
+        record_id: &str,
+        dialog: &mut PlacementDialog,
+        direction: f32,
+    ) {
+        let Some(draft) = self.drafts.draft_for(record_id) else {
+            return;
+        };
+        let clip_length = draft.selected_clip().map(|clip| clip.length_beats).unwrap_or(1.0);
+        match dialog.field_index {
+            0 => dialog.track = ((dialog.track as i32) + direction as i32).clamp(0, 3) as u8,
+            1 => dialog.start_beat = (dialog.start_beat + direction * 0.25).max(0.0),
+            2 => {
+                dialog.bars = ((dialog.bars as i32) + direction as i32).max(1) as u32;
+                dialog.repeats = bars_to_repeats(dialog.bars, clip_length, draft.timeline().beats_per_measure);
+            }
+            3 => {
+                dialog.repeats = ((dialog.repeats as i32) + direction as i32).max(1) as u32;
+                dialog.bars = repeats_to_bars(dialog.repeats, clip_length, draft.timeline().beats_per_measure);
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_row_modal_key(
+        &mut self,
+        key: KeyCode,
+        record_id: &str,
+        dialog: &mut RowEditorDialog,
+    ) -> bool {
+        let field_max = if dialog.lane.is_color() { 6 } else { 5 };
+        match key {
+            KeyCode::Esc => return false,
+            KeyCode::Up => dialog.field_index = dialog.field_index.saturating_sub(1),
+            KeyCode::Down => dialog.field_index = (dialog.field_index + 1).min(field_max),
+            KeyCode::Left | KeyCode::Char('-') => self.nudge_row_dialog(record_id, dialog, -1.0),
+            KeyCode::Right | KeyCode::Char('=') => self.nudge_row_dialog(record_id, dialog, 1.0),
+            KeyCode::Char('k') | KeyCode::Char('K') => {
+                if let Some(draft) = self.drafts.draft_mut(record_id) {
+                    draft.enter_custom_mode(dialog.lane);
+                }
+                self.focus_area = EditorFocusArea::ClipGraph;
+                self.sync_selection(record_id);
+                return false;
+            }
+            KeyCode::Enter => {
+                if let Some(draft) = self.drafts.draft_mut(record_id) {
+                    draft.apply_row_dialog(dialog.clone());
+                }
+                self.sync_selection(record_id);
+                return false;
+            }
+            _ => {}
+        }
+        true
+    }
+
+    fn nudge_row_dialog(
+        &mut self,
+        record_id: &str,
+        dialog: &mut RowEditorDialog,
+        direction: f32,
+    ) {
+        let Some(draft) = self.drafts.draft_for(record_id) else {
+            return;
+        };
+        let clip_length = draft.selected_clip().map(|clip| clip.length_beats).unwrap_or(1.0);
+        match dialog.field_index {
+            0 => {
+                dialog.mode = if dialog.mode == RowDialogMode::Shape {
+                    RowDialogMode::Custom
+                } else {
+                    RowDialogMode::Shape
+                };
+            }
+            1 => dialog.shape = cycle_clip_shape(dialog.shape, direction > 0.0, dialog.lane.is_color()),
+            2 if dialog.lane.is_color() => {
+                dialog.target_color[0] = (dialog.target_color[0] + 0.05 * direction).clamp(0.0, 1.0);
+            }
+            2 => dialog.depth += 0.05 * direction,
+            3 if dialog.lane.is_color() => {
+                dialog.target_color[1] = (dialog.target_color[1] + 0.05 * direction).clamp(0.0, 1.0);
+            }
+            4 if dialog.lane.is_color() => {
+                dialog.target_color[2] = (dialog.target_color[2] + 0.05 * direction).clamp(0.0, 1.0);
+            }
+            idx if idx == field_max_for_lane(dialog.lane) - 2 => {
+                dialog.offset_beats = (dialog.offset_beats + 0.25 * direction).clamp(0.0, clip_length.max(0.25));
+            }
+            idx if idx == field_max_for_lane(dialog.lane) - 1 => {
+                dialog.width_beats = (dialog.width_beats + 0.25 * direction).clamp(0.25, clip_length.max(0.25));
+            }
+            _ => {
+                dialog.ease = dialog.ease.next();
+            }
+        }
+        if dialog.offset_beats + dialog.width_beats > clip_length {
+            dialog.width_beats = (clip_length - dialog.offset_beats).max(0.25);
+        }
+    }
+
+    fn render_modal(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        draft: &ChromaticBulgeGridEditorDraft,
+    ) {
+        let Some(modal) = &self.modal else {
+            return;
+        };
+        let popup = centered_rect(60, 40, area);
+        frame.render_widget(Clear, popup);
+        let lines = match modal {
+            EditorModal::NewClip(dialog) => vec![
+                Line::from("new clip"),
+                Line::from(""),
+                Line::from(format!(
+                    "{} name: {}",
+                    if dialog.field_index == 0 { ">" } else { " " },
+                    dialog.name
+                )),
+                Line::from(format!(
+                    "{} length: {}",
+                    if dialog.field_index == 1 { ">" } else { " " },
+                    dialog.length_preset.label()
+                )),
+                Line::from(""),
+                Line::from("Enter create  Up/Down field  Left/Right change length"),
+            ],
+            EditorModal::Placement(dialog) => vec![
+                Line::from(if dialog.editing_existing {
+                    "edit placement"
+                } else {
+                    "place clip"
+                }),
+                Line::from(""),
+                Line::from(format!(
+                    "{} track: {}",
+                    if dialog.field_index == 0 { ">" } else { " " },
+                    track_label(dialog.track)
+                )),
+                Line::from(format!(
+                    "{} start beat: {:.2}",
+                    if dialog.field_index == 1 { ">" } else { " " },
+                    dialog.start_beat
+                )),
+                Line::from(format!(
+                    "{} bars: {}",
+                    if dialog.field_index == 2 { ">" } else { " " },
+                    dialog.bars
+                )),
+                Line::from(format!(
+                    "{} repeats: {}",
+                    if dialog.field_index == 3 { ">" } else { " " },
+                    dialog.repeats
+                )),
+                Line::from(""),
+                Line::from("Enter save  +/- or arrows adjust"),
+            ],
+            EditorModal::RowEditor(dialog) => {
+                let mut lines = vec![
+                    Line::from(format!("edit row {}", dialog.lane.label())),
+                    Line::from(""),
+                    Line::from(format!(
+                        "{} mode: {}",
+                        if dialog.field_index == 0 { ">" } else { " " },
+                        if dialog.mode == RowDialogMode::Shape { "shape" } else { "custom" }
+                    )),
+                    Line::from(format!(
+                        "{} shape: {}",
+                        if dialog.field_index == 1 { ">" } else { " " },
+                        clip_shape_label(dialog.shape)
+                    )),
+                ];
+                if dialog.lane.is_color() {
+                    lines.push(Line::from(format!(
+                        "{} red: {:.2}",
+                        if dialog.field_index == 2 { ">" } else { " " },
+                        dialog.target_color[0]
+                    )));
+                    lines.push(Line::from(format!(
+                        "{} green: {:.2}",
+                        if dialog.field_index == 3 { ">" } else { " " },
+                        dialog.target_color[1]
+                    )));
+                    lines.push(Line::from(format!(
+                        "{} blue: {:.2}",
+                        if dialog.field_index == 4 { ">" } else { " " },
+                        dialog.target_color[2]
+                    )));
+                    lines.push(Line::from(format!(
+                        "{} offset: {:.2}",
+                        if dialog.field_index == 5 { ">" } else { " " },
+                        dialog.offset_beats
+                    )));
+                    lines.push(Line::from(format!(
+                        "{} width: {:.2}",
+                        if dialog.field_index == 6 { ">" } else { " " },
+                        dialog.width_beats
+                    )));
+                } else {
+                    lines.push(Line::from(format!(
+                        "{} depth: {:+.2}",
+                        if dialog.field_index == 2 { ">" } else { " " },
+                        dialog.depth
+                    )));
+                    lines.push(Line::from(format!(
+                        "{} offset: {:.2}",
+                        if dialog.field_index == 3 { ">" } else { " " },
+                        dialog.offset_beats
+                    )));
+                    lines.push(Line::from(format!(
+                        "{} width: {:.2}",
+                        if dialog.field_index == 4 { ">" } else { " " },
+                        dialog.width_beats
+                    )));
+                    lines.push(Line::from(format!(
+                        "{} ease: {}",
+                        if dialog.field_index == 5 { ">" } else { " " },
+                        clip_shape_ease_label(dialog.ease)
+                    )));
+                }
+                lines.push(Line::from(""));
+                lines.push(Line::from(format!(
+                    "clip length {:.2} beats  touched {}",
+                    draft.selected_clip().map(|clip| clip.length_beats).unwrap_or(0.0),
+                    draft
+                        .selected_clip()
+                        .map(|clip| clip.authored_lanes().len())
+                        .unwrap_or_default()
+                )));
+                lines.push(Line::from("Enter save  K custom editor  +/- or arrows adjust"));
+                lines
+            }
+        };
+        frame.render_widget(
+            Paragraph::new(lines)
+                .wrap(Wrap { trim: false })
+                .style(Style::default().bg(Color::Rgb(12, 18, 20)).fg(TEXT))
+                .block(Block::bordered().title(" song editor ").border_style(Style::default().fg(CYAN))),
+            popup,
+        );
+    }
+
     fn handle_non_modal_key(
         &mut self,
         key: KeyCode,
@@ -950,7 +1504,7 @@ impl VisualizerEditorOverlay {
     ) -> bool {
         match self.tab {
             EditorTab::State => self.handle_state_key(key, record_id),
-            EditorTab::Clips => self.handle_clips_key(key, session, record_id),
+            EditorTab::Song => self.handle_song_key(key, session, record_id),
             EditorTab::Export => self.handle_export_key(key, record_id),
         }
     }
@@ -984,7 +1538,7 @@ impl VisualizerEditorOverlay {
         true
     }
 
-    fn handle_clips_key(
+    fn handle_song_key(
         &mut self,
         key: KeyCode,
         session: &mut SessionModel,
@@ -993,7 +1547,7 @@ impl VisualizerEditorOverlay {
         match self.focus_area {
             EditorFocusArea::ClipLibrary => self.handle_clip_library_key(key, record_id),
             EditorFocusArea::Arrangement => self.handle_arrangement_key(key, session, record_id),
-            EditorFocusArea::ClipLanes => self.handle_clip_lanes_key(key, record_id),
+            EditorFocusArea::ClipRows => self.handle_clip_rows_key(key, record_id),
             EditorFocusArea::ClipGraph => self.handle_clip_graph_key(key, record_id),
             EditorFocusArea::ClipInspector => {
                 self.handle_clip_inspector_key(key, session, record_id)
@@ -1016,14 +1570,11 @@ impl VisualizerEditorOverlay {
                 }
                 self.sync_selection(record_id);
             }
-            KeyCode::Char('a') | KeyCode::Char('A') => {
-                if let Some(draft) = self.drafts.draft_mut(record_id) {
-                    let name = draft.create_empty_clip();
-                    self.set_status(format!("created {}", name));
-                }
-                self.sync_selection(record_id);
+            KeyCode::Char('n') | KeyCode::Char('N') => {
+                self.modal = Some(EditorModal::NewClip(NewClipDialog::default()));
+                self.set_status("new clip");
             }
-            KeyCode::Char('c') | KeyCode::Char('C') => {
+            KeyCode::Char('d') | KeyCode::Char('D') => {
                 if let Some(draft) = self.drafts.draft_mut(record_id) {
                     if let Some(name) = draft.duplicate_selected_clip() {
                         self.set_status(format!("duplicated {}", name));
@@ -1034,7 +1585,7 @@ impl VisualizerEditorOverlay {
                 self.sync_selection(record_id);
             }
             KeyCode::Char('r') | KeyCode::Char('R') => self.begin_clip_rename(record_id),
-            KeyCode::Delete | KeyCode::Backspace | KeyCode::Char('d') | KeyCode::Char('D') => {
+            KeyCode::Delete | KeyCode::Backspace => {
                 if let Some(draft) = self.drafts.draft_mut(record_id) {
                     match draft.delete_selected_clip() {
                         Ok(Some(name)) => self.set_status(format!("deleted {}", name)),
@@ -1044,7 +1595,7 @@ impl VisualizerEditorOverlay {
                 }
                 self.sync_selection(record_id);
             }
-            KeyCode::Enter => self.focus_area = EditorFocusArea::ClipGraph,
+            KeyCode::Enter => self.focus_area = EditorFocusArea::ClipRows,
             _ => {}
         }
         true
@@ -1069,16 +1620,7 @@ impl VisualizerEditorOverlay {
                 }
                 self.sync_selection(record_id);
             }
-            KeyCode::Char('a') | KeyCode::Char('A') => {
-                let beat = self.current_global_beat_for_record(session, record_id);
-                if let Some(draft) = self.drafts.draft_mut(record_id) {
-                    match draft.add_placement_at_playhead(beat) {
-                        Ok(value) => self.set_status(format!("added placement at {:.2}", value)),
-                        Err(message) => self.set_status(message),
-                    }
-                }
-                self.sync_selection(record_id);
-            }
+            KeyCode::Char('p') | KeyCode::Char('P') => self.open_placement_dialog(session, record_id, false),
             KeyCode::Char('g') | KeyCode::Char('G') => {
                 let beat = self.current_global_beat_for_record(session, record_id);
                 if let Some(draft) = self.drafts.draft_mut(record_id) {
@@ -1104,6 +1646,15 @@ impl VisualizerEditorOverlay {
                     }
                 }
             }
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                if let Some(draft) = self.drafts.draft_mut(record_id) {
+                    match draft.reassign_selected_placement_to_selected_clip() {
+                        Ok(name) => self.set_status(format!("placement now uses {}", name)),
+                        Err(message) => self.set_status(message),
+                    }
+                }
+                self.sync_selection(record_id);
+            }
             KeyCode::Delete | KeyCode::Backspace | KeyCode::Char('d') | KeyCode::Char('D') => {
                 if let Some(draft) = self.drafts.draft_mut(record_id) {
                     if draft.delete_selected_placement() {
@@ -1115,22 +1666,14 @@ impl VisualizerEditorOverlay {
                 self.sync_selection(record_id);
             }
             KeyCode::Enter => {
-                let beat = self.current_global_beat_for_record(session, record_id);
-                if let Some(draft) = self.drafts.draft_mut(record_id) {
-                    if draft.select_placement_at_beat(beat) {
-                        self.set_status("selected placement under playhead");
-                    } else {
-                        self.set_status("no placement under playhead");
-                    }
-                }
-                self.sync_selection(record_id);
+                self.open_placement_dialog(session, record_id, true);
             }
             _ => {}
         }
         true
     }
 
-    fn handle_clip_lanes_key(&mut self, key: KeyCode, record_id: &str) -> bool {
+    fn handle_clip_rows_key(&mut self, key: KeyCode, record_id: &str) -> bool {
         match key {
             KeyCode::Up => {
                 self.lane_index = self.lane_index.saturating_sub(1);
@@ -1140,7 +1683,22 @@ impl VisualizerEditorOverlay {
                 self.lane_index = (self.lane_index + 1).min(LaneId::ALL.len().saturating_sub(1));
                 self.sync_selection(record_id);
             }
-            KeyCode::Enter => self.focus_area = EditorFocusArea::ClipGraph,
+            KeyCode::Char(' ') => {
+                let lane = self.selected_lane();
+                if let Some(draft) = self.drafts.draft_mut(record_id) {
+                    draft.toggle_row_enabled(lane);
+                }
+                self.sync_selection(record_id);
+            }
+            KeyCode::Char('k') | KeyCode::Char('K') => {
+                let lane = self.selected_lane();
+                if let Some(draft) = self.drafts.draft_mut(record_id) {
+                    draft.enter_custom_mode(lane);
+                }
+                self.focus_area = EditorFocusArea::ClipGraph;
+                self.sync_selection(record_id);
+            }
+            KeyCode::Enter => self.open_row_dialog(record_id),
             _ => {}
         }
         true
@@ -1817,19 +2375,18 @@ impl ChromaticBulgeGridEditorDraft {
         }
     }
 
-    pub fn create_empty_clip(&mut self) -> String {
-        let index = self.timeline().clips.len() + 1;
+    pub fn create_clip(&mut self, name: &str, length_beats: f32) -> String {
         let id = self.next_clip_id("clip");
-        let name = format!("Clip {}", index);
         self.timeline_mut().clips.push(ChromaticBulgeGridClip {
             id: id.clone(),
-            name: name.clone(),
-            length_beats: 4.0,
+            name: name.to_string(),
+            length_beats: length_beats.max(0.25),
             color: default_clip_color(id.len()),
+            authoring: Some(ChromaticBulgeGridClipAuthoring { lanes: Vec::new() }),
             lanes: ChromaticBulgeGridAutomationLanes::default(),
         });
         self.clip_editor.selected_clip_id.0 = Some(id);
-        name
+        name.to_string()
     }
 
     pub fn duplicate_selected_clip(&mut self) -> Option<String> {
@@ -1841,6 +2398,7 @@ impl ChromaticBulgeGridEditorDraft {
             name: name.clone(),
             length_beats: clip.length_beats,
             color: clip.color,
+            authoring: clip.authoring,
             lanes: clip.lanes,
         });
         self.clip_editor.selected_clip_id.0 = Some(id);
@@ -1911,14 +2469,15 @@ impl ChromaticBulgeGridEditorDraft {
         true
     }
 
-    pub fn add_placement_at_playhead(&mut self, beat: f32) -> Result<f32, String> {
+    pub fn add_placement(&mut self, track: u8, beat: f32, repeats: u32) -> Result<(), String> {
         let Some(clip) = self.selected_clip().cloned() else {
             return Err("no selected clip".to_string());
         };
         let placement = ClipPlacement {
             clip_id: clip.id.clone(),
             start_beat: beat.max(0.0),
-            repeats: 1,
+            track: track.min(3),
+            repeats: repeats.max(1),
         };
         self.validate_placement(None, &placement)?;
         self.timeline_mut().arrangement.push(placement);
@@ -1932,26 +2491,42 @@ impl ChromaticBulgeGridEditorDraft {
             .position(|candidate| {
                 candidate.clip_id == clip.id
                     && (candidate.start_beat - beat).abs() < 0.0001
-                    && candidate.repeats == 1
+                    && candidate.repeats == repeats.max(1)
+                    && candidate.track == track.min(3)
             })
             .unwrap_or(0);
         self.clip_editor.selected_placement_index.0 = Some(index);
-        Ok(beat)
+        Ok(())
+    }
+
+    pub fn update_selected_placement(
+        &mut self,
+        track: u8,
+        beat: f32,
+        repeats: u32,
+    ) -> Result<(), String> {
+        let Some(index) = self.clip_editor.selected_placement_index.0 else {
+            return Err("no selected placement".to_string());
+        };
+        let mut placement = self.timeline().arrangement[index].clone();
+        placement.track = track.min(3);
+        placement.start_beat = beat.max(0.0);
+        placement.repeats = repeats.max(1);
+        self.validate_placement(Some(index), &placement)?;
+        self.timeline_mut().arrangement[index] = placement;
+        self.timeline_mut()
+            .arrangement
+            .sort_by(|left, right| left.track.cmp(&right.track).then_with(|| left.start_beat.total_cmp(&right.start_beat)));
+        self.clip_editor.selected_placement_index.0 = self.placement_index_at_beat(beat);
+        Ok(())
     }
 
     pub fn move_selected_placement_to(&mut self, beat: f32) -> Result<(), String> {
         let Some(index) = self.clip_editor.selected_placement_index.0 else {
             return Err("no selected placement".to_string());
         };
-        let mut placement = self.timeline().arrangement[index].clone();
-        placement.start_beat = beat.max(0.0);
-        self.validate_placement(Some(index), &placement)?;
-        self.timeline_mut().arrangement[index] = placement;
-        self.timeline_mut()
-            .arrangement
-            .sort_by(|left, right| left.start_beat.total_cmp(&right.start_beat));
-        self.clip_editor.selected_placement_index.0 = self.placement_index_at_beat(beat);
-        Ok(())
+        let placement = self.timeline().arrangement[index].clone();
+        self.update_selected_placement(placement.track, beat, placement.repeats)
     }
 
     pub fn adjust_selected_placement_repeats(&mut self, delta: i32) -> Result<u32, String> {
@@ -1963,6 +2538,25 @@ impl ChromaticBulgeGridEditorDraft {
         self.validate_placement(Some(index), &placement)?;
         self.timeline_mut().arrangement[index] = placement.clone();
         Ok(placement.repeats)
+    }
+
+    pub fn reassign_selected_placement_to_selected_clip(&mut self) -> Result<String, String> {
+        let Some(placement_index) = self.clip_editor.selected_placement_index.0 else {
+            return Err("no selected placement".to_string());
+        };
+        let Some(clip_id) = self.clip_editor.selected_clip_id.0.clone() else {
+            return Err("no selected clip".to_string());
+        };
+        let clip_name = self
+            .timeline()
+            .clip_by_id(&clip_id)
+            .map(|clip| clip.name.clone())
+            .ok_or_else(|| "no selected clip".to_string())?;
+        let mut placement = self.timeline().arrangement[placement_index].clone();
+        placement.clip_id = clip_id;
+        self.validate_placement(Some(placement_index), &placement)?;
+        self.timeline_mut().arrangement[placement_index] = placement;
+        Ok(clip_name)
     }
 
     pub fn delete_selected_placement(&mut self) -> bool {
@@ -1979,6 +2573,165 @@ impl ChromaticBulgeGridEditorDraft {
             Some(index.min(self.timeline().arrangement.len() - 1))
         };
         true
+    }
+
+    fn row_summary(&self, lane: LaneId) -> RowSummary {
+        let Some(clip) = self.selected_clip() else {
+            return RowSummary {
+                mode_label: "off".to_string(),
+                summary: "no clip".to_string(),
+            };
+        };
+        let lane_id = lane.to_lane_id();
+        let Some(authoring) = self.clip_authoring_row(lane_id) else {
+            return RowSummary {
+                mode_label: "off".to_string(),
+                summary: "disabled".to_string(),
+            };
+        };
+        match &authoring.mode {
+            ClipLaneAuthoringMode::Custom => RowSummary {
+                mode_label: "custom".to_string(),
+                summary: format!("{} keys", if lane.is_color() { color_lane(&clip.lanes, lane).len() } else { float_lane(&clip.lanes, lane).len() }),
+            },
+            ClipLaneAuthoringMode::Shape(shape) => {
+                let summary = if lane.is_color() {
+                    format!(
+                        "{} rgb [{:.2},{:.2},{:.2}] w {:.2} off {:.2}",
+                        clip_shape_label(shape.shape),
+                        shape.target_color.unwrap_or([0.0, 0.0, 0.0])[0],
+                        shape.target_color.unwrap_or([0.0, 0.0, 0.0])[1],
+                        shape.target_color.unwrap_or([0.0, 0.0, 0.0])[2],
+                        shape.width_beats,
+                        shape.offset_beats
+                    )
+                } else {
+                    format!(
+                        "{} depth {:+.2} w {:.2} off {:.2}",
+                        clip_shape_label(shape.shape),
+                        shape.depth.unwrap_or(0.0),
+                        shape.width_beats,
+                        shape.offset_beats
+                    )
+                };
+                RowSummary {
+                    mode_label: "shape".to_string(),
+                    summary,
+                }
+            }
+        }
+    }
+
+    fn row_editor_dialog(&self, lane: LaneId) -> RowEditorDialog {
+        let lane_id = lane.to_lane_id();
+        let default = default_shape_authoring_for_lane(lane_id);
+        if let Some(row) = self.clip_authoring_row(lane_id) {
+            match &row.mode {
+                ClipLaneAuthoringMode::Shape(shape) => RowEditorDialog {
+                    lane,
+                    mode: RowDialogMode::Shape,
+                    field_index: 0,
+                    shape: shape.shape,
+                    depth: shape.depth.unwrap_or(default.depth.unwrap_or(0.25)),
+                    target_color: shape.target_color.unwrap_or(default.target_color.unwrap_or([1.0, 0.4, 0.2])),
+                    offset_beats: shape.offset_beats,
+                    width_beats: shape.width_beats,
+                    ease: shape.ease,
+                },
+                ClipLaneAuthoringMode::Custom => RowEditorDialog {
+                    lane,
+                    mode: RowDialogMode::Custom,
+                    field_index: 0,
+                    shape: default.shape,
+                    depth: default.depth.unwrap_or(0.25),
+                    target_color: default.target_color.unwrap_or([1.0, 0.4, 0.2]),
+                    offset_beats: default.offset_beats,
+                    width_beats: default.width_beats,
+                    ease: default.ease,
+                },
+            }
+        } else {
+            RowEditorDialog {
+                lane,
+                mode: RowDialogMode::Shape,
+                field_index: 0,
+                shape: default.shape,
+                depth: default.depth.unwrap_or(0.25),
+                target_color: default.target_color.unwrap_or([1.0, 0.4, 0.2]),
+                offset_beats: default.offset_beats,
+                width_beats: default.width_beats,
+                ease: default.ease,
+            }
+        }
+    }
+
+    pub fn toggle_row_enabled(&mut self, lane: LaneId) {
+        let lane_id = lane.to_lane_id();
+        let Some(clip) = self.selected_clip_mut() else {
+            return;
+        };
+        let authoring = clip
+            .authoring
+            .get_or_insert_with(|| ChromaticBulgeGridClipAuthoring { lanes: Vec::new() });
+        if let Some(index) = authoring.lanes.iter().position(|row| row.lane == lane_id) {
+            authoring.lanes.remove(index);
+        } else {
+            authoring.lanes.push(ClipLaneAuthoring {
+                lane: lane_id,
+                mode: ClipLaneAuthoringMode::Shape(default_shape_authoring_for_lane(lane_id)),
+            });
+        }
+        self.recompile_selected_clip();
+    }
+
+    pub fn enter_custom_mode(&mut self, lane: LaneId) {
+        let lane_id = lane.to_lane_id();
+        let Some(clip) = self.selected_clip_mut() else {
+            return;
+        };
+        let authoring = clip
+            .authoring
+            .get_or_insert_with(|| ChromaticBulgeGridClipAuthoring { lanes: Vec::new() });
+        if let Some(row) = authoring.lanes.iter_mut().find(|row| row.lane == lane_id) {
+            row.mode = ClipLaneAuthoringMode::Custom;
+        } else {
+            authoring.lanes.push(ClipLaneAuthoring {
+                lane: lane_id,
+                mode: ClipLaneAuthoringMode::Custom,
+            });
+        }
+    }
+
+    fn apply_row_dialog(&mut self, dialog: RowEditorDialog) {
+        let lane_id = dialog.lane.to_lane_id();
+        let Some(clip) = self.selected_clip_mut() else {
+            return;
+        };
+        let authoring = clip
+            .authoring
+            .get_or_insert_with(|| ChromaticBulgeGridClipAuthoring { lanes: Vec::new() });
+        let row = if let Some(row) = authoring.lanes.iter_mut().find(|row| row.lane == lane_id) {
+            row
+        } else {
+            authoring.lanes.push(ClipLaneAuthoring {
+                lane: lane_id,
+                mode: ClipLaneAuthoringMode::Custom,
+            });
+            authoring.lanes.last_mut().unwrap()
+        };
+        row.mode = if dialog.mode == RowDialogMode::Custom {
+            ClipLaneAuthoringMode::Custom
+        } else {
+            ClipLaneAuthoringMode::Shape(ClipShapeAuthoring {
+                shape: dialog.shape,
+                depth: (!dialog.lane.is_color()).then_some(dialog.depth),
+                target_color: dialog.lane.is_color().then_some(dialog.target_color),
+                offset_beats: dialog.offset_beats,
+                width_beats: dialog.width_beats,
+                ease: dialog.ease,
+            })
+        };
+        self.recompile_selected_clip();
     }
 
     pub fn live_local_playback_beat(&self, playback: PlaybackClock) -> Option<f32> {
@@ -2273,12 +3026,43 @@ impl ChromaticBulgeGridEditorDraft {
             return Err("no selected clip".to_string());
         };
         let old = self.timeline().clips[index].length_beats;
+        let old_lanes = self.timeline().clips[index].lanes.clone();
         self.timeline_mut().clips[index].length_beats = value;
+        if let Some(authoring) = self.timeline().clips[index].authoring.clone() {
+            let base = self.base_state();
+            self.timeline_mut().clips[index].lanes = compile_authoring_lanes(
+                base,
+                value,
+                &authoring,
+                &old_lanes,
+            );
+        }
         if let Some(error) = self.validate_current_timeline() {
             self.timeline_mut().clips[index].length_beats = old;
+            self.timeline_mut().clips[index].lanes = old_lanes;
             return Err(error);
         }
         Ok(())
+    }
+
+    fn clip_authoring_row(&self, lane: ChromaticBulgeGridLaneId) -> Option<&ClipLaneAuthoring> {
+        self.selected_clip()?
+            .authoring
+            .as_ref()?
+            .lanes
+            .iter()
+            .find(|row| row.lane == lane)
+    }
+
+    fn recompile_selected_clip(&mut self) {
+        let base = self.base_state();
+        if let Some(clip) = self.selected_clip_mut() {
+            if let Some(authoring) = clip.authoring.clone() {
+                let existing = clip.lanes.clone();
+                clip.lanes =
+                    compile_authoring_lanes(base, clip.length_beats, &authoring, &existing);
+            }
+        }
     }
 
     fn placement_index_at_beat(&self, beat: f32) -> Option<usize> {
@@ -2314,7 +3098,12 @@ impl ChromaticBulgeGridEditorDraft {
             };
             let existing_end = existing.end_beat(existing_clip);
             if placement.start_beat < existing_end - 0.0001 && existing.start_beat < end - 0.0001 {
-                return Err("placement would overlap existing arrangement".to_string());
+                if placement.track == existing.track {
+                    return Err("placement would overlap existing track".to_string());
+                }
+                if !clip.authored_lanes().is_disjoint(&existing_clip.authored_lanes()) {
+                    return Err("placement would overlap another clip on the same parameter".to_string());
+                }
             }
         }
         Ok(())
@@ -2336,13 +3125,26 @@ impl ChromaticBulgeGridEditorDraft {
             .iter()
             .filter_map(|placement| {
                 let clip = timeline.clip_by_id(&placement.clip_id)?;
-                Some((placement.start_beat, placement.end_beat(clip)))
+                Some((
+                    placement.start_beat,
+                    placement.end_beat(clip),
+                    placement.track,
+                    clip.authored_lanes(),
+                ))
             })
             .collect::<Vec<_>>();
-        spans.sort_by(|left, right| left.0.total_cmp(&right.0));
-        for window in spans.windows(2) {
-            if window[0].1 > window[1].0 + 0.0001 {
-                return Some("clip length change would create overlapping placements".to_string());
+        spans.sort_by(|left, right| left.0.total_cmp(&right.0).then(left.2.cmp(&right.2)));
+        for index in 0..spans.len() {
+            for next in spans.iter().skip(index + 1) {
+                if next.0 >= spans[index].1 - 0.0001 {
+                    break;
+                }
+                if spans[index].2 == next.2 {
+                    return Some("clip length change would create overlapping placements".to_string());
+                }
+                if !spans[index].3.is_disjoint(&next.3) {
+                    return Some("clip length change would overlap another clip on the same parameter".to_string());
+                }
             }
         }
         None
@@ -2521,6 +3323,75 @@ impl LaneId {
     fn is_color(self) -> bool {
         matches!(self, Self::ColdColor | Self::HotColor)
     }
+
+    fn to_lane_id(self) -> ChromaticBulgeGridLaneId {
+        match self {
+            Self::MotionRate => ChromaticBulgeGridLaneId::MotionRate,
+            Self::LatticeDensity => ChromaticBulgeGridLaneId::LatticeDensity,
+            Self::CircleRadius => ChromaticBulgeGridLaneId::CircleRadius,
+            Self::CircleFalloffStart => ChromaticBulgeGridLaneId::CircleFalloffStart,
+            Self::CircleFalloffEnd => ChromaticBulgeGridLaneId::CircleFalloffEnd,
+            Self::BulgeAmount => ChromaticBulgeGridLaneId::BulgeAmount,
+            Self::RimGuard => ChromaticBulgeGridLaneId::RimGuard,
+            Self::RimExponent => ChromaticBulgeGridLaneId::RimExponent,
+            Self::RimWarp => ChromaticBulgeGridLaneId::RimWarp,
+            Self::SpacingMaxPx => ChromaticBulgeGridLaneId::SpacingMaxPx,
+            Self::SpacingMinPx => ChromaticBulgeGridLaneId::SpacingMinPx,
+            Self::DotSize => ChromaticBulgeGridLaneId::DotSize,
+            Self::OuterDotScale => ChromaticBulgeGridLaneId::OuterDotScale,
+            Self::EdgeSoftness => ChromaticBulgeGridLaneId::EdgeSoftness,
+            Self::ChromaticAberration => ChromaticBulgeGridLaneId::ChromaticAberration,
+            Self::ScrollBase => ChromaticBulgeGridLaneId::ScrollBase,
+            Self::ScrollMotionScale => ChromaticBulgeGridLaneId::ScrollMotionScale,
+            Self::ScrollMotionFloor => ChromaticBulgeGridLaneId::ScrollMotionFloor,
+            Self::ScrollMotionCeiling => ChromaticBulgeGridLaneId::ScrollMotionCeiling,
+            Self::ColdColor => ChromaticBulgeGridLaneId::ColdColor,
+            Self::HotColor => ChromaticBulgeGridLaneId::HotColor,
+            Self::ColorCycleRate => ChromaticBulgeGridLaneId::ColorCycleRate,
+            Self::InnerAlpha => ChromaticBulgeGridLaneId::InnerAlpha,
+        }
+    }
+}
+
+impl ClipLengthPreset {
+    fn label(self) -> &'static str {
+        match self {
+            Self::OneBeat => "1 beat",
+            Self::TwoBeats => "2 beats",
+            Self::OneBar => "1 bar",
+            Self::TwoBars => "2 bars",
+        }
+    }
+
+    fn length_beats(self, beats_per_measure: u32) -> f32 {
+        let bar = beats_per_measure.max(1) as f32;
+        match self {
+            Self::OneBeat => 1.0,
+            Self::TwoBeats => 2.0,
+            Self::OneBar => bar,
+            Self::TwoBars => bar * 2.0,
+        }
+    }
+
+    fn next(self) -> Self {
+        match self {
+            Self::OneBeat => Self::TwoBeats,
+            Self::TwoBeats => Self::OneBar,
+            Self::OneBar => Self::TwoBars,
+            Self::TwoBars => Self::OneBeat,
+        }
+    }
+}
+
+impl ClipShapeEase {
+    fn next(self) -> Self {
+        match self {
+            Self::Hold => Self::Linear,
+            Self::Linear => Self::EaseOut,
+            Self::EaseOut => Self::EaseInOut,
+            Self::EaseInOut => Self::Hold,
+        }
+    }
 }
 
 impl InspectorField {
@@ -2587,7 +3458,7 @@ impl EditorFocusArea {
             Self::StateParams => "state",
             Self::ClipLibrary => "library",
             Self::Arrangement => "arrangement",
-            Self::ClipLanes => "lanes",
+            Self::ClipRows => "rows",
             Self::ClipGraph => "graph",
             Self::ClipInspector => "inspector",
             Self::Export => "export",
@@ -2640,6 +3511,7 @@ fn default_timeline() -> ChromaticBulgeGridClipTimeline {
             name: "Clip 1".to_string(),
             length_beats: 4.0,
             color: default_clip_color(1),
+            authoring: Some(ChromaticBulgeGridClipAuthoring { lanes: Vec::new() }),
             lanes: ChromaticBulgeGridAutomationLanes::default(),
         }],
         arrangement: Vec::new(),
@@ -2661,11 +3533,12 @@ fn default_clip_color(seed: usize) -> [f32; 3] {
 fn next_focus_area(tab: EditorTab, current: EditorFocusArea) -> EditorFocusArea {
     match tab {
         EditorTab::State => EditorFocusArea::StateParams,
-        EditorTab::Clips => match current {
+        EditorTab::Song => match current {
             EditorFocusArea::ClipLibrary => EditorFocusArea::Arrangement,
-            EditorFocusArea::Arrangement => EditorFocusArea::ClipLanes,
-            EditorFocusArea::ClipLanes => EditorFocusArea::ClipGraph,
+            EditorFocusArea::Arrangement => EditorFocusArea::ClipRows,
+            EditorFocusArea::ClipRows => EditorFocusArea::ClipLibrary,
             EditorFocusArea::ClipGraph => EditorFocusArea::ClipInspector,
+            EditorFocusArea::ClipInspector => EditorFocusArea::ClipRows,
             _ => EditorFocusArea::ClipLibrary,
         },
         EditorTab::Export => EditorFocusArea::Export,
@@ -2838,35 +3711,7 @@ fn build_arrangement_grid(
     }
     playhead_row[to_index(current_beat.min(total_beats))] = '^';
 
-    let selected_index = draft.clip_editor.selected_placement_index.0;
-    let mut spans = Vec::<Span<'static>>::new();
-    let mut cursor = 0usize;
-    for (index, placement) in timeline.arrangement.iter().enumerate() {
-        let Some(clip) = timeline.clip_by_id(&placement.clip_id) else {
-            continue;
-        };
-        let start = to_index(placement.start_beat);
-        let end = to_index(placement.end_beat(clip));
-        if start > cursor {
-            spans.push(Span::raw(" ".repeat(start - cursor)));
-        }
-        let cells = end.saturating_sub(start).max(1);
-        let label = if cells >= clip.name.len() + 2 {
-            clip.name.clone()
-        } else {
-            clip_initials(&clip.name)
-        };
-        spans.push(Span::styled(
-            fill_label(&label, cells),
-            placement_style(clip.color, Some(index) == selected_index),
-        ));
-        cursor = start + cells;
-    }
-    if cursor < width {
-        spans.push(Span::raw(" ".repeat(width - cursor)));
-    }
-
-    vec![
+    let mut lines = vec![
         Line::from(format!(
             "0{:>width$}",
             format!("{:.0} beats", total_beats),
@@ -2874,8 +3719,48 @@ fn build_arrangement_grid(
         )),
         Line::from(measure_row.into_iter().collect::<String>()),
         Line::from(playhead_row.into_iter().collect::<String>()),
-        Line::from(spans),
-    ]
+    ];
+
+    let selected_index = draft.clip_editor.selected_placement_index.0;
+    for track in 0..4u8 {
+        let mut spans = vec![Span::styled(
+            format!("{:<8}", track_label(track)),
+            Style::default().fg(DIM),
+        )];
+        let mut cursor = 0usize;
+        for (index, placement) in timeline
+            .arrangement
+            .iter()
+            .enumerate()
+            .filter(|(_, placement)| placement.track == track)
+        {
+            let Some(clip) = timeline.clip_by_id(&placement.clip_id) else {
+                continue;
+            };
+            let start = to_index(placement.start_beat);
+            let end = to_index(placement.end_beat(clip));
+            if start > cursor {
+                spans.push(Span::raw(" ".repeat(start - cursor)));
+            }
+            let cells = end.saturating_sub(start).max(1);
+            let label = if cells >= clip.name.len() + 2 {
+                clip.name.clone()
+            } else {
+                clip_initials(&clip.name)
+            };
+            spans.push(Span::styled(
+                fill_label(&label, cells),
+                placement_style(clip.color, Some(index) == selected_index),
+            ));
+            cursor = start + cells;
+        }
+        if cursor < width {
+            spans.push(Span::raw(" ".repeat(width - cursor)));
+        }
+        lines.push(Line::from(spans));
+    }
+
+    lines
 }
 
 fn build_clip_preview(clip: &ChromaticBulgeGridClip) -> String {
@@ -3276,6 +4161,124 @@ fn clip_initials(name: &str) -> String {
     }
 }
 
+fn track_label(track: u8) -> &'static str {
+    match track.min(3) {
+        0 => "Track A",
+        1 => "Track B",
+        2 => "Track C",
+        _ => "Track D",
+    }
+}
+
+fn clip_shape_label(shape: ClipShape) -> &'static str {
+    match shape {
+        ClipShape::Pulse => "pulse",
+        ClipShape::Rise => "rise",
+        ClipShape::Fall => "fall",
+        ClipShape::Triangle => "triangle",
+        ClipShape::Stutter => "stutter",
+        ClipShape::Flash => "flash",
+        ClipShape::Fade => "fade",
+    }
+}
+
+fn clip_shape_ease_label(ease: ClipShapeEase) -> &'static str {
+    match ease {
+        ClipShapeEase::Hold => "hold",
+        ClipShapeEase::Linear => "linear",
+        ClipShapeEase::EaseOut => "ease_out",
+        ClipShapeEase::EaseInOut => "ease_in_out",
+    }
+}
+
+fn cycle_clip_shape(shape: ClipShape, forward: bool, color_lane: bool) -> ClipShape {
+    let all = if color_lane {
+        &[ClipShape::Flash, ClipShape::Fade, ClipShape::Pulse][..]
+    } else {
+        &[
+            ClipShape::Pulse,
+            ClipShape::Rise,
+            ClipShape::Fall,
+            ClipShape::Triangle,
+            ClipShape::Stutter,
+        ][..]
+    };
+    let index = all.iter().position(|candidate| *candidate == shape).unwrap_or(0);
+    let next = if forward {
+        (index + 1) % all.len()
+    } else {
+        (index + all.len() - 1) % all.len()
+    };
+    all[next]
+}
+
+fn field_max_for_lane(lane: LaneId) -> usize {
+    if lane.is_color() { 7 } else { 5 }
+}
+
+fn default_shape_authoring_for_lane(lane: ChromaticBulgeGridLaneId) -> ClipShapeAuthoring {
+    ClipShapeAuthoring {
+        shape: if lane.is_color() {
+            ClipShape::Flash
+        } else {
+            ClipShape::Pulse
+        },
+        depth: (!lane.is_color()).then_some(default_depth_for_lane(lane)),
+        target_color: lane.is_color().then_some(default_color_for_lane(lane)),
+        offset_beats: 0.0,
+        width_beats: if lane.is_color() { 0.25 } else { 0.5 },
+        ease: if lane.is_color() {
+            ClipShapeEase::Linear
+        } else {
+            ClipShapeEase::EaseOut
+        },
+    }
+}
+
+fn default_depth_for_lane(lane: ChromaticBulgeGridLaneId) -> f32 {
+    match lane {
+        ChromaticBulgeGridLaneId::CircleRadius => 0.3,
+        ChromaticBulgeGridLaneId::BulgeAmount => 0.4,
+        ChromaticBulgeGridLaneId::ChromaticAberration => 0.2,
+        ChromaticBulgeGridLaneId::ScrollBase => 120.0,
+        ChromaticBulgeGridLaneId::ColorCycleRate => 0.5,
+        _ => 0.25,
+    }
+}
+
+fn default_color_for_lane(lane: ChromaticBulgeGridLaneId) -> [f32; 3] {
+    match lane {
+        ChromaticBulgeGridLaneId::ColdColor => [0.2, 0.5, 1.0],
+        ChromaticBulgeGridLaneId::HotColor => [1.0, 0.4, 0.2],
+        _ => [1.0, 1.0, 1.0],
+    }
+}
+
+fn bars_to_repeats(bars: u32, clip_length: f32, beats_per_measure: u32) -> u32 {
+    let total_beats = bars.max(1) as f32 * beats_per_measure.max(1) as f32;
+    (total_beats / clip_length.max(0.25)).round().max(1.0) as u32
+}
+
+fn repeats_to_bars(repeats: u32, clip_length: f32, beats_per_measure: u32) -> u32 {
+    let total_beats = repeats.max(1) as f32 * clip_length.max(0.25);
+    (total_beats / beats_per_measure.max(1) as f32).round().max(1.0) as u32
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+    let vertical = Layout::vertical([
+        Constraint::Percentage((100 - percent_y) / 2),
+        Constraint::Percentage(percent_y),
+        Constraint::Percentage((100 - percent_y) / 2),
+    ])
+    .split(area);
+    Layout::horizontal([
+        Constraint::Percentage((100 - percent_x) / 2),
+        Constraint::Percentage(percent_x),
+        Constraint::Percentage((100 - percent_x) / 2),
+    ])
+    .split(vertical[1])[1]
+}
+
 fn sanitize_clip_id(seed: &str) -> String {
     let mut output = seed
         .chars()
@@ -3383,7 +4386,8 @@ mod tests {
     };
     use crate::archive::{
         legacy_automation_to_timeline, ChromaticBulgeGridAutomation,
-        ChromaticBulgeGridAutomationLanes, FloatKeyframe, InterpolationMode, TrackVisualizerConfig,
+        ChromaticBulgeGridAutomationLanes, ChromaticBulgeGridLaneId, ClipLaneAuthoringMode,
+        ClipShape, FloatKeyframe, InterpolationMode, TrackVisualizerConfig,
     };
 
     #[test]
@@ -3450,10 +4454,11 @@ mod tests {
     }
 
     #[test]
-    fn adding_placement_uses_current_playhead_beat() {
+    fn adding_placement_uses_explicit_track_and_beat() {
         let mut draft = seeded_draft();
-        draft.add_placement_at_playhead(12.0).expect("placement");
+        draft.add_placement(2, 12.0, 1).expect("placement");
         assert_eq!(draft.timeline().arrangement[0].start_beat, 12.0);
+        assert_eq!(draft.timeline().arrangement[0].track, 2);
     }
 
     #[test]
@@ -3463,11 +4468,13 @@ mod tests {
             super::ClipPlacement {
                 clip_id: "clip_1".to_string(),
                 start_beat: 0.0,
+                track: 0,
                 repeats: 1,
             },
             super::ClipPlacement {
                 clip_id: "clip_1".to_string(),
                 start_beat: 4.0,
+                track: 0,
                 repeats: 1,
             },
         ];
@@ -3485,6 +4492,7 @@ mod tests {
         draft.timeline_mut().arrangement.push(super::ClipPlacement {
             clip_id: "clip_1".to_string(),
             start_beat: 0.0,
+            track: 0,
             repeats: 1,
         });
         let error = draft
@@ -3508,6 +4516,32 @@ mod tests {
         let json = draft.export_json().expect("json");
         assert!(json.contains("\"timeline\""));
         assert!(!json.contains("\"automation\""));
+    }
+
+    #[test]
+    fn toggling_row_enabled_creates_authored_row() {
+        let mut draft = seeded_draft();
+        draft.toggle_row_enabled(LaneId::CircleRadius);
+        let clip = draft.selected_clip().expect("selected clip");
+        let row = clip
+            .authoring
+            .as_ref()
+            .and_then(|authoring| authoring.lanes.iter().find(|row| row.lane == ChromaticBulgeGridLaneId::CircleRadius))
+            .expect("row should exist");
+        assert!(matches!(row.mode, ClipLaneAuthoringMode::Shape(_)));
+    }
+
+    #[test]
+    fn applying_row_dialog_populates_compiled_lanes() {
+        let mut draft = seeded_draft();
+        let mut dialog = draft.row_editor_dialog(LaneId::CircleRadius);
+        dialog.shape = ClipShape::Pulse;
+        dialog.depth = 0.3;
+        dialog.width_beats = 0.25;
+        draft.apply_row_dialog(dialog);
+        let clip = draft.selected_clip().expect("selected clip");
+        assert!(clip.lanes.automated_lane_count() > 0);
+        assert!(!clip.lanes.circle_radius.is_empty());
     }
 
     fn seeded_draft() -> ChromaticBulgeGridEditorDraft {

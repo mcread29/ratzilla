@@ -25,6 +25,7 @@ mod state;
 mod terminal_state;
 mod track_visualizer;
 mod visualizer_editor;
+mod visualizer_sequence;
 
 use app::App;
 use overlay_state::OverlayRenderState;
