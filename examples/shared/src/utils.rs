@@ -1,71 +1,40 @@
-use crate::backend::BackendType;
 use wasm_bindgen::JsValue;
 
-/// Inject HTML footer with backend switching links
-pub(crate) fn inject_backend_footer(current_backend: BackendType) -> Result<(), JsValue> {
+/// Inject a fixed FPS widget above the app in the top-right corner.
+pub(crate) fn inject_fps_widget() -> Result<(), JsValue> {
     let window = web_sys::window().ok_or("No window")?;
     let document = window.document().ok_or("No document")?;
 
-    // Remove existing footer if present
-    if let Some(existing) = document.get_element_by_id("ratzilla-backend-footer") {
+    // Remove an existing widget before recreating it.
+    if let Some(existing) = document.get_element_by_id("ratzilla-fps-widget") {
         existing.remove();
     }
 
-    // Create footer element
-    let footer = document.create_element("div")?;
-    footer.set_id("ratzilla-backend-footer");
+    let widget = document.create_element("div")?;
+    widget.set_id("ratzilla-fps-widget");
 
-    // Set footer styles
-    footer.set_attribute(
+    widget.set_attribute(
         "style",
-        "position: fixed; bottom: 0; left: 0; right: 0; \
-         background: rgba(0,0,0,0.8); color: white; \
-         padding: 8px 16px; font-family: monospace; font-size: 12px; \
-         display: flex; justify-content: center; gap: 16px; \
-         border-top: 1px solid #333; z-index: 1000;",
+        "position: fixed; top: 12px; right: 12px; \
+         display: flex; align-items: baseline; gap: 8px; \
+         padding: 8px 12px; border-radius: 10px; \
+         background: rgba(15, 23, 42, 0.82); color: #e2e8f0; \
+         border: 1px solid rgba(148, 163, 184, 0.28); \
+         box-shadow: 0 10px 30px rgba(15, 23, 42, 0.35); \
+         backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); \
+         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \
+         'Liberation Mono', 'Courier New', monospace; \
+         font-size: 12px; line-height: 1; z-index: 2147483647; \
+         pointer-events: none;",
     )?;
 
-    // Get current URL without backend param - use relative URL to avoid protocol issues
-    let location = window.location();
-    let base_url = location.pathname().unwrap_or_default();
-
-    let backends = [BackendType::Dom, BackendType::Canvas, BackendType::WebGl2];
-    let mut links = Vec::new();
-
-    for backend in backends {
-        let is_current = backend == current_backend;
-        let style = if is_current {
-            "color: #4ade80; font-weight: bold; text-decoration: none;"
-        } else {
-            "color: #94a3b8; text-decoration: none; cursor: pointer;"
-        };
-
-        let link = if is_current {
-            format!("<span style=\"{}\">● {backend}</span>", style,)
-        } else {
-            format!(
-                "<a href=\"{}?backend={}\" style=\"{}\">{backend}</a>",
-                base_url,
-                backend.as_str(),
-                style,
-            )
-        };
-
-        links.push(link);
-    }
-
-    let footer_html = format!(
-        "<span style=\"color: #64748b;\">Backend:</span> {} | \
-         <span style=\"color: #64748b;\">FPS:</span> \
-         <span id=\"ratzilla-fps\" style=\"color: #4ade80; font-weight: bold;\">--</span>",
-        links.join(" | ")
+    widget.set_inner_html(
+        "<span style=\"color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em;\">FPS</span> \
+         <span id=\"ratzilla-fps\" style=\"color: #4ade80; font-weight: 700; font-size: 14px;\">--</span>",
     );
 
-    footer.set_inner_html(&footer_html);
-
-    // Append to body
     let body = document.body().ok_or("No body")?;
-    body.append_child(&footer)?;
+    body.append_child(&widget)?;
 
     Ok(())
 }

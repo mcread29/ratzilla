@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 include!(concat!(env!("OUT_DIR"), "/embedded_archive.rs"));
@@ -117,21 +117,23 @@ pub struct MediaPage {
     pub corruption_reason: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct AudioArtifact {
     pub path: String,
     pub title: String,
     pub duration_hint: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct TrackVisualizerConfig {
     pub mode: TrackVisualizerMode,
     #[serde(default)]
     pub params: TrackVisualizerParams,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub automation: Option<ChromaticBulgeGridAutomation>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum TrackVisualizerMode {
     DiplomaticSignalBloom,
@@ -140,7 +142,7 @@ pub enum TrackVisualizerMode {
     ChromaticBulgeGrid,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct TrackVisualizerParams {
     #[serde(default = "default_motion_rate")]
     pub motion_rate: f32,
@@ -162,7 +164,7 @@ pub struct TrackVisualizerParams {
     pub shader_states: Option<ChromaticBulgeGridShaderStates>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 pub struct ChromaticBulgeGridShaderStates {
     #[serde(default)]
     pub playing: ChromaticBulgeGridShaderState,
@@ -170,7 +172,7 @@ pub struct ChromaticBulgeGridShaderStates {
     pub idle: ChromaticBulgeGridShaderState,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 pub struct ChromaticBulgeGridShaderState {
     #[serde(default = "default_motion_rate")]
     pub motion_rate: f32,
@@ -218,6 +220,103 @@ pub struct ChromaticBulgeGridShaderState {
     pub color_cycle_rate: f32,
     #[serde(default = "default_inner_alpha")]
     pub inner_alpha: f32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ChromaticBulgeGridAutomation {
+    pub bpm: f32,
+    pub measures: u32,
+    #[serde(default = "default_beats_per_measure")]
+    pub beats_per_measure: u32,
+    #[serde(default)]
+    pub lanes: ChromaticBulgeGridAutomationLanes,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+pub struct ChromaticBulgeGridAutomationLanes {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub motion_rate: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lattice_density: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub circle_radius: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub circle_falloff_start: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub circle_falloff_end: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bulge_amount: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rim_guard: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rim_exponent: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rim_warp: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spacing_max_px: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spacing_min_px: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dot_size: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outer_dot_scale: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub edge_softness: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chromatic_aberration: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scroll_base: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scroll_motion_scale: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scroll_motion_floor: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scroll_motion_ceiling: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cold_color: Vec<ColorKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hot_color: Vec<ColorKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub color_cycle_rate: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inner_alpha: Vec<FloatKeyframe>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+pub struct FloatKeyframe {
+    pub beat: f32,
+    pub value: f32,
+    #[serde(default)]
+    pub interpolation: InterpolationMode,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ColorKeyframe {
+    pub beat: f32,
+    pub value: [f32; 3],
+    #[serde(default)]
+    pub interpolation: InterpolationMode,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum InterpolationMode {
+    #[default]
+    Hold,
+    Linear,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlaybackClock {
+    pub current_time_secs: f32,
+    pub duration_secs: Option<f32>,
+    pub is_playing: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ChromaticBulgeGridResolvedState {
+    pub uniforms: ChromaticBulgeGridShaderState,
+    pub current_beat: f32,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -316,6 +415,7 @@ impl ArchiveLoader {
 
         for (record_file, record_json) in record_jsons {
             let record = parse_json::<RecordDocument>(record_file, record_json)?;
+            validate_record_visualizer(&record)?;
             let category_idx = category_index
                 .get(&record.category_id)
                 .copied()
@@ -553,6 +653,16 @@ impl Default for ChromaticBulgeGridShaderState {
     }
 }
 
+impl Default for PlaybackClock {
+    fn default() -> Self {
+        Self {
+            current_time_secs: 0.0,
+            duration_secs: None,
+            is_playing: false,
+        }
+    }
+}
+
 impl ChromaticBulgeGridShaderState {
     pub fn from_legacy_params(params: &TrackVisualizerParams) -> Self {
         Self {
@@ -561,10 +671,222 @@ impl ChromaticBulgeGridShaderState {
             ..Self::default()
         }
     }
+
+    pub fn clamp(self) -> Self {
+        Self {
+            motion_rate: self.motion_rate.clamp(0.2, 3.0),
+            lattice_density: self.lattice_density.clamp(2.0, 12.0),
+            circle_radius: self.circle_radius.clamp(0.02, 0.95),
+            circle_falloff_start: self.circle_falloff_start.clamp(0.0, 1.0),
+            circle_falloff_end: self.circle_falloff_end.clamp(0.0, 1.2),
+            bulge_amount: self.bulge_amount.clamp(0.0, 1.5),
+            rim_guard: self.rim_guard.clamp(0.01, 2.0),
+            rim_exponent: self.rim_exponent.clamp(0.1, 6.0),
+            rim_warp: self.rim_warp.clamp(0.0, 64.0),
+            spacing_max_px: self.spacing_max_px.clamp(4.0, 64.0),
+            spacing_min_px: self.spacing_min_px.clamp(2.0, 48.0),
+            dot_size: self.dot_size.clamp(0.02, 1.0),
+            outer_dot_scale: self.outer_dot_scale.clamp(0.02, 2.0),
+            edge_softness: self.edge_softness.clamp(0.1, 8.0),
+            chromatic_aberration: self.chromatic_aberration.clamp(0.0, 24.0),
+            scroll_base: self.scroll_base.clamp(0.0, 200.0),
+            scroll_motion_scale: self.scroll_motion_scale.clamp(0.0, 200.0),
+            scroll_motion_floor: self.scroll_motion_floor.clamp(0.0, 4.0),
+            scroll_motion_ceiling: self.scroll_motion_ceiling.clamp(0.0, 8.0),
+            cold_color: clamp_color(self.cold_color),
+            hot_color: clamp_color(self.hot_color),
+            color_cycle_rate: self.color_cycle_rate.clamp(0.0, 6.0),
+            inner_alpha: self.inner_alpha.clamp(0.0, 1.0),
+        }
+    }
+}
+
+impl TrackVisualizerConfig {
+    pub fn normalized_for_export(&self) -> Self {
+        let mut normalized = self.clone();
+        normalized.params = normalized.params.normalized();
+        normalized.automation = normalized
+            .automation
+            .map(|automation| automation.normalized());
+        normalized
+    }
+
+    pub fn resolve_chromatic_bulge_grid(
+        &self,
+        playback: PlaybackClock,
+    ) -> ChromaticBulgeGridResolvedState {
+        let states = self.params.shader_states.unwrap_or_else(|| {
+            let state = ChromaticBulgeGridShaderState::from_legacy_params(&self.params);
+            ChromaticBulgeGridShaderStates {
+                playing: state,
+                idle: state,
+            }
+        });
+        let current_beat = (playback.current_time_secs.max(0.0)
+            * self
+                .automation
+                .as_ref()
+                .map_or(default_bpm(), |automation| automation.bpm.max(0.0)))
+            / 60.0;
+
+        if !playback.is_playing {
+            return ChromaticBulgeGridResolvedState {
+                uniforms: states.idle.clamp(),
+                current_beat,
+            };
+        }
+
+        let mut uniforms = states.playing;
+        if let Some(automation) = &self.automation {
+            uniforms = automation.apply_to_state(uniforms, current_beat);
+        }
+
+        ChromaticBulgeGridResolvedState {
+            uniforms: uniforms.clamp(),
+            current_beat,
+        }
+    }
+}
+
+impl TrackVisualizerParams {
+    fn normalized(&self) -> Self {
+        Self {
+            motion_rate: self.motion_rate,
+            energy_gain: self.energy_gain,
+            bass_gain: self.bass_gain,
+            mid_gain: self.mid_gain,
+            treble_gain: self.treble_gain,
+            ring_count: self.ring_count,
+            particle_count: self.particle_count,
+            lattice_density: self.lattice_density,
+            shader_states: self
+                .shader_states
+                .map(|states| ChromaticBulgeGridShaderStates {
+                    playing: states.playing.clamp(),
+                    idle: states.idle.clamp(),
+                }),
+        }
+    }
+}
+
+impl ChromaticBulgeGridAutomation {
+    pub fn normalized(&self) -> Self {
+        let mut normalized = self.clone();
+        normalized.bpm = normalized.bpm.max(1.0);
+        normalized.measures = normalized.measures.max(1);
+        normalized.beats_per_measure = normalized.beats_per_measure.max(1);
+        normalized.lanes.sort_all();
+        normalized
+    }
+
+    pub fn total_beats(&self) -> f32 {
+        self.measures.max(1) as f32 * self.beats_per_measure.max(1) as f32
+    }
+
+    pub fn duration_secs(&self) -> f32 {
+        self.total_beats() * 60.0 / self.bpm.max(1.0)
+    }
+
+    fn apply_to_state(
+        &self,
+        base: ChromaticBulgeGridShaderState,
+        beat: f32,
+    ) -> ChromaticBulgeGridShaderState {
+        let lanes = &self.normalized().lanes;
+        ChromaticBulgeGridShaderState {
+            motion_rate: sample_float_lane(&lanes.motion_rate, beat, base.motion_rate),
+            lattice_density: sample_float_lane(&lanes.lattice_density, beat, base.lattice_density),
+            circle_radius: sample_float_lane(&lanes.circle_radius, beat, base.circle_radius),
+            circle_falloff_start: sample_float_lane(
+                &lanes.circle_falloff_start,
+                beat,
+                base.circle_falloff_start,
+            ),
+            circle_falloff_end: sample_float_lane(
+                &lanes.circle_falloff_end,
+                beat,
+                base.circle_falloff_end,
+            ),
+            bulge_amount: sample_float_lane(&lanes.bulge_amount, beat, base.bulge_amount),
+            rim_guard: sample_float_lane(&lanes.rim_guard, beat, base.rim_guard),
+            rim_exponent: sample_float_lane(&lanes.rim_exponent, beat, base.rim_exponent),
+            rim_warp: sample_float_lane(&lanes.rim_warp, beat, base.rim_warp),
+            spacing_max_px: sample_float_lane(&lanes.spacing_max_px, beat, base.spacing_max_px),
+            spacing_min_px: sample_float_lane(&lanes.spacing_min_px, beat, base.spacing_min_px),
+            dot_size: sample_float_lane(&lanes.dot_size, beat, base.dot_size),
+            outer_dot_scale: sample_float_lane(&lanes.outer_dot_scale, beat, base.outer_dot_scale),
+            edge_softness: sample_float_lane(&lanes.edge_softness, beat, base.edge_softness),
+            chromatic_aberration: sample_float_lane(
+                &lanes.chromatic_aberration,
+                beat,
+                base.chromatic_aberration,
+            ),
+            scroll_base: sample_float_lane(&lanes.scroll_base, beat, base.scroll_base),
+            scroll_motion_scale: sample_float_lane(
+                &lanes.scroll_motion_scale,
+                beat,
+                base.scroll_motion_scale,
+            ),
+            scroll_motion_floor: sample_float_lane(
+                &lanes.scroll_motion_floor,
+                beat,
+                base.scroll_motion_floor,
+            ),
+            scroll_motion_ceiling: sample_float_lane(
+                &lanes.scroll_motion_ceiling,
+                beat,
+                base.scroll_motion_ceiling,
+            ),
+            cold_color: sample_color_lane(&lanes.cold_color, beat, base.cold_color),
+            hot_color: sample_color_lane(&lanes.hot_color, beat, base.hot_color),
+            color_cycle_rate: sample_float_lane(
+                &lanes.color_cycle_rate,
+                beat,
+                base.color_cycle_rate,
+            ),
+            inner_alpha: sample_float_lane(&lanes.inner_alpha, beat, base.inner_alpha),
+        }
+    }
+}
+
+impl ChromaticBulgeGridAutomationLanes {
+    fn sort_all(&mut self) {
+        sort_float_keyframes(&mut self.motion_rate);
+        sort_float_keyframes(&mut self.lattice_density);
+        sort_float_keyframes(&mut self.circle_radius);
+        sort_float_keyframes(&mut self.circle_falloff_start);
+        sort_float_keyframes(&mut self.circle_falloff_end);
+        sort_float_keyframes(&mut self.bulge_amount);
+        sort_float_keyframes(&mut self.rim_guard);
+        sort_float_keyframes(&mut self.rim_exponent);
+        sort_float_keyframes(&mut self.rim_warp);
+        sort_float_keyframes(&mut self.spacing_max_px);
+        sort_float_keyframes(&mut self.spacing_min_px);
+        sort_float_keyframes(&mut self.dot_size);
+        sort_float_keyframes(&mut self.outer_dot_scale);
+        sort_float_keyframes(&mut self.edge_softness);
+        sort_float_keyframes(&mut self.chromatic_aberration);
+        sort_float_keyframes(&mut self.scroll_base);
+        sort_float_keyframes(&mut self.scroll_motion_scale);
+        sort_float_keyframes(&mut self.scroll_motion_floor);
+        sort_float_keyframes(&mut self.scroll_motion_ceiling);
+        sort_color_keyframes(&mut self.cold_color);
+        sort_color_keyframes(&mut self.hot_color);
+        sort_float_keyframes(&mut self.color_cycle_rate);
+        sort_float_keyframes(&mut self.inner_alpha);
+    }
 }
 
 fn default_motion_rate() -> f32 {
     1.0
+}
+
+fn default_bpm() -> f32 {
+    120.0
+}
+
+fn default_beats_per_measure() -> u32 {
+    4
 }
 
 fn default_energy_gain() -> f32 {
@@ -703,9 +1025,247 @@ fn validate_unique_category_ids(manifest: &ArchiveManifestDoc) -> Result<(), Arc
     Ok(())
 }
 
+fn validate_record_visualizer(record: &RecordDocument) -> Result<(), ArchiveLoadError> {
+    let Some(visualizer) = record.visualizer() else {
+        return Ok(());
+    };
+
+    if let Some(automation) = &visualizer.automation {
+        if visualizer.mode != TrackVisualizerMode::ChromaticBulgeGrid {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {} uses automation on unsupported visualizer mode {}",
+                record.id,
+                visualizer.mode.label()
+            )));
+        }
+        validate_automation(record.id.as_str(), automation)?;
+    }
+
+    Ok(())
+}
+
+fn validate_automation(
+    record_id: &str,
+    automation: &ChromaticBulgeGridAutomation,
+) -> Result<(), ArchiveLoadError> {
+    if !automation.bpm.is_finite() || automation.bpm <= 0.0 {
+        return Err(ArchiveLoadError::Validation(format!(
+            "record {record_id} has invalid automation bpm"
+        )));
+    }
+    if automation.measures == 0 {
+        return Err(ArchiveLoadError::Validation(format!(
+            "record {record_id} has invalid automation measures"
+        )));
+    }
+    if automation.beats_per_measure == 0 {
+        return Err(ArchiveLoadError::Validation(format!(
+            "record {record_id} has invalid automation beats_per_measure"
+        )));
+    }
+
+    validate_float_lane(record_id, "motion_rate", &automation.lanes.motion_rate)?;
+    validate_float_lane(
+        record_id,
+        "lattice_density",
+        &automation.lanes.lattice_density,
+    )?;
+    validate_float_lane(record_id, "circle_radius", &automation.lanes.circle_radius)?;
+    validate_float_lane(
+        record_id,
+        "circle_falloff_start",
+        &automation.lanes.circle_falloff_start,
+    )?;
+    validate_float_lane(
+        record_id,
+        "circle_falloff_end",
+        &automation.lanes.circle_falloff_end,
+    )?;
+    validate_float_lane(record_id, "bulge_amount", &automation.lanes.bulge_amount)?;
+    validate_float_lane(record_id, "rim_guard", &automation.lanes.rim_guard)?;
+    validate_float_lane(record_id, "rim_exponent", &automation.lanes.rim_exponent)?;
+    validate_float_lane(record_id, "rim_warp", &automation.lanes.rim_warp)?;
+    validate_float_lane(
+        record_id,
+        "spacing_max_px",
+        &automation.lanes.spacing_max_px,
+    )?;
+    validate_float_lane(
+        record_id,
+        "spacing_min_px",
+        &automation.lanes.spacing_min_px,
+    )?;
+    validate_float_lane(record_id, "dot_size", &automation.lanes.dot_size)?;
+    validate_float_lane(
+        record_id,
+        "outer_dot_scale",
+        &automation.lanes.outer_dot_scale,
+    )?;
+    validate_float_lane(record_id, "edge_softness", &automation.lanes.edge_softness)?;
+    validate_float_lane(
+        record_id,
+        "chromatic_aberration",
+        &automation.lanes.chromatic_aberration,
+    )?;
+    validate_float_lane(record_id, "scroll_base", &automation.lanes.scroll_base)?;
+    validate_float_lane(
+        record_id,
+        "scroll_motion_scale",
+        &automation.lanes.scroll_motion_scale,
+    )?;
+    validate_float_lane(
+        record_id,
+        "scroll_motion_floor",
+        &automation.lanes.scroll_motion_floor,
+    )?;
+    validate_float_lane(
+        record_id,
+        "scroll_motion_ceiling",
+        &automation.lanes.scroll_motion_ceiling,
+    )?;
+    validate_color_lane(record_id, "cold_color", &automation.lanes.cold_color)?;
+    validate_color_lane(record_id, "hot_color", &automation.lanes.hot_color)?;
+    validate_float_lane(
+        record_id,
+        "color_cycle_rate",
+        &automation.lanes.color_cycle_rate,
+    )?;
+    validate_float_lane(record_id, "inner_alpha", &automation.lanes.inner_alpha)?;
+    Ok(())
+}
+
+fn validate_float_lane(
+    record_id: &str,
+    lane_name: &str,
+    keyframes: &[FloatKeyframe],
+) -> Result<(), ArchiveLoadError> {
+    validate_duplicate_beats(
+        record_id,
+        lane_name,
+        keyframes.iter().map(|keyframe| keyframe.beat),
+    )
+}
+
+fn validate_color_lane(
+    record_id: &str,
+    lane_name: &str,
+    keyframes: &[ColorKeyframe],
+) -> Result<(), ArchiveLoadError> {
+    validate_duplicate_beats(
+        record_id,
+        lane_name,
+        keyframes.iter().map(|keyframe| keyframe.beat),
+    )
+}
+
+fn validate_duplicate_beats(
+    record_id: &str,
+    lane_name: &str,
+    beats: impl Iterator<Item = f32>,
+) -> Result<(), ArchiveLoadError> {
+    let mut unique = Vec::<f32>::new();
+    for beat in beats {
+        if !beat.is_finite() || beat < 0.0 {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} has invalid beat in lane {lane_name}"
+            )));
+        }
+        if unique.iter().any(|seen| (seen - beat).abs() < 0.0001) {
+            return Err(ArchiveLoadError::Validation(format!(
+                "record {record_id} has duplicate beat {beat} in lane {lane_name}"
+            )));
+        }
+        unique.push(beat);
+    }
+    Ok(())
+}
+
+fn sample_float_lane(keyframes: &[FloatKeyframe], beat: f32, base: f32) -> f32 {
+    if keyframes.is_empty() {
+        return base;
+    }
+
+    let clamped_beat = beat.max(0.0);
+    if clamped_beat < keyframes[0].beat {
+        return base;
+    }
+
+    for window in keyframes.windows(2) {
+        let left = window[0];
+        let right = window[1];
+        if clamped_beat < right.beat {
+            return match left.interpolation {
+                InterpolationMode::Hold => left.value,
+                InterpolationMode::Linear => {
+                    let span = (right.beat - left.beat).max(0.0001);
+                    let t = ((clamped_beat - left.beat) / span).clamp(0.0, 1.0);
+                    lerp(left.value, right.value, t)
+                }
+            };
+        }
+    }
+
+    keyframes.last().map_or(base, |keyframe| keyframe.value)
+}
+
+fn sample_color_lane(keyframes: &[ColorKeyframe], beat: f32, base: [f32; 3]) -> [f32; 3] {
+    if keyframes.is_empty() {
+        return base;
+    }
+
+    let clamped_beat = beat.max(0.0);
+    if clamped_beat < keyframes[0].beat {
+        return base;
+    }
+
+    for window in keyframes.windows(2) {
+        let left = window[0];
+        let right = window[1];
+        if clamped_beat < right.beat {
+            return match left.interpolation {
+                InterpolationMode::Hold => left.value,
+                InterpolationMode::Linear => {
+                    let span = (right.beat - left.beat).max(0.0001);
+                    let t = ((clamped_beat - left.beat) / span).clamp(0.0, 1.0);
+                    [
+                        lerp(left.value[0], right.value[0], t),
+                        lerp(left.value[1], right.value[1], t),
+                        lerp(left.value[2], right.value[2], t),
+                    ]
+                }
+            };
+        }
+    }
+
+    keyframes.last().map_or(base, |keyframe| keyframe.value)
+}
+
+fn lerp(start: f32, end: f32, t: f32) -> f32 {
+    start + (end - start) * t
+}
+
+fn clamp_color(value: [f32; 3]) -> [f32; 3] {
+    [
+        value[0].clamp(0.0, 1.0),
+        value[1].clamp(0.0, 1.0),
+        value[2].clamp(0.0, 1.0),
+    ]
+}
+
+fn sort_float_keyframes(keyframes: &mut [FloatKeyframe]) {
+    keyframes.sort_by(|left, right| left.beat.total_cmp(&right.beat));
+}
+
+fn sort_color_keyframes(keyframes: &mut [ColorKeyframe]) {
+    keyframes.sort_by(|left, right| left.beat.total_cmp(&right.beat));
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{ArchiveLoadError, ArchiveLoader, MediaHealth, TrackVisualizerMode};
+    use super::{
+        ArchiveLoadError, ArchiveLoader, MediaHealth, TrackVisualizerConfig, TrackVisualizerMode,
+        TrackVisualizerParams,
+    };
 
     const MANIFEST: &str = r#"{
       "categories": [
@@ -1041,6 +1601,230 @@ mod tests {
         assert_eq!(states.playing.circle_radius, 0.3);
         assert_eq!(states.idle.motion_rate, 0.25);
         assert_eq!(states.idle.chromatic_aberration, 0.1);
+    }
+
+    #[test]
+    fn chromatic_bulge_grid_automation_parses_when_present() {
+        let record = readable_record_json_with_visualizer(
+            "one",
+            Some("a.mp3"),
+            &[],
+            Some(
+                r#"{
+                    "mode":"chromatic_bulge_grid",
+                    "params":{
+                        "shader_states":{
+                            "playing":{"circle_radius":0.24},
+                            "idle":{"circle_radius":0.18}
+                        }
+                    },
+                    "automation":{
+                        "bpm":132.0,
+                        "measures":64,
+                        "beats_per_measure":4,
+                        "lanes":{
+                            "circle_radius":[
+                                {"beat":0.0,"value":0.24,"interpolation":"hold"},
+                                {"beat":16.0,"value":0.31,"interpolation":"linear"}
+                            ],
+                            "cold_color":[
+                                {"beat":0.0,"value":[1.0,1.0,1.0],"interpolation":"hold"}
+                            ]
+                        }
+                    }
+                }"#,
+            ),
+        );
+        let store = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
+            .expect("archive store");
+        let automation = store
+            .record_by_id("one")
+            .expect("record")
+            .visualizer()
+            .expect("visualizer")
+            .automation
+            .as_ref()
+            .expect("automation");
+
+        assert_eq!(automation.bpm, 132.0);
+        assert_eq!(automation.lanes.circle_radius.len(), 2);
+        assert_eq!(automation.lanes.cold_color.len(), 1);
+    }
+
+    #[test]
+    fn rejects_duplicate_automation_beats_in_same_lane() {
+        let record = readable_record_json_with_visualizer(
+            "one",
+            Some("a.mp3"),
+            &[],
+            Some(
+                r#"{
+                    "mode":"chromatic_bulge_grid",
+                    "automation":{
+                        "bpm":120.0,
+                        "measures":8,
+                        "beats_per_measure":4,
+                        "lanes":{
+                            "circle_radius":[
+                                {"beat":4.0,"value":0.24,"interpolation":"hold"},
+                                {"beat":4.0,"value":0.31,"interpolation":"linear"}
+                            ]
+                        }
+                    }
+                }"#,
+            ),
+        );
+        let error = ArchiveLoader::load_from_strs(MANIFEST, &[("one.json", &record)])
+            .expect_err("duplicate beats should fail");
+
+        assert!(matches!(
+            error,
+            ArchiveLoadError::Validation(message)
+            if message.contains("duplicate beat") && message.contains("circle_radius")
+        ));
+    }
+
+    #[test]
+    fn scalar_sampling_uses_base_before_first_keyframe_and_interpolates() {
+        let config = TrackVisualizerConfig {
+            mode: TrackVisualizerMode::ChromaticBulgeGrid,
+            params: TrackVisualizerParams {
+                shader_states: Some(super::ChromaticBulgeGridShaderStates {
+                    playing: super::ChromaticBulgeGridShaderState {
+                        circle_radius: 0.24,
+                        ..Default::default()
+                    },
+                    idle: Default::default(),
+                }),
+                ..Default::default()
+            },
+            automation: Some(super::ChromaticBulgeGridAutomation {
+                bpm: 120.0,
+                measures: 8,
+                beats_per_measure: 4,
+                lanes: super::ChromaticBulgeGridAutomationLanes {
+                    circle_radius: vec![
+                        super::FloatKeyframe {
+                            beat: 4.0,
+                            value: 0.30,
+                            interpolation: super::InterpolationMode::Linear,
+                        },
+                        super::FloatKeyframe {
+                            beat: 8.0,
+                            value: 0.50,
+                            interpolation: super::InterpolationMode::Linear,
+                        },
+                    ],
+                    ..Default::default()
+                },
+            }),
+        };
+
+        let before = config.resolve_chromatic_bulge_grid(super::PlaybackClock {
+            current_time_secs: 1.0,
+            duration_secs: None,
+            is_playing: true,
+        });
+        let held = config.resolve_chromatic_bulge_grid(super::PlaybackClock {
+            current_time_secs: 2.5,
+            duration_secs: None,
+            is_playing: true,
+        });
+        let interpolated = config.resolve_chromatic_bulge_grid(super::PlaybackClock {
+            current_time_secs: 4.5,
+            duration_secs: None,
+            is_playing: true,
+        });
+
+        assert!((before.uniforms.circle_radius - 0.24).abs() < 0.001);
+        assert!((held.uniforms.circle_radius - 0.35).abs() < 0.001);
+        assert!((interpolated.uniforms.circle_radius - 0.50).abs() < 0.001);
+    }
+
+    #[test]
+    fn color_sampling_interpolates_channel_wise() {
+        let config = TrackVisualizerConfig {
+            mode: TrackVisualizerMode::ChromaticBulgeGrid,
+            params: TrackVisualizerParams {
+                shader_states: Some(super::ChromaticBulgeGridShaderStates {
+                    playing: super::ChromaticBulgeGridShaderState {
+                        cold_color: [0.0, 0.0, 0.0],
+                        ..Default::default()
+                    },
+                    idle: Default::default(),
+                }),
+                ..Default::default()
+            },
+            automation: Some(super::ChromaticBulgeGridAutomation {
+                bpm: 60.0,
+                measures: 8,
+                beats_per_measure: 4,
+                lanes: super::ChromaticBulgeGridAutomationLanes {
+                    cold_color: vec![
+                        super::ColorKeyframe {
+                            beat: 0.0,
+                            value: [0.0, 0.0, 0.0],
+                            interpolation: super::InterpolationMode::Linear,
+                        },
+                        super::ColorKeyframe {
+                            beat: 4.0,
+                            value: [1.0, 0.5, 0.25],
+                            interpolation: super::InterpolationMode::Linear,
+                        },
+                    ],
+                    ..Default::default()
+                },
+            }),
+        };
+
+        let resolved = config.resolve_chromatic_bulge_grid(super::PlaybackClock {
+            current_time_secs: 2.0,
+            duration_secs: None,
+            is_playing: true,
+        });
+
+        assert_eq!(resolved.uniforms.cold_color, [0.5, 0.25, 0.125]);
+    }
+
+    #[test]
+    fn paused_transport_uses_idle_state() {
+        let config = TrackVisualizerConfig {
+            mode: TrackVisualizerMode::ChromaticBulgeGrid,
+            params: TrackVisualizerParams {
+                shader_states: Some(super::ChromaticBulgeGridShaderStates {
+                    playing: super::ChromaticBulgeGridShaderState {
+                        circle_radius: 0.40,
+                        ..Default::default()
+                    },
+                    idle: super::ChromaticBulgeGridShaderState {
+                        circle_radius: 0.18,
+                        ..Default::default()
+                    },
+                }),
+                ..Default::default()
+            },
+            automation: Some(super::ChromaticBulgeGridAutomation {
+                bpm: 120.0,
+                measures: 8,
+                beats_per_measure: 4,
+                lanes: super::ChromaticBulgeGridAutomationLanes {
+                    circle_radius: vec![super::FloatKeyframe {
+                        beat: 0.0,
+                        value: 0.50,
+                        interpolation: super::InterpolationMode::Hold,
+                    }],
+                    ..Default::default()
+                },
+            }),
+        };
+
+        let resolved = config.resolve_chromatic_bulge_grid(super::PlaybackClock {
+            current_time_secs: 10.0,
+            duration_secs: None,
+            is_playing: false,
+        });
+
+        assert!((resolved.uniforms.circle_radius - 0.18).abs() < 0.001);
     }
 
     #[test]

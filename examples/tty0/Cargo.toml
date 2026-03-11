@@ -11,9 +11,11 @@ examples-shared.workspace = true
 tachyonfx.workspace = true
 web-time.workspace = true
 wasm-bindgen.workspace = true
+js-sys.workspace = true
 rand = { workspace = true, features = ["small_rng"] }
-web-sys = { workspace = true, features = ["AnalyserNode", "AudioContext", "AudioContextState", "AudioDestinationNode", "AudioNode", "BaseAudioContext", "CanvasGradient", "HtmlAudioElement", "HtmlMediaElement", "MediaElementAudioSourceNode", "Storage", "Window"] }
+web-sys = { workspace = true, features = ["AnalyserNode", "AudioContext", "AudioContextState", "AudioDestinationNode", "AudioNode", "BaseAudioContext", "Blob", "CanvasGradient", "Clipboard", "Document", "Element", "HtmlAnchorElement", "HtmlAudioElement", "HtmlMediaElement", "Location", "MediaElementAudioSourceNode", "Navigator", "RequestInit", "RequestMode", "Response", "Storage", "Url", "UrlSearchParams", "Window", "console"] }
 thiserror = "2.0.18"
 glow = "0.16"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+wasm-bindgen-futures.workspace = true

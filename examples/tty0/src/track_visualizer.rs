@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    archive::{TrackVisualizerConfig, TrackVisualizerMode, TrackVisualizerParams},
+    archive::{PlaybackClock, TrackVisualizerConfig, TrackVisualizerMode, TrackVisualizerParams},
     panel_shader_visualizer::{PanelShaderRequest, PanelShaderVisualizerLayer},
 };
 use ratzilla::{
@@ -107,9 +107,11 @@ pub fn render_visualizer(
     record_id: &str,
     config: &TrackVisualizerConfig,
     analysis: Option<AudioAnalysisSnapshot>,
+    playback: PlaybackClock,
     viewer_tick: u64,
 ) {
     if is_shader_backed_mode(config.mode) {
+        let resolved = config.resolve_chromatic_bulge_grid(playback);
         frame.render_widget(
             Paragraph::new("").style(Style::default().bg(Color::Black)),
             area,
@@ -118,9 +120,8 @@ pub fn render_visualizer(
             area,
             mode: config.mode,
             record_id: record_id.to_string(),
-            analysis: analysis.unwrap_or_else(|| AudioAnalysisSnapshot::idle(0.0)),
-            viewer_tick,
-            params: config.params.clone(),
+            playback,
+            shader_state: resolved.uniforms,
         });
         return;
     }
@@ -615,7 +616,11 @@ mod tests {
     use crate::archive::{TrackVisualizerConfig, TrackVisualizerMode, TrackVisualizerParams};
 
     fn config(mode: TrackVisualizerMode, params: TrackVisualizerParams) -> TrackVisualizerConfig {
-        TrackVisualizerConfig { mode, params }
+        TrackVisualizerConfig {
+            mode,
+            params,
+            automation: None,
+        }
     }
 
     #[test]

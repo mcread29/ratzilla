@@ -5,6 +5,7 @@ use crate::{
     archive_state::ArchiveState,
     help::{HelpKeyOutcome, HelpOverlay},
     introstate::IntroState,
+    overlay_state::OverlayRenderState,
     panel_shader_visualizer::PanelShaderVisualizerLayer,
     session::SessionModel,
     state::{StateId, StateMachine},
@@ -23,6 +24,7 @@ impl App {
     pub fn new(
         visual_layer: GraphicsCanvasLayer,
         panel_shader_visualizer: PanelShaderVisualizerLayer,
+        overlay_state: OverlayRenderState,
     ) -> Self {
         let archive = Rc::new(
             ArchiveLoader::load_embedded().expect("tty0 embedded archive must load successfully"),
@@ -37,6 +39,7 @@ impl App {
                 Rc::clone(&session),
                 visual_layer,
                 panel_shader_visualizer.clone(),
+                overlay_state,
             ),
         );
         states.insert(StateId::Terminal, TerminalState::create(session));

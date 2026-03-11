@@ -1,4 +1,4 @@
-use crate::{fps, utils::inject_backend_footer};
+use crate::{fps, utils::inject_fps_widget};
 use ratzilla::{
     backend::{canvas::CanvasBackendOptions, dom::DomBackendOptions, webgl2::WebGl2BackendOptions},
     error::Error,
@@ -422,7 +422,7 @@ impl MultiBackendBuilder {
     /// 2. Creates the appropriate backend with the configured options
     /// 3. Wraps the backend with FPS tracking
     /// 4. Creates and returns the terminal with the selected backend
-    /// 5. Injects a backend footer into the DOM (best effort)
+    /// 5. Injects an FPS widget into the DOM (best effort)
     ///
     /// # Returns
     ///
@@ -460,8 +460,8 @@ impl MultiBackendBuilder {
         let fps_backend: FpsTrackingBackend = backend.into();
         let terminal = Terminal::with_options(fps_backend, self.terminal_options)?;
 
-        // Inject footer (ignore errors)
-        let _ = inject_backend_footer(backend_type);
+        // Inject FPS widget (ignore errors)
+        let _ = inject_fps_widget();
 
         Ok(terminal)
     }

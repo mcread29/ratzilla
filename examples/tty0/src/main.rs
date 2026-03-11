@@ -15,6 +15,7 @@ mod audio;
 mod help;
 mod introstate;
 mod logo_text;
+mod overlay_state;
 mod panel_shader_visualizer;
 mod postprocessing;
 mod session;
@@ -23,17 +24,21 @@ mod shaders;
 mod state;
 mod terminal_state;
 mod track_visualizer;
+mod visualizer_editor;
 
 use app::App;
+use overlay_state::OverlayRenderState;
 use panel_shader_visualizer::PanelShaderVisualizerLayer;
 use postprocessing::PostProcessing;
 
 fn main() -> io::Result<()> {
     let visual_layer = GraphicsCanvasLayer::new();
     let panel_shader_visualizer = PanelShaderVisualizerLayer::new();
+    let overlay_state = OverlayRenderState::default();
     let app_state = Rc::new(RefCell::new(App::new(
         visual_layer.clone(),
         panel_shader_visualizer.clone(),
+        overlay_state.clone(),
     )));
 
     let mut terminal = MultiBackendBuilder::with_fallback(BackendType::WebGl2)
@@ -47,10 +52,9 @@ fn main() -> io::Result<()> {
                 .cursor_shape(CursorShape::SteadyUnderScore)
                 .with_render_hook(visual_layer.render_hook())
                 .with_render_hook(panel_shader_visualizer.render_hook())
-                .with_render_hook(PostProcessing::default()),
+                .with_render_hook(PostProcessing::new(overlay_state)),
         )
         .build_terminal()?;
-    remove_backend_footer_in_release();
 
     terminal.on_key_event({
         let app_state = app_state.clone();
@@ -69,13 +73,4 @@ fn main() -> io::Result<()> {
     });
 
     Ok(())
-}
-
-fn remove_backend_footer_in_release() {
-    #[cfg(not(debug_assertions))]
-    if let Some(document) = web_sys::window().and_then(|window| window.document()) {
-        if let Some(footer) = document.get_element_by_id("ratzilla-backend-footer") {
-            footer.remove();
-        }
-    }
 }

@@ -1,9 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{
-    archive::{ChromaticBulgeGridShaderState, TrackVisualizerMode, TrackVisualizerParams},
-    track_visualizer::AudioAnalysisSnapshot,
-};
+use crate::archive::{ChromaticBulgeGridShaderState, PlaybackClock, TrackVisualizerMode};
 use glow::{self, HasContext, PixelUnpackData};
 use ratzilla::{
     backend::hooks::{BackendKind, RenderHook, RenderHookContext, RenderHookHandle},
@@ -159,9 +156,8 @@ pub struct PanelShaderRequest {
     pub area: Rect,
     pub mode: TrackVisualizerMode,
     pub record_id: String,
-    pub analysis: AudioAnalysisSnapshot,
-    pub viewer_tick: u64,
-    pub params: TrackVisualizerParams,
+    pub playback: PlaybackClock,
+    pub shader_state: ChromaticBulgeGridShaderState,
 }
 
 #[derive(Clone, Default)]
@@ -505,7 +501,10 @@ impl PanelShaderRuntime {
                 Some(&resources.scene_uniforms.bulge_amount),
                 uniforms.bulge_amount,
             );
-            gl.uniform_1_f32(Some(&resources.scene_uniforms.rim_guard), uniforms.rim_guard);
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.rim_guard),
+                uniforms.rim_guard,
+            );
             gl.uniform_1_f32(
                 Some(&resources.scene_uniforms.rim_exponent),
                 uniforms.rim_exponent,
@@ -532,7 +531,10 @@ impl PanelShaderRuntime {
                 Some(&resources.scene_uniforms.chromatic_aberration),
                 uniforms.chromatic_aberration,
             );
-            gl.uniform_1_f32(Some(&resources.scene_uniforms.scroll_base), uniforms.scroll_base);
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.scroll_base),
+                uniforms.scroll_base,
+            );
             gl.uniform_1_f32(
                 Some(&resources.scene_uniforms.scroll_motion_scale),
                 uniforms.scroll_motion_scale,
@@ -561,7 +563,10 @@ impl PanelShaderRuntime {
                 Some(&resources.scene_uniforms.color_cycle_rate),
                 uniforms.color_cycle_rate,
             );
-            gl.uniform_1_f32(Some(&resources.scene_uniforms.inner_alpha), uniforms.inner_alpha);
+            gl.uniform_1_f32(
+                Some(&resources.scene_uniforms.inner_alpha),
+                uniforms.inner_alpha,
+            );
             gl.draw_arrays(glow::TRIANGLES, 0, 3);
 
             gl.bind_vertex_array(None);
@@ -661,25 +666,19 @@ impl UniformSet {
         height: i32,
         cell_size: (i32, i32),
     ) -> Self {
-        let shader_state = request
-            .params
-            .shader_states
-            .as_ref()
-            .map(|states| {
-                if request.analysis.is_playing {
-                    states.playing
-                } else {
-                    states.idle
-                }
-            })
-            .unwrap_or_else(|| ChromaticBulgeGridShaderState::from_legacy_params(&request.params));
+        let shader_state = request.shader_state.clamp();
         let spacing_max_px = shader_state.spacing_max_px.clamp(2.0, 64.0);
         let spacing_min_px = shader_state.spacing_min_px.clamp(2.0, spacing_max_px);
-        let lattice_density = resolve_lattice_density(shader_state.lattice_density, cell_size.1, spacing_max_px, spacing_min_px);
+        let lattice_density = resolve_lattice_density(
+            shader_state.lattice_density,
+            cell_size.1,
+            spacing_max_px,
+            spacing_min_px,
+        );
 
         Self {
             resolution: (width as f32, height as f32),
-            time: request.viewer_tick as f32 / 1000.0,
+            time: request.playback.current_time_secs.max(0.0),
             motion_rate: shader_state.motion_rate.clamp(0.2, 3.0),
             lattice_density,
             circle_radius: shader_state.circle_radius.clamp(0.05, 0.48),
@@ -727,8 +726,8 @@ fn resolve_lattice_density(
         return density;
     }
 
-    let normalized = ((spacing_max_px - cell_height) / (spacing_max_px - spacing_min_px))
-        .clamp(0.0, 1.0);
+    let normalized =
+        ((spacing_max_px - cell_height) / (spacing_max_px - spacing_min_px)).clamp(0.0, 1.0);
     (2.0 + normalized * 10.0).clamp(2.0, 12.0)
 }
 
@@ -775,16 +774,8 @@ impl RuntimeResources {
                     "u_chromatic_aberration",
                 )?,
                 scroll_base: uniform_location(gl, scene_program, "u_scroll_base")?,
-                scroll_motion_scale: uniform_location(
-                    gl,
-                    scene_program,
-                    "u_scroll_motion_scale",
-                )?,
-                scroll_motion_floor: uniform_location(
-                    gl,
-                    scene_program,
-                    "u_scroll_motion_floor",
-                )?,
+                scroll_motion_scale: uniform_location(gl, scene_program, "u_scroll_motion_scale")?,
+                scroll_motion_floor: uniform_location(gl, scene_program, "u_scroll_motion_floor")?,
                 scroll_motion_ceiling: uniform_location(
                     gl,
                     scene_program,
@@ -955,13 +946,7 @@ fn gl_error(message: &str) -> Error {
 #[cfg(test)]
 mod tests {
     use super::{PanelShaderRequest, PanelShaderVisualizerLayer, UniformSet};
-    use crate::{
-        archive::{
-            ChromaticBulgeGridShaderState, ChromaticBulgeGridShaderStates, TrackVisualizerMode,
-            TrackVisualizerParams,
-        },
-        track_visualizer::AudioAnalysisSnapshot,
-    };
+    use crate::archive::{ChromaticBulgeGridShaderState, PlaybackClock, TrackVisualizerMode};
     use ratzilla::ratatui::layout::Rect;
 
     fn request() -> PanelShaderRequest {
@@ -969,44 +954,18 @@ mod tests {
             area: Rect::new(2, 3, 20, 10),
             mode: TrackVisualizerMode::ChromaticBulgeGrid,
             record_id: "0x07E2BIG".to_string(),
-            analysis: AudioAnalysisSnapshot {
-                energy: 2.0,
-                bass: 2.0,
-                mid: 2.0,
-                treble: 2.0,
-                peak: 1.4,
-                beat: 1.4,
-                progress_ratio: 1.4,
+            playback: PlaybackClock {
+                current_time_secs: 1.25,
+                duration_secs: Some(99.0),
                 is_playing: true,
             },
-            viewer_tick: 1_250,
-            params: TrackVisualizerParams {
+            shader_state: ChromaticBulgeGridShaderState {
                 motion_rate: 8.0,
-                energy_gain: 8.0,
-                bass_gain: 8.0,
-                mid_gain: 8.0,
-                treble_gain: 8.0,
-                ring_count: 99,
-                particle_count: 99,
-                lattice_density: 99,
-                shader_states: Some(ChromaticBulgeGridShaderStates {
-                    playing: ChromaticBulgeGridShaderState {
-                        motion_rate: 8.0,
-                        lattice_density: 99.0,
-                        circle_radius: 0.31,
-                        chromatic_aberration: 0.63,
-                        hot_color: [1.2, 0.4, 0.1],
-                        ..ChromaticBulgeGridShaderState::default()
-                    },
-                    idle: ChromaticBulgeGridShaderState {
-                        motion_rate: 0.05,
-                        lattice_density: 1.0,
-                        circle_radius: 0.12,
-                        chromatic_aberration: 0.05,
-                        hot_color: [0.2, 0.3, 0.4],
-                        ..ChromaticBulgeGridShaderState::default()
-                    },
-                }),
+                lattice_density: 99.0,
+                circle_radius: 0.31,
+                chromatic_aberration: 0.63,
+                hot_color: [1.2, 0.4, 0.1],
+                ..ChromaticBulgeGridShaderState::default()
             },
         }
     }
@@ -1040,7 +999,7 @@ mod tests {
     }
 
     #[test]
-    fn uniform_set_uses_playing_shader_state() {
+    fn uniform_set_uses_resolved_shader_state() {
         let uniforms = UniformSet::from_request(&request(), 320, 180, (9, 18));
 
         assert_eq!(uniforms.resolution, (320.0, 180.0));
@@ -1053,12 +1012,18 @@ mod tests {
     }
 
     #[test]
-    fn uniform_set_uses_idle_shader_state_when_not_playing() {
+    fn uniform_set_uses_request_playback_clock_for_time() {
         let mut request = request();
-        request.analysis.is_playing = false;
+        request.playback.current_time_secs = 4.5;
+        request.shader_state.motion_rate = 0.05;
+        request.shader_state.lattice_density = 1.0;
+        request.shader_state.circle_radius = 0.12;
+        request.shader_state.chromatic_aberration = 0.05;
+        request.shader_state.hot_color = [0.2, 0.3, 0.4];
 
         let uniforms = UniformSet::from_request(&request, 320, 180, (9, 18));
 
+        assert_eq!(uniforms.time, 4.5);
         assert_eq!(uniforms.motion_rate, 0.2);
         assert_eq!(uniforms.lattice_density, 2.0);
         assert_eq!(uniforms.circle_radius, 0.12);
@@ -1069,9 +1034,8 @@ mod tests {
     #[test]
     fn default_lattice_density_aligns_to_terminal_rows() {
         let mut request = request();
-        request.params.shader_states = None;
-        request.params.motion_rate = 1.0;
-        request.params.lattice_density = 6;
+        request.shader_state.motion_rate = 1.0;
+        request.shader_state.lattice_density = 6.0;
 
         let uniforms = UniformSet::from_request(&request, 320, 180, (9, 18));
 

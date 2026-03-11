@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, rc::Rc};
 
 use crate::{
-    archive::{ArchiveStore, FlatRecordEntry, RecordDocument},
+    archive::{ArchiveStore, FlatRecordEntry, PlaybackClock, RecordDocument},
     audio::{AudioController, PlaybackView},
     session_logs::{SessionLogContext, SessionLogGenerator},
     state::StateId,
@@ -190,8 +190,32 @@ impl SessionModel {
         self.audio.view_for(self.current_record())
     }
 
+    pub fn playback_clock(&self) -> PlaybackClock {
+        self.audio.playback_clock_for(self.current_record())
+    }
+
     pub fn analysis_snapshot(&self) -> Option<AudioAnalysisSnapshot> {
         self.audio.analysis_snapshot_for(self.current_record())
+    }
+
+    pub fn set_playback(&mut self, should_play: bool) {
+        let record = self.current_record().clone();
+        let result = if should_play {
+            self.audio.play(&record)
+        } else {
+            self.audio.pause()
+        };
+
+        self.decryption_status = match (should_play, result) {
+            (true, Ok(())) => "audio transport active // evidence playback running",
+            (false, Ok(())) => "audio transport paused // evidence playback standing by",
+            (_, Err(_)) => "selected media surface is corrupted",
+        };
+    }
+
+    pub fn seek_to_secs(&mut self, secs: f32) {
+        let record = self.current_record().clone();
+        self.audio.seek_to_secs(&record, secs);
     }
 
     pub fn tick(&mut self, elapsed: Duration) {

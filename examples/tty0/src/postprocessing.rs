@@ -6,7 +6,10 @@ use ratzilla::{
     error::Error,
 };
 
-use crate::shaders::{FRAGMENT_SHADER_SOURCE, VERTEX_SHADER_SOURCE};
+use crate::{
+    overlay_state::OverlayRenderState,
+    shaders::{FRAGMENT_SHADER_SOURCE, VERTEX_SHADER_SOURCE},
+};
 
 struct PostProcessingShaderOptions {
     vertex_shader_source: String,
@@ -66,6 +69,7 @@ fn create_shader(
 
 #[derive(Default)]
 pub struct PostProcessing {
+    overlay_state: OverlayRenderState,
     frame_buffer: Option<glow::Framebuffer>,
     texture: Option<glow::Texture>,
     program: Option<glow::Program>,
@@ -89,15 +93,29 @@ const UNIFORM_NAMES: [&str; 9] = [
 ];
 
 impl PostProcessing {
+    pub fn new(overlay_state: OverlayRenderState) -> Self {
+        Self {
+            overlay_state,
+            frame_buffer: None,
+            texture: None,
+            program: None,
+            vao: None,
+            uniform_map: HashMap::new(),
+            width: 0,
+            height: 0,
+            start_time: None,
+        }
+    }
+
     fn ensure_initialized(&mut self, gl: &glow::Context) -> Result<(), Error> {
         if self.program.is_some() {
             return Ok(());
         }
-        *self = Self::new(gl)?;
+        *self = Self::initialize(self.overlay_state.clone(), gl)?;
         Ok(())
     }
 
-    fn new(gl: &glow::Context) -> Result<Self, Error> {
+    fn initialize(overlay_state: OverlayRenderState, gl: &glow::Context) -> Result<Self, Error> {
         let frame_buffer = unsafe {
             gl.create_framebuffer()
                 .map_err(Error::UnableToRetrieveElementById)?
@@ -123,6 +141,7 @@ impl PostProcessing {
         }
 
         Ok(Self {
+            overlay_state,
             frame_buffer: Some(frame_buffer),
             texture: Some(texture),
             program: Some(program),
@@ -341,6 +360,9 @@ impl PostProcessing {
 
 impl RenderHook for PostProcessing {
     fn pre_render(&mut self, context: &RenderHookContext<'_>) -> Result<(), Error> {
+        if self.overlay_state.editor_open() {
+            return Ok(());
+        }
         let gl = context.webgl_context().ok_or_else(|| {
             Error::UnableToRetrieveElementById("WebGL context unavailable".into())
         })?;
@@ -350,6 +372,9 @@ impl RenderHook for PostProcessing {
     }
 
     fn post_render(&mut self, context: &RenderHookContext<'_>) -> Result<(), Error> {
+        if self.overlay_state.editor_open() {
+            return Ok(());
+        }
         let gl = context.webgl_context().ok_or_else(|| {
             Error::UnableToRetrieveElementById("WebGL context unavailable".into())
         })?;

@@ -2,10 +2,12 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     archive::{AccessLevel, MediaHealth, RecordDocument, WaveformMode},
+    overlay_state::OverlayRenderState,
     panel_shader_visualizer::PanelShaderVisualizerLayer,
     session::{LogColorRole, RecordPageTab, SessionModel},
     state::{StateActions, StateId, StateMachineError},
     track_visualizer,
+    visualizer_editor::VisualizerEditorOverlay,
 };
 use ratzilla::event::KeyCode;
 use ratzilla::ratatui::{
@@ -34,7 +36,9 @@ pub struct ArchiveState {
     session: Rc<RefCell<SessionModel>>,
     visual_layer: GraphicsCanvasLayer,
     panel_shader_visualizer: PanelShaderVisualizerLayer,
+    overlay_state: OverlayRenderState,
     visual_runtime: Rc<RefCell<track_visualizer::TrackVisualizerRuntime>>,
+    visualizer_editor: VisualizerEditorOverlay,
     pending_transition: Option<StateId>,
 }
 
@@ -43,14 +47,17 @@ impl ArchiveState {
         session: Rc<RefCell<SessionModel>>,
         visual_layer: GraphicsCanvasLayer,
         panel_shader_visualizer: PanelShaderVisualizerLayer,
+        overlay_state: OverlayRenderState,
     ) -> Self {
         Self {
             session,
             visual_layer,
             panel_shader_visualizer,
+            overlay_state,
             visual_runtime: Rc::new(RefCell::new(
                 track_visualizer::TrackVisualizerRuntime::default(),
             )),
+            visualizer_editor: VisualizerEditorOverlay::new(),
             pending_transition: None,
         }
     }
@@ -59,19 +66,34 @@ impl ArchiveState {
         session: Rc<RefCell<SessionModel>>,
         visual_layer: GraphicsCanvasLayer,
         panel_shader_visualizer: PanelShaderVisualizerLayer,
+        overlay_state: OverlayRenderState,
     ) -> Box<dyn StateActions> {
-        Box::new(Self::new(session, visual_layer, panel_shader_visualizer))
+        Box::new(Self::new(
+            session,
+            visual_layer,
+            panel_shader_visualizer,
+            overlay_state,
+        ))
     }
 }
 
 impl StateActions for ArchiveState {
     fn on_enter(&mut self) -> Result<(), StateMachineError> {
         self.pending_transition = None;
+        self.overlay_state.set_editor_open(false);
         Ok(())
     }
 
     fn handle_key(&mut self, key: KeyCode) -> Result<(), StateMachineError> {
         let mut session = self.session.borrow_mut();
+        if matches!(key, KeyCode::Char('e') | KeyCode::Char('E')) {
+            let record = session.current_record().clone();
+            self.visualizer_editor.toggle_for_record(&record);
+            return Ok(());
+        }
+        if self.visualizer_editor.handle_key(key.clone(), &mut session) {
+            return Ok(());
+        }
         match key {
             KeyCode::Left => session.move_record_page(-1),
             KeyCode::Right => session.move_record_page(1),
@@ -94,10 +116,17 @@ impl StateActions for ArchiveState {
 
     fn render(&mut self, frame: &mut Frame) {
         let area = frame.area();
-        if area.width < 110 || area.height < 34 {
-            self.render_compact(frame, area);
+        if self.visualizer_editor.is_open() {
+            self.overlay_state.set_editor_open(true);
+            let session = self.session.borrow();
+            self.visualizer_editor.render(frame, area, &session);
         } else {
-            self.render_wide(frame, area);
+            self.overlay_state.set_editor_open(false);
+            if area.width < 110 || area.height < 34 {
+                self.render_compact(frame, area);
+            } else {
+                self.render_wide(frame, area);
+            }
         }
     }
 
@@ -456,7 +485,8 @@ impl ArchiveState {
         let visual_inner = visual_block.inner(sections[1]);
         frame.render_widget(visual_block, sections[1]);
 
-        if let Some(config) = record.visualizer() {
+        let preview_visualizer = self.visualizer_editor.preview_visualizer(record);
+        if let Some(config) = preview_visualizer.as_ref() {
             track_visualizer::render_visualizer(
                 frame,
                 visual_inner,
@@ -466,6 +496,7 @@ impl ArchiveState {
                 &record.id,
                 config,
                 session.analysis_snapshot(),
+                session.playback_clock(),
                 session.viewer_tick,
             );
         } else {

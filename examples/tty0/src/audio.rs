@@ -1,5 +1,5 @@
 use crate::{
-    archive::{MediaHealth, RecordDocument},
+    archive::{MediaHealth, PlaybackClock, RecordDocument},
     track_visualizer::{decay_snapshot_toward_idle, AudioAnalysisSnapshot},
 };
 use web_sys::{
@@ -102,30 +102,7 @@ impl AudioController {
     }
 
     pub fn toggle(&mut self, record: &RecordDocument) -> Result<bool, String> {
-        let Some(source) = record.audio_source() else {
-            return Err(record
-                .media_page
-                .corruption_reason
-                .clone()
-                .unwrap_or_else(|| "record media is corrupted".to_string()));
-        };
-
-        let same_record = self.active_record_id.as_deref() == Some(record.id.as_str())
-            && self.active_source.as_deref() == Some(source);
-
-        if !same_record {
-            let audio = HtmlAudioElement::new()
-                .map_err(|_| "browser audio element could not be created".to_string())?;
-            audio.set_cross_origin(Some("anonymous"));
-            audio.set_src(source);
-            audio.set_preload("auto");
-            self.analysis_pipeline = AudioAnalysisPipeline::new(&audio).ok();
-            self.element = Some(audio);
-            self.active_record_id = Some(record.id.clone());
-            self.active_source = Some(source.to_string());
-            self.analysis_snapshot = Some(AudioAnalysisSnapshot::idle(0.0));
-            self.last_error = None;
-        }
+        self.ensure_record_loaded(record)?;
 
         let audio = self
             .element
@@ -156,6 +133,105 @@ impl AudioController {
                 message
             })?;
             Ok(false)
+        }
+    }
+
+    pub fn play(&mut self, record: &RecordDocument) -> Result<(), String> {
+        self.ensure_record_loaded(record)?;
+
+        let Some(audio) = &self.element else {
+            return Ok(());
+        };
+        if audio.paused() || audio.ended() {
+            if let Some(pipeline) = &self.analysis_pipeline {
+                pipeline.resume_if_suspended();
+            }
+            let _ = audio.set_current_time(if audio.ended() {
+                0.0
+            } else {
+                audio.current_time()
+            });
+            let _ = audio.play().map_err(|_| {
+                let message = "browser blocked playback or transport failed".to_string();
+                self.last_error = Some(message.clone());
+                message
+            })?;
+        }
+        Ok(())
+    }
+
+    pub fn pause(&mut self) -> Result<(), String> {
+        let Some(audio) = &self.element else {
+            return Ok(());
+        };
+        if !audio.paused() && !audio.ended() {
+            audio.pause().map_err(|_| {
+                let message = "browser transport refused to pause".to_string();
+                self.last_error = Some(message.clone());
+                message
+            })?;
+        }
+        Ok(())
+    }
+
+    pub fn seek_to_secs(&mut self, record: &RecordDocument, secs: f32) {
+        if self.ensure_record_loaded(record).is_err() {
+            return;
+        }
+        let Some(audio) = &self.element else {
+            return;
+        };
+        let target = match sanitize_duration(audio.duration()) {
+            Some(duration) => secs.clamp(0.0, duration),
+            None => secs.max(0.0),
+        };
+        let _ = audio.set_current_time(target as f64);
+        self.sync();
+    }
+
+    fn ensure_record_loaded(&mut self, record: &RecordDocument) -> Result<(), String> {
+        let Some(source) = record.audio_source() else {
+            return Err(record
+                .media_page
+                .corruption_reason
+                .clone()
+                .unwrap_or_else(|| "record media is corrupted".to_string()));
+        };
+
+        let same_record = self.active_record_id.as_deref() == Some(record.id.as_str())
+            && self.active_source.as_deref() == Some(source);
+        if same_record {
+            return Ok(());
+        }
+
+        let audio = HtmlAudioElement::new()
+            .map_err(|_| "browser audio element could not be created".to_string())?;
+        audio.set_cross_origin(Some("anonymous"));
+        audio.set_src(source);
+        audio.set_preload("auto");
+        self.analysis_pipeline = AudioAnalysisPipeline::new(&audio).ok();
+        self.element = Some(audio);
+        self.active_record_id = Some(record.id.clone());
+        self.active_source = Some(source.to_string());
+        self.analysis_snapshot = Some(AudioAnalysisSnapshot::idle(0.0));
+        self.last_error = None;
+        Ok(())
+    }
+
+    pub fn playback_clock_for(&self, record: &RecordDocument) -> PlaybackClock {
+        let is_active = self.active_record_id.as_deref() == Some(record.id.as_str());
+        if !is_active {
+            return PlaybackClock::default();
+        }
+
+        let Some(audio) = &self.element else {
+            return PlaybackClock::default();
+        };
+
+        PlaybackClock {
+            current_time_secs: audio.current_time().max(0.0) as f32,
+            duration_secs: sanitize_duration(audio.duration()),
+            is_playing: !audio.paused() && !audio.ended(),
         }
     }
 

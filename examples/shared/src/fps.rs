@@ -74,7 +74,7 @@ pub fn record_frame() {
     FPS_RECORDER.with(|recorder| {
         if let Some(ref mut fps_recorder) = *recorder.borrow_mut() {
             fps_recorder.record();
-            // Update the footer FPS display
+            // Update the on-screen FPS widget
             let fps = fps_recorder.fps();
             update_fps_display(fps);
         }
@@ -92,7 +92,7 @@ pub fn get_current_fps() -> f32 {
     })
 }
 
-/// Update the FPS display in the footer
+/// Update the FPS display in the widget
 fn update_fps_display(fps: f32) {
     let _ = (|| -> Result<(), JsValue> {
         let fps_element = window()

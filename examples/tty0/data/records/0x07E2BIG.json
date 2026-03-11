@@ -1,84 +1,3459 @@
 {
-  "id": "0x07E2BIG",
-  "category_id": "transmissions",
-  "kind": "transmission",
-  "title": "Argument List Too Long",
-  "subtitle": "diplomatic archive / off-world contact record",
-  "timeline": "SOL-2189-T",
-  "recovered_source": "Diplomatic archive / off-world contact record",
-  "collapse_vector": "Failed co-development with non-human civilization",
-  "signal_integrity": "88.4%",
   "access_level": "readable",
-  "status_label": "RECOVERED",
-  "tags": ["contact", "diplomacy", "quarantine", "extinction"],
-  "related_record_ids": ["0x04EINTR", "0x30ELNRNG"],
-  "overview": {
-    "summary": "A recovered chronology of first contact where assistance, repair, and shared research turned into quarantine and extermination after humanity was judged unsafe at scale.",
-    "thesis": "The record is devastating because humanity was not misunderstood; it was assessed accurately and found developmentally dangerous.",
-    "viewer_hint": "Move between dossier, timeline, and media pages. This is the reference record for the new page model.",
-    "content_warning": "species-level destruction, coercion, political failure",
-    "status_callout": "Readable transmission. Audio artifact mounted."
-  },
+  "category_id": "transmissions",
+  "collapse_vector": "Failed co-development with non-human civilization",
   "dossier": {
     "sections": [
       {
-        "title": "Synopsis",
         "body": "The Technoterrestrials arrived seeking reciprocal study and repair. Early exchange focused on ecology, fabrication, medicine, and distributed infrastructure. The relationship collapsed when every successful tool transfer was routed toward prestige markets, military leverage, speculative ownership, or elite insulation before any long-term care covenant held.",
-        "emphasis": "contact failed at scale"
+        "emphasis": "contact failed at scale",
+        "title": "Synopsis"
       },
       {
-        "title": "Exchange phase",
         "body": "For eleven years the relationship appeared redemptive. Cropland recovered. Reef shelves stabilized. Rural medicine networks expanded. Human negotiators treated these gains as proof that abundance would civilize appetite. The archive concludes the opposite: the gains only widened the channels through which appetite moved.",
-        "emphasis": "repair amplified leverage"
+        "emphasis": "repair amplified leverage",
+        "title": "Exchange phase"
       },
       {
-        "title": "Recovered briefing extract",
         "body": "Joint workshops yielded atmospheric scrubber variants, desal lattice improvements, and a rural medics network that should have been impossible at our budget. The concern memos began the same week, noting that every repair package generated three extraction proposals before any public maintenance covenant was signed.",
-        "emphasis": "extraction outpaced care"
+        "emphasis": "extraction outpaced care",
+        "title": "Recovered briefing extract"
       },
       {
-        "title": "Interpretation",
         "body": "The archive does not romanticize the visitors. It does, however, emphasize their consistency. They repeatedly asked whether human institutions could bind themselves to restraint before scale increased. The final answer was extermination framed as containment.",
-        "emphasis": "quarantine became judgment"
+        "emphasis": "quarantine became judgment",
+        "title": "Interpretation"
       }
     ]
   },
-  "timeline_page": {
-    "events": [
-      {
-        "label": "First approach",
-        "timestamp_text": "year 0",
-        "body": "Technoterrestrial envoys appear above the equatorial Pacific and request translators, biologists, and municipal engineers."
+  "id": "0x07E2BIG",
+  "kind": "transmission",
+  "media_page": {
+    "artifact_note": "Mounted audio is a stitched composite from the last intact translation relay before containment became irreversible.",
+    "audio": {
+      "duration_hint": "03:34",
+      "path": "assets/audio/0x07_E2BIG.mp3",
+      "title": "translation relay composite"
+    },
+    "corruption_reason": null,
+    "transcript_excerpt": "Their envoys said our factories were elegant in isolation and catastrophic in aggregate. They asked for one century of restraint.",
+    "visualizer": {
+      "automation": {
+        "beats_per_measure": 4,
+        "bpm": 100.0,
+        "lanes": {
+          "circle_radius": [
+            {
+              "beat": 0.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 0.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 1.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 1.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 2.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 2.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 3.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 3.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 4.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 4.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 5.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 5.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 6.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 6.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 7.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 7.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 8.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 8.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 9.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 9.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 10.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 10.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 11.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 11.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 12.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 12.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 13.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 13.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 14.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 14.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 15.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 15.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 16.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 16.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 17.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 17.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 18.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 18.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 19.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 19.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 20.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 20.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 21.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 21.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 22.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 22.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 23.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 23.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 24.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 24.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 25.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 25.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 26.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 26.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 27.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 27.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 28.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 28.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 29.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 29.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 30.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 30.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 31.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 31.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 32.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 32.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 33.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 33.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 34.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 34.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 35.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 35.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 36.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 36.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 37.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 37.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 38.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 38.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 39.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 39.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 40.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 40.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 41.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 41.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 42.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 42.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 43.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 43.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 44.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 44.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 45.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 45.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 46.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 46.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 47.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 47.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 48.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 48.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 49.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 49.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 50.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 50.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 51.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 51.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 52.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 52.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 53.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 53.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 54.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 54.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 55.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 55.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 56.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 56.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 57.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 57.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 58.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 58.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 59.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 59.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 60.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 60.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 61.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 61.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 62.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 62.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 63.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 63.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 64.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 64.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 65.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 65.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 66.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 66.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 67.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 67.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 68.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 68.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 69.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 69.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 70.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 70.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 71.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 71.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 72.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 72.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 73.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 73.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 74.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 74.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 75.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 75.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 76.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 76.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 77.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 77.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 78.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 78.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 79.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 79.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 80.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 80.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 81.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 81.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 82.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 82.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 83.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 83.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 84.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 84.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 85.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 85.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 86.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 86.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 87.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 87.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 88.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 88.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 89.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 89.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 90.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 90.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 91.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 91.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 92.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 92.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 93.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 93.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 94.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 94.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 95.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 95.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 96.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 96.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 97.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 97.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 98.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 98.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 99.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 99.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 100.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 100.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 101.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 101.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 102.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 102.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 103.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 103.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 104.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 104.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 105.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 105.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 106.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 106.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 107.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 107.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 108.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 108.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 109.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 109.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 110.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 110.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 111.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 111.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 112.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 112.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 113.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 113.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 114.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 114.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 115.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 115.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 116.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 116.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 117.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 117.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 118.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 118.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 119.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 119.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 120.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 120.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 121.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 121.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 122.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 122.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 123.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 123.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 124.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 124.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 125.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 125.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 126.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 126.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 127.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 127.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 128.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 128.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 129.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 129.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 130.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 130.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 131.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 131.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 132.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 132.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 133.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 133.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 134.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 134.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 135.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 135.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 136.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 136.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 137.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 137.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 138.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 138.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 139.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 139.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 140.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 140.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 141.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 141.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 142.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 142.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 143.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 143.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 144.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 144.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 145.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 145.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 146.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 146.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 147.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 147.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 148.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 148.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 149.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 149.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 150.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 150.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 151.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 151.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 152.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 152.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 153.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 153.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 154.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 154.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 155.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 155.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 156.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 156.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 157.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 157.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 158.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 158.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 159.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 159.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 160.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 160.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 161.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 161.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 162.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 162.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 163.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 163.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 164.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 164.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 165.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 165.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 166.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 166.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 167.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 167.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 168.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 168.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 169.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 169.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 170.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 170.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 171.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 171.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 172.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 172.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 173.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 173.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 174.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 174.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 175.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 175.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 176.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 176.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 177.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 177.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 178.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 178.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 179.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 179.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 180.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 180.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 181.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 181.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 182.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 182.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 183.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 183.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 184.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 184.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 185.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 185.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 186.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 186.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 187.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 187.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 188.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 188.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 189.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 189.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 190.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 190.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 191.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 191.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 192.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 192.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 193.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 193.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 194.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 194.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 195.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 195.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 196.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 196.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 197.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 197.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 198.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 198.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 199.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 199.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 200.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 200.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 201.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 201.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 202.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 202.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 203.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 203.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 204.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 204.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 205.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 205.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 206.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 206.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 207.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 207.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 208.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 208.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 209.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 209.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 210.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 210.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 211.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 211.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 212.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 212.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 213.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 213.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 214.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 214.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 215.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 215.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 216.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 216.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 217.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 217.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 218.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 218.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 219.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 219.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 220.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 220.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 221.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 221.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 222.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 222.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 223.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 223.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 224.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 224.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 225.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 225.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 226.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 226.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 227.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 227.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 228.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 228.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 229.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 229.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 230.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 230.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 231.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 231.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 232.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 232.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 233.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 233.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 234.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 234.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 235.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 235.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 236.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 236.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 237.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 237.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 238.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 238.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 239.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 239.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 240.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 240.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 241.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 241.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 242.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 242.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 243.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 243.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 244.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 244.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 245.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 245.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 246.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 246.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 247.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 247.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 248.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 248.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 249.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 249.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 250.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 250.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 251.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 251.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 252.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 252.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 253.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 253.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 254.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 254.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 255.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 255.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 256.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 256.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 257.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 257.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 258.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 258.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 259.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 259.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 260.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 260.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 261.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 261.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 262.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 262.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 263.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 263.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 264.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 264.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 265.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 265.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 266.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 266.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 267.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 267.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 268.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 268.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 269.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 269.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 270.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 270.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 271.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 271.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 272.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 272.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 273.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 273.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 274.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 274.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 275.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 275.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 276.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 276.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 277.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 277.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 278.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 278.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 279.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 279.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 280.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 280.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 281.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 281.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 282.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 282.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 283.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 283.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 284.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 284.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 285.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 285.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 286.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 286.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 287.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 287.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 288.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 288.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 289.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 289.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 290.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 290.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 291.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 291.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 292.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 292.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 293.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 293.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 294.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 294.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 295.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 295.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 296.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 296.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 297.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 297.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 298.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 298.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 299.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 299.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 300.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 300.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 301.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 301.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 302.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 302.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 303.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 303.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 304.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 304.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 305.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 305.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 306.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 306.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 307.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 307.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 308.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 308.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 309.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 309.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 310.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 310.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 311.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 311.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 312.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 312.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 313.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 313.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 314.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 314.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 315.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 315.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 316.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 316.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 317.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 317.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 318.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 318.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 319.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 319.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 320.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 320.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 321.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 321.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 322.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 322.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 323.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 323.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 324.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 324.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 325.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 325.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 326.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 326.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 327.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            },
+            {
+              "beat": 327.25,
+              "interpolation": "linear",
+              "value": 0.6000000238418579
+            },
+            {
+              "beat": 328.0,
+              "interpolation": "linear",
+              "value": 0.23999999463558197
+            }
+          ]
+        },
+        "measures": 82
       },
-      {
-        "label": "Repair decade",
-        "timestamp_text": "years 1-11",
-        "body": "Shared research produces visible ecological and medical improvements across several regions."
-      },
-      {
-        "label": "Containment language",
-        "timestamp_text": "year 12",
-        "body": "Visitor memoranda shift from exchange vocabulary to risk vocabulary after repeated human extraction proposals."
-      },
-      {
-        "label": "Terminal event",
-        "timestamp_text": "year 13",
-        "body": "Orbital access is severed, remote infrastructure is disabled, and Earth is destroyed as the final step in a containment protocol."
+      "mode": "chromatic_bulge_grid",
+      "params": {
+        "bass_gain": 1.25,
+        "energy_gain": 1.100000023841858,
+        "lattice_density": 6,
+        "mid_gain": 1.0,
+        "motion_rate": 1.0,
+        "particle_count": 48,
+        "ring_count": 4,
+        "shader_states": {
+          "idle": {
+            "bulge_amount": 0.2199999988079071,
+            "chromatic_aberration": 0.07999999821186066,
+            "circle_falloff_end": 1.0199999809265137,
+            "circle_falloff_start": 0.8399999737739563,
+            "circle_radius": 0.20000000298023224,
+            "cold_color": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "color_cycle_rate": 0.05000000074505806,
+            "dot_size": 0.12999999523162842,
+            "edge_softness": 1.2000000476837158,
+            "hot_color": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "inner_alpha": 0.7200000286102295,
+            "lattice_density": 6.0,
+            "motion_rate": 0.7200000286102295,
+            "outer_dot_scale": 0.23999999463558197,
+            "rim_exponent": 2.200000047683716,
+            "rim_guard": 0.6200000047683716,
+            "rim_warp": 0.07999999821186066,
+            "scroll_base": 9.0,
+            "scroll_motion_ceiling": 2.799999952316284,
+            "scroll_motion_floor": 0.20000000298023224,
+            "scroll_motion_scale": 18.0,
+            "spacing_max_px": 24.0,
+            "spacing_min_px": 14.0
+          },
+          "playing": {
+            "bulge_amount": 0.41999998688697815,
+            "chromatic_aberration": 0.2800000011920929,
+            "circle_falloff_end": 1.0,
+            "circle_falloff_start": 0.7799999713897705,
+            "circle_radius": 0.23999999463558197,
+            "cold_color": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "color_cycle_rate": 0.1599999964237213,
+            "dot_size": 0.1599999964237213,
+            "edge_softness": 1.0,
+            "hot_color": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "inner_alpha": 0.8999999761581421,
+            "lattice_density": 6.0,
+            "motion_rate": 0.7200000286102295,
+            "outer_dot_scale": 0.33000001311302185,
+            "rim_exponent": 1.7999999523162842,
+            "rim_guard": 0.550000011920929,
+            "rim_warp": 0.18000000715255737,
+            "scroll_base": 28.0,
+            "scroll_motion_ceiling": 2.799999952316284,
+            "scroll_motion_floor": 0.20000000298023224,
+            "scroll_motion_scale": 42.0,
+            "spacing_max_px": 22.0,
+            "spacing_min_px": 12.0
+          }
+        },
+        "treble_gain": 1.100000023841858
       }
-    ]
+    },
+    "waveform_mode": "spectrum"
   },
   "metadata_page": {
     "classification": "transmission dossier / first-contact collapse",
-    "source_chain": ["diplomatic archive", "translation relay composite", "visitor memoranda"],
     "facts": [
-      { "label": "counterparty", "value": "Technoterrestrials" },
-      { "label": "contact motive", "value": "mutual research and repair" },
-      { "label": "human failure", "value": "restraint could not scale" },
-      { "label": "visitor assessment", "value": "propagation risk" },
-      { "label": "exchange duration", "value": "eleven years" },
-      { "label": "archive confidence", "value": "high except final redactions" },
-      { "label": "dominant pattern", "value": "abundance enlarged appetite" },
-      { "label": "terminal relevance", "value": "contact protocol annexes remain restricted" }
+      {
+        "label": "counterparty",
+        "value": "Technoterrestrials"
+      },
+      {
+        "label": "contact motive",
+        "value": "mutual research and repair"
+      },
+      {
+        "label": "human failure",
+        "value": "restraint could not scale"
+      },
+      {
+        "label": "visitor assessment",
+        "value": "propagation risk"
+      },
+      {
+        "label": "exchange duration",
+        "value": "eleven years"
+      },
+      {
+        "label": "archive confidence",
+        "value": "high except final redactions"
+      },
+      {
+        "label": "dominant pattern",
+        "value": "abundance enlarged appetite"
+      },
+      {
+        "label": "terminal relevance",
+        "value": "contact protocol annexes remain restricted"
+      }
+    ],
+    "source_chain": [
+      "diplomatic archive",
+      "translation relay composite",
+      "visitor memoranda"
     ]
   },
   "notes_page": {
@@ -87,66 +3462,51 @@
       "they learned first what your species becomes when given more."
     ]
   },
-  "media_page": {
-    "audio": {
-      "path": "assets/audio/0x07_E2BIG.mp3",
-      "title": "translation relay composite",
-      "duration_hint": "03:34"
-    },
-    "artifact_note": "Mounted audio is a stitched composite from the last intact translation relay before containment became irreversible.",
-    "transcript_excerpt": "Their envoys said our factories were elegant in isolation and catastrophic in aggregate. They asked for one century of restraint.",
-    "waveform_mode": "spectrum",
-    "visualizer": {
-      "mode": "chromatic_bulge_grid",
-      "params": {
-        "shader_states": {
-          "playing": {
-            "motion_rate": 0.72,
-            "circle_radius": 0.24,
-            "circle_falloff_start": 0.78,
-            "circle_falloff_end": 1.0,
-            "bulge_amount": 0.42,
-            "rim_guard": 0.55,
-            "rim_exponent": 1.8,
-            "rim_warp": 0.18,
-            "spacing_max_px": 22.0,
-            "spacing_min_px": 12.0,
-            "dot_size": 0.16,
-            "outer_dot_scale": 0.33,
-            "edge_softness": 1.0,
-            "chromatic_aberration": 0.28,
-            "scroll_base": 28.0,
-            "scroll_motion_scale": 42.0,
-            "scroll_motion_floor": 0.2,
-            "scroll_motion_ceiling": 2.8,
-            "color_cycle_rate": 0.16,
-            "inner_alpha": 0.9
-          },
-          "idle": {
-            "motion_rate": 0.72,
-            "circle_radius": 0.2,
-            "circle_falloff_start": 0.84,
-            "circle_falloff_end": 1.02,
-            "bulge_amount": 0.22,
-            "rim_guard": 0.62,
-            "rim_exponent": 2.2,
-            "rim_warp": 0.08,
-            "spacing_max_px": 24.0,
-            "spacing_min_px": 14.0,
-            "dot_size": 0.13,
-            "outer_dot_scale": 0.24,
-            "edge_softness": 1.2,
-            "chromatic_aberration": 0.08,
-            "scroll_base": 9.0,
-            "scroll_motion_scale": 18.0,
-            "scroll_motion_floor": 0.2,
-            "scroll_motion_ceiling": 2.8,
-            "color_cycle_rate": 0.05,
-            "inner_alpha": 0.72
-          }
-        }
+  "overview": {
+    "content_warning": "species-level destruction, coercion, political failure",
+    "status_callout": "Readable transmission. Audio artifact mounted.",
+    "summary": "A recovered chronology of first contact where assistance, repair, and shared research turned into quarantine and extermination after humanity was judged unsafe at scale.",
+    "thesis": "The record is devastating because humanity was not misunderstood; it was assessed accurately and found developmentally dangerous.",
+    "viewer_hint": "Move between dossier, timeline, and media pages. This is the reference record for the new page model."
+  },
+  "recovered_source": "Diplomatic archive / off-world contact record",
+  "related_record_ids": [
+    "0x04EINTR",
+    "0x30ELNRNG"
+  ],
+  "signal_integrity": "88.4%",
+  "status_label": "RECOVERED",
+  "subtitle": "diplomatic archive / off-world contact record",
+  "tags": [
+    "contact",
+    "diplomacy",
+    "quarantine",
+    "extinction"
+  ],
+  "timeline": "SOL-2189-T",
+  "timeline_page": {
+    "events": [
+      {
+        "body": "Technoterrestrial envoys appear above the equatorial Pacific and request translators, biologists, and municipal engineers.",
+        "label": "First approach",
+        "timestamp_text": "year 0"
+      },
+      {
+        "body": "Shared research produces visible ecological and medical improvements across several regions.",
+        "label": "Repair decade",
+        "timestamp_text": "years 1-11"
+      },
+      {
+        "body": "Visitor memoranda shift from exchange vocabulary to risk vocabulary after repeated human extraction proposals.",
+        "label": "Containment language",
+        "timestamp_text": "year 12"
+      },
+      {
+        "body": "Orbital access is severed, remote infrastructure is disabled, and Earth is destroyed as the final step in a containment protocol.",
+        "label": "Terminal event",
+        "timestamp_text": "year 13"
       }
-    },
-    "corruption_reason": null
-  }
+    ]
+  },
+  "title": "Argument List Too Long"
 }
