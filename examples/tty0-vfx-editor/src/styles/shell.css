@@ -540,6 +540,17 @@
   align-items: center;
   justify-content: center;
   background: transparent;
+  padding: 0;
+  border: 0;
+  outline: none;
+}
+
+.resizable-shell-handle[aria-orientation="horizontal"] {
+  height: 4px !important;
+}
+
+.resizable-shell-handle[aria-orientation="vertical"] {
+  width: 4px !important;
 }
 
 .resizable-shell-handle::after {

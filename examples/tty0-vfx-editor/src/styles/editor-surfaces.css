@@ -273,17 +273,16 @@
   flex-direction: column;
   gap: 0.5rem;
   height: auto;
-  max-height: min(32vh, 260px);
+  max-height: none;
   overflow: hidden;
   align-items: stretch;
   justify-content: flex-start;
 }
 
 .shape-editor {
-  width: 100%;
-  height: auto;
-  aspect-ratio: 16 / 9;
-  flex: 0 1 auto;
+  width: auto;
+  height: min(32vh, 260px);
+  flex: 0 0 auto;
   min-height: 0;
   max-height: min(32vh, 260px);
   max-width: 100%;
