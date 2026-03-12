@@ -1,0 +1,131 @@
+import { useEffect, useRef } from "react";
+import { FRAGMENT_SHADER, VERTEX_SHADER } from "../../shaders";
+import { TrackVisualizerConfig } from "../../types";
+import { buildTimelineIndex, resolveNormalizedChromaticBulgeGrid } from "../../vfx";
+import { createProgram, setUniform1f, setUniform2f, setUniform3f } from "../preview/gl";
+
+export function PreviewCanvas({
+  config,
+  audioRef,
+  playbackTimeRef,
+  isPlaying,
+  onReady,
+  timelineIndex,
+}: {
+  config: TrackVisualizerConfig;
+  audioRef: { current: HTMLAudioElement | null };
+  playbackTimeRef: { current: number };
+  isPlaying: boolean;
+  onReady: () => void;
+  timelineIndex: ReturnType<typeof buildTimelineIndex>;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const configRef = useRef(config);
+  const isPlayingRef = useRef(isPlaying);
+  const timelineIndexRef = useRef(timelineIndex);
+
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  useEffect(() => {
+    timelineIndexRef.current = timelineIndex;
+  }, [timelineIndex]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const gl = canvas.getContext("webgl2");
+    if (!gl) return;
+    const program = createProgram(gl, VERTEX_SHADER, FRAGMENT_SHADER);
+    if (!program) return;
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    gl.useProgram(program);
+    const uniforms = {
+      u_bulge_amount: gl.getUniformLocation(program, "u_bulge_amount"),
+      u_chromatic_aberration: gl.getUniformLocation(program, "u_chromatic_aberration"),
+      u_circle_falloff_end: gl.getUniformLocation(program, "u_circle_falloff_end"),
+      u_circle_falloff_start: gl.getUniformLocation(program, "u_circle_falloff_start"),
+      u_circle_radius: gl.getUniformLocation(program, "u_circle_radius"),
+      u_cold_color: gl.getUniformLocation(program, "u_cold_color"),
+      u_dot_size: gl.getUniformLocation(program, "u_dot_size"),
+      u_edge_softness: gl.getUniformLocation(program, "u_edge_softness"),
+      u_hot_color: gl.getUniformLocation(program, "u_hot_color"),
+      u_inner_alpha: gl.getUniformLocation(program, "u_inner_alpha"),
+      u_lattice_density: gl.getUniformLocation(program, "u_lattice_density"),
+      u_motion_rate: gl.getUniformLocation(program, "u_motion_rate"),
+      u_outer_dot_scale: gl.getUniformLocation(program, "u_outer_dot_scale"),
+      u_resolution: gl.getUniformLocation(program, "u_resolution"),
+      u_rim_exponent: gl.getUniformLocation(program, "u_rim_exponent"),
+      u_rim_guard: gl.getUniformLocation(program, "u_rim_guard"),
+      u_rim_warp: gl.getUniformLocation(program, "u_rim_warp"),
+      u_time: gl.getUniformLocation(program, "u_time"),
+    };
+
+    let frame = 0;
+    let announcedReady = false;
+    const render = () => {
+      const audio = audioRef.current;
+      const currentTime = audio ? audio.currentTime : playbackTimeRef.current;
+      const currentIsPlaying = audio ? !audio.paused && !audio.ended : isPlayingRef.current;
+      const currentUniforms = resolveNormalizedChromaticBulgeGrid(
+        configRef.current,
+        {
+          currentTimeSecs: currentTime,
+          visualTimeSecs: currentTime,
+          isPlaying: currentIsPlaying,
+          timelinePreview: true,
+        },
+        timelineIndexRef.current,
+      ).uniforms;
+      const dpr = window.devicePixelRatio || 1;
+      const width = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+      const height = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      gl.viewport(0, 0, width, height);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      setUniform2f(gl, uniforms.u_resolution, width, height);
+      setUniform1f(gl, uniforms.u_time, currentTime);
+      setUniform2f(gl, uniforms.u_motion_rate, currentUniforms.motion_rate, currentUniforms.motion_rate_y);
+      setUniform1f(gl, uniforms.u_lattice_density, currentUniforms.lattice_density);
+      setUniform1f(gl, uniforms.u_circle_radius, currentUniforms.circle_radius);
+      setUniform1f(gl, uniforms.u_circle_falloff_start, currentUniforms.circle_falloff_start);
+      setUniform1f(gl, uniforms.u_circle_falloff_end, currentUniforms.circle_falloff_end);
+      setUniform1f(gl, uniforms.u_bulge_amount, currentUniforms.bulge_amount);
+      setUniform1f(gl, uniforms.u_rim_guard, currentUniforms.rim_guard);
+      setUniform1f(gl, uniforms.u_rim_exponent, currentUniforms.rim_exponent);
+      setUniform1f(gl, uniforms.u_rim_warp, currentUniforms.rim_warp);
+      setUniform1f(gl, uniforms.u_dot_size, currentUniforms.dot_size);
+      setUniform1f(gl, uniforms.u_outer_dot_scale, currentUniforms.outer_dot_scale);
+      setUniform1f(gl, uniforms.u_edge_softness, currentUniforms.edge_softness);
+      setUniform1f(gl, uniforms.u_chromatic_aberration, currentUniforms.chromatic_aberration);
+      setUniform3f(gl, uniforms.u_cold_color, currentUniforms.cold_color);
+      setUniform3f(gl, uniforms.u_hot_color, currentUniforms.hot_color);
+      setUniform1f(gl, uniforms.u_inner_alpha, currentUniforms.inner_alpha);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (!announcedReady) {
+        announcedReady = true;
+        onReady();
+      }
+      frame = requestAnimationFrame(render);
+    };
+    frame = requestAnimationFrame(render);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      gl.deleteProgram(program);
+      if (vao) gl.deleteVertexArray(vao);
+    };
+  }, [audioRef, onReady, playbackTimeRef]);
+
+  return <canvas ref={canvasRef} className="preview-canvas" />;
+}
