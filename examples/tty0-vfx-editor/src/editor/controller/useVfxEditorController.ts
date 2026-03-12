@@ -1,4 +1,5 @@
 import { ChangeEvent, DragEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { importRecordFromJson } from "../../platform";
 import { ClipPlacement, LaneId, LfoPoint, TrackVisualizerConfig } from "../../types";
 import {
@@ -24,6 +25,8 @@ import { EDITOR_LANES, laneMeta, visibleLane } from "../utils/lanes";
 import { snapBeatToGrid } from "../utils/timelineMath";
 
 export function useVfxEditorController() {
+  type MessageTone = "info" | "success" | "warning" | "error";
+
   const [loaded, setLoaded] = useState<LoadedDocument | null>(null);
   const [draft, setDraft] = useState<TrackVisualizerConfig>(normalizedConfig(defaultVisualizer()));
   const [selectedLane, setSelectedLane] = useState<LaneId>("motion_rate");
@@ -32,6 +35,7 @@ export function useVfxEditorController() {
   const [selectedPlacementIndices, setSelectedPlacementIndices] = useState<number[]>([]);
   const [placementSelectionAnchor, setPlacementSelectionAnchor] = useState<number | null>(null);
   const [message, setMessage] = useState<string>("Load a visualizer JSON or start a new effect.");
+  const [messageTone, setMessageTone] = useState<MessageTone>("info");
   const [isPlaying, setIsPlaying] = useState(false);
   const [previewReady, setPreviewReady] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
@@ -153,7 +157,13 @@ export function useVfxEditorController() {
         repeats: placement.repeats,
       })),
     );
-    setMessage(`Copied ${placements.length} placement${placements.length === 1 ? "" : "s"}.`);
+    setStatus(`Copied ${placements.length} placement${placements.length === 1 ? "" : "s"}.`, "success");
+    toast.success(`Copied ${placements.length} placement${placements.length === 1 ? "" : "s"}.`);
+  }
+
+  function setStatus(nextMessage: string, tone: MessageTone = "info") {
+    setMessage(nextMessage);
+    setMessageTone(tone);
   }
 
   function currentBeat(): number {
@@ -228,7 +238,7 @@ export function useVfxEditorController() {
     playbackTimeRef.current = 0;
     setIsPlaying(false);
     setImportedAudioUrl(null);
-    setMessage(options.status);
+    setStatus(options.status, "success");
   }
 
   async function handleImportRecord(event: ChangeEvent<HTMLInputElement>) {
@@ -252,7 +262,11 @@ export function useVfxEditorController() {
         });
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Load failed.");
+      const failureMessage = error instanceof Error ? error.message : "Load failed.";
+      setStatus(failureMessage, "error");
+      toast.error("Load failed.", {
+        description: failureMessage,
+      });
     } finally {
       input.value = "";
     }
@@ -273,7 +287,7 @@ export function useVfxEditorController() {
     playbackTimeRef.current = 0;
     setIsPlaying(false);
     setImportedAudioUrl(null);
-    setMessage("Started a new visualizer draft.");
+    setStatus("Started a new visualizer draft.", "success");
   }
 
   function handleImportAudio(event: ChangeEvent<HTMLInputElement>) {
@@ -284,7 +298,10 @@ export function useVfxEditorController() {
     }
     const url = URL.createObjectURL(file);
     setImportedAudioUrl(url);
-    setMessage(`Mounted audio file ${file.name}.`);
+    setStatus(`Mounted audio file ${file.name}.`, "success");
+    toast.success("Imported audio.", {
+      description: file.name,
+    });
   }
 
   async function handleSave() {
@@ -303,14 +320,17 @@ export function useVfxEditorController() {
       savedSnapshot: serializeVisualizer(normalized),
       visualizer: normalized,
     }));
-    setMessage(`Saved ${jsonFilename(loaded?.name)}.`);
+    setStatus(`Saved ${jsonFilename(loaded?.name)}.`, "success");
+    toast.success("Saved JSON.", {
+      description: jsonFilename(loaded?.name),
+    });
   }
 
   function revertToLoaded() {
     if (!loaded) return;
     setDraft(loaded.visualizer);
     clearPlacementSelection();
-    setMessage(`Reverted ${loaded.name}.`);
+    setStatus(`Reverted ${loaded.name}.`, "warning");
   }
 
   function commitSelectedClipShape(points: LfoPoint[]) {
@@ -383,7 +403,7 @@ export function useVfxEditorController() {
     }
     if (!previewReady || !audioReady) {
       setPlayPending(true);
-      setMessage("Preparing preview and audio before playback.");
+      setStatus("Preparing preview and audio before playback.");
       return;
     }
     void audioRef.current.play();
@@ -407,6 +427,7 @@ export function useVfxEditorController() {
       setSelectedClipId(clipId);
       return current;
     });
+    setStatus("Added a new clip.", "success");
   }
 
   function duplicateClip() {
@@ -422,12 +443,16 @@ export function useVfxEditorController() {
       setSelectedLane(visibleLane(primaryLane(newClip)?.lane ?? selectedLane));
       return current;
     });
+    setStatus("Duplicated selected clip.", "success");
   }
 
   function deleteClip() {
     if (!selectedClip) return;
     if (timeline.arrangement.some((placement) => placement.clip_id === selectedClip.id)) {
-      setMessage("Delete blocked: clip is still placed on the song timeline.");
+      setStatus("Delete blocked: clip is still placed on the song timeline.", "warning");
+      toast.warning("Clip delete blocked.", {
+        description: "Remove timeline placements first.",
+      });
       return;
     }
     updateDraft((current) => {
@@ -439,13 +464,14 @@ export function useVfxEditorController() {
       );
       return current;
     });
+    setStatus("Deleted selected clip.", "warning");
   }
 
   function placeSelectedClipAtBeat(beat: number) {
     if (!selectedClip) return;
     const primary = primaryLane(selectedClip);
     if (!primary) {
-      setMessage("Selected clip has no authored lane.");
+      setStatus("Selected clip has no authored lane.", "warning");
       return;
     }
     updateDraft((current) => {
@@ -574,10 +600,11 @@ export function useVfxEditorController() {
       if (pastedIndices.length) {
         const clip = nextTimeline.clips.find((candidate) => candidate.id === nextTimeline.arrangement[pastedIndices[0]].clip_id);
         setSelectedClipId(clip?.id ?? null);
-        if (clip) {
-          setSelectedLane(visibleLane(primaryLane(clip)?.lane ?? selectedLane));
-        }
-        setMessage(`Pasted ${pastedIndices.length} placement${pastedIndices.length === 1 ? "" : "s"}.`);
+      if (clip) {
+        setSelectedLane(visibleLane(primaryLane(clip)?.lane ?? selectedLane));
+      }
+        setStatus(`Pasted ${pastedIndices.length} placement${pastedIndices.length === 1 ? "" : "s"}.`, "success");
+        toast.success(`Pasted ${pastedIndices.length} placement${pastedIndices.length === 1 ? "" : "s"}.`);
       }
       return current;
     });
@@ -678,6 +705,7 @@ export function useVfxEditorController() {
       draft,
       dirty,
       message,
+      messageTone,
       fileInputRef,
       audioInputRef,
       effectiveAudioUrl,
@@ -688,7 +716,7 @@ export function useVfxEditorController() {
       handleImportAudio,
       handleSave,
       revertToLoaded,
-      setMessage,
+      setMessage: setStatus,
     },
     selectionState: {
       selectedLane,

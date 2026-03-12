@@ -1,6 +1,10 @@
 import { ChromaticBulgeGridShaderState, LaneId } from "../../types";
 import { isColorLane } from "../../vfx";
 import { colorToHex, clampColorChannel, getBaseColor, hexToColor } from "../utils/color";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 function ColorEditor({
   label,
@@ -13,20 +17,20 @@ function ColorEditor({
 }) {
   return (
     <div className="color-editor">
-      <label>
+      <Label>
         {label}
-        <input
+        <Input
           className="color-picker"
           type="color"
           value={colorToHex(value)}
           onChange={(event) => onChange(hexToColor(event.target.value))}
         />
-      </label>
+      </Label>
       <div className="color-channel-grid">
         {(["R", "G", "B"] as const).map((channel, index) => (
-          <label key={channel}>
+          <Label key={channel}>
             {channel}
-            <input
+            <Input
               type="number"
               min={0}
               max={1}
@@ -38,7 +42,7 @@ function ColorEditor({
                 onChange(next);
               }}
             />
-          </label>
+          </Label>
         ))}
       </div>
     </div>
@@ -57,13 +61,17 @@ export function PropertySidebarPanel({
   onChangeBaseValue: (lane: LaneId, value: number | [number, number, number]) => void;
 }) {
   return (
-    <section className="panel property-sidebar-panel">
-      <div className="property-sidebar-header">
-        <h2>{selectedLaneMeta.label}</h2>
-        <code className="property-variable-name">{selectedLane}</code>
-      </div>
-      <p className="empty-copy">{selectedLaneMeta.description}</p>
-      <div className="base-panel">
+    <Card className="panel property-sidebar-panel">
+      <CardHeader className="p-0">
+        <div className="property-sidebar-header">
+          <CardTitle className="text-base">{selectedLaneMeta.label}</CardTitle>
+          <Badge variant="amber" className="property-variable-name font-mono normal-case tracking-[0.04em]">
+            {selectedLane}
+          </Badge>
+        </div>
+        <CardDescription>{selectedLaneMeta.description}</CardDescription>
+      </CardHeader>
+      <CardContent className="base-panel p-0">
         {baseState ? (
           isColorLane(selectedLane) ? (
             <ColorEditor
@@ -72,18 +80,18 @@ export function PropertySidebarPanel({
               onChange={(nextColor) => onChangeBaseValue(selectedLane, nextColor)}
             />
           ) : (
-            <label>
+            <Label>
               Base Value
-              <input
+              <Input
                 type="number"
                 step={0.01}
                 value={Number(baseState[selectedLane])}
                 onChange={(event) => onChangeBaseValue(selectedLane, Number(event.target.value))}
               />
-            </label>
+            </Label>
           )
         ) : null}
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }

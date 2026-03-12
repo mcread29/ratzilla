@@ -1,5 +1,9 @@
 import { TimelineTool } from "../editor-types";
 import { TimelineActionIcon, TimelineFieldIcon, TimelineToolIcon } from "./icons";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export function ArrangementToolbar({
   bpm,
@@ -33,92 +37,114 @@ export function ArrangementToolbar({
   return (
     <div className="inline-actions arrangement-toolbar">
       <div className="arrangement-toolbar-fields">
-        <label className="compact-field">
+        <div className="compact-field">
           <span className="compact-field-icon" aria-hidden="true">
             <TimelineFieldIcon name="bpm" />
           </span>
-          <input type="number" step={0.1} aria-label="BPM" value={bpm} onChange={(event) => onChangeBpm(Number(event.target.value))} />
-        </label>
-        <label className="compact-field">
+          <Input
+            type="number"
+            step={0.1}
+            aria-label="BPM"
+            className="h-8 w-[54px] px-1.5 text-center"
+            value={bpm}
+            onChange={(event) => onChangeBpm(Number(event.target.value))}
+          />
+        </div>
+        <div className="compact-field">
           <span className="compact-field-icon" aria-hidden="true">
             <TimelineFieldIcon name="measures" />
           </span>
-          <input
+          <Input
             type="number"
             step={1}
             min={1}
             aria-label="Measures"
+            className="h-8 w-[54px] px-1.5 text-center"
             value={measures}
             onChange={(event) => onChangeMeasures(Number(event.target.value))}
           />
-        </label>
-        <label className="compact-field">
+        </div>
+        <div className="compact-field">
           <span className="compact-field-icon" aria-hidden="true">
             <TimelineFieldIcon name="time" />
           </span>
-          <input
+          <Input
             type="number"
             step={1}
             min={1}
             aria-label="Time"
+            className="h-8 w-[54px] px-1.5 text-center"
             value={beatsPerMeasure}
             onChange={(event) => onChangeBeatsPerMeasure(Number(event.target.value))}
           />
-        </label>
+        </div>
       </div>
       <div className="arrangement-toolbar-actions">
-        <div className="tool-toggle" role="group" aria-label="Timeline tool">
-          <button
-            className={timelineTool === "select" ? "active" : ""}
-            onClick={() => onChangeTimelineTool("select")}
-            type="button"
-            title="Select tool"
-            aria-label="Select tool"
-            aria-pressed={timelineTool === "select"}
-          >
+        <ToggleGroup
+          type="single"
+          value={timelineTool}
+          onValueChange={(value) => {
+            if (value === "select" || value === "pencil") {
+              onChangeTimelineTool(value);
+            }
+          }}
+          aria-label="Timeline tool"
+        >
+          <ToggleGroupItem value="select" aria-label="Select tool">
             <TimelineToolIcon name="select" />
-          </button>
-          <button
-            className={timelineTool === "pencil" ? "active" : ""}
-            onClick={() => onChangeTimelineTool("pencil")}
-            type="button"
-            title="Pencil tool"
-            aria-label="Pencil tool"
-            aria-pressed={timelineTool === "pencil"}
-          >
+          </ToggleGroupItem>
+          <ToggleGroupItem value="pencil" aria-label="Pencil tool">
             <TimelineToolIcon name="pencil" />
-          </button>
-        </div>
-        <button
-          className="icon-button"
-          onClick={onAddPlacement}
-          disabled={!hasSelectedClip}
-          type="button"
-          title="Place selected clip"
-          aria-label="Place selected clip"
-        >
-          <TimelineActionIcon name="place" />
-        </button>
-        <button
-          className="icon-button"
-          onClick={onCopyPlacements}
-          disabled={!selectedPlacementCount}
-          type="button"
-          title={`Copy placement${selectedPlacementCount === 1 ? "" : "s"}`}
-          aria-label={`Copy placement${selectedPlacementCount === 1 ? "" : "s"}`}
-        >
-          <TimelineActionIcon name="copy" />
-        </button>
-        <button
-          className="icon-button"
-          onClick={onDeletePlacements}
-          disabled={!selectedPlacementCount}
-          type="button"
-          title={`Delete placement${selectedPlacementCount === 1 ? "" : "s"}`}
-          aria-label={`Delete placement${selectedPlacementCount === 1 ? "" : "s"}`}
-        >
-          <TimelineActionIcon name="delete" />
-        </button>
+          </ToggleGroupItem>
+        </ToggleGroup>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              className="icon-button"
+              onClick={onAddPlacement}
+              disabled={!hasSelectedClip}
+              type="button"
+              variant="toolbar"
+              size="icon"
+              aria-label="Place selected clip"
+            >
+              <TimelineActionIcon name="place" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Place selected clip</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              className="icon-button"
+              onClick={onCopyPlacements}
+              disabled={!selectedPlacementCount}
+              type="button"
+              variant="toolbar"
+              size="icon"
+              aria-label={`Copy placement${selectedPlacementCount === 1 ? "" : "s"}`}
+            >
+              <TimelineActionIcon name="copy" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{`Copy placement${selectedPlacementCount === 1 ? "" : "s"}`}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              className="icon-button"
+              onClick={onDeletePlacements}
+              disabled={!selectedPlacementCount}
+              type="button"
+              variant="toolbar"
+              size="icon"
+              aria-label={`Delete placement${selectedPlacementCount === 1 ? "" : "s"}`}
+            >
+              <TimelineActionIcon name="delete" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{`Delete placement${selectedPlacementCount === 1 ? "" : "s"}`}</TooltipContent>
+        </Tooltip>
       </div>
     </div>
   );

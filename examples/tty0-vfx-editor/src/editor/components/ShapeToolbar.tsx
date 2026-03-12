@@ -1,5 +1,6 @@
 import { ShapeInteractionMode } from "../editor-types";
 import { ShapeModeIcon } from "./icons";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 export function ShapeToolbar({
   interactionMode,
@@ -10,21 +11,26 @@ export function ShapeToolbar({
 }) {
   return (
     <div className="lfo-shape-toolbar">
-      <div className="tool-toggle" role="group" aria-label="LFO edit mode">
+      <ToggleGroup
+        type="single"
+        value={interactionMode}
+        onValueChange={(value) => {
+          if (value === "add" || value === "move" || value === "delete") {
+            onChangeMode(value);
+          }
+        }}
+        aria-label="LFO edit mode"
+      >
         {(["add", "move", "delete"] as const).map((mode) => (
-          <button
+          <ToggleGroupItem
             key={mode}
-            className={interactionMode === mode ? "active" : ""}
-            onClick={() => onChangeMode(mode)}
-            type="button"
-            title={`${mode[0].toUpperCase()}${mode.slice(1)} mode`}
             aria-label={`${mode[0].toUpperCase()}${mode.slice(1)} mode`}
-            aria-pressed={interactionMode === mode}
+            value={mode}
           >
             <ShapeModeIcon name={mode} />
-          </button>
+          </ToggleGroupItem>
         ))}
-      </div>
+      </ToggleGroup>
     </div>
   );
 }

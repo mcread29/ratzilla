@@ -1,6 +1,7 @@
 import { ChromaticBulgeGridClip, LfoPoint } from "../../types";
 import { ClipMetadataForm } from "./ClipMetadataForm";
 import { ShapeEditorPanel } from "./ShapeEditorPanel";
+import { Card, CardContent } from "@/components/ui/card";
 
 export function ClipEditorPanel({
   selectedClip,
@@ -30,7 +31,7 @@ export function ClipEditorPanel({
   onChangeClipMax: (value: number) => void;
 }) {
   return (
-    <section className="panel clip-editor-panel">
+    <Card className="panel clip-editor-panel">
       {selectedClip ? (
         <ShapeEditorPanel
           onCommitShape={onCommitShape}
@@ -51,8 +52,10 @@ export function ClipEditorPanel({
           }
         />
       ) : (
-        <p>Select or create a clip.</p>
+        <CardContent className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border/80 bg-muted/20 p-6 text-sm text-muted-foreground">
+          Select or create a clip.
+        </CardContent>
       )}
-    </section>
+    </Card>
   );
 }

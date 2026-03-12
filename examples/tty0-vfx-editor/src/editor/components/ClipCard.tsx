@@ -4,6 +4,7 @@ import { primaryLane } from "../../vfx";
 import { ClipDropIndicator } from "../editor-types";
 import { clipListRangeLabel, formatClipBarLength } from "../utils/formatting";
 import { visibleLane } from "../utils/lanes";
+import { Button } from "@/components/ui/button";
 
 export function ClipCard({
   clip,
@@ -31,9 +32,10 @@ export function ClipCard({
   onDragEnd: () => void;
 }) {
   return (
-    <button
+    <Button
       className={[
         "clip-card",
+        "h-auto w-full justify-start rounded-xl border border-border/80 bg-card px-3 py-3 text-left shadow-none hover:bg-accent/35",
         selectedClipId === clip.id ? "selected" : "",
         draggedClipId === clip.id ? "dragging" : "",
         clipDropIndicator?.clipId === clip.id ? `drop-${clipDropIndicator.position}` : "",
@@ -46,6 +48,7 @@ export function ClipCard({
       onDragOver={(event) => onDragOver(event, clip.id)}
       onDrop={(event) => onDrop(event, clip.id)}
       onDragEnd={onDragEnd}
+      variant="ghost"
     >
       <span
         className="clip-swatch"
@@ -58,6 +61,6 @@ export function ClipCard({
         </div>
         <span>{clipListRangeLabel(clip)}</span>
       </div>
-    </button>
+    </Button>
   );
 }

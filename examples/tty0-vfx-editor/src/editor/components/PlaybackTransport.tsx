@@ -1,6 +1,8 @@
 import { usePlaybackDisplayTime } from "../hooks/usePlaybackDisplayTime";
 import { formatDuration, formatMeasurePosition } from "../utils/formatting";
 import { TransportIcon } from "./icons";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export function PlaybackTransport({
   audioRef,
@@ -49,29 +51,41 @@ export function PlaybackTransport({
       />
       <div className="timeline-transport">
         <div className="transport-actions">
-          <button
-            className="icon-button"
-            onClick={onTogglePlayback}
-            disabled={!effectiveAudioUrl}
-            type="button"
-            title={playPending ? "Preparing playback" : isPlaying ? "Pause playback" : "Play playback"}
-            aria-label={playPending ? "Preparing playback" : isPlaying ? "Pause playback" : "Play playback"}
-          >
-            <TransportIcon name={playPending ? "loading" : isPlaying ? "pause" : "play"} />
-          </button>
-          <button
-            className="icon-button"
-            onClick={() => {
-              setDisplayTime(0);
-              onStop();
-            }}
-            disabled={!effectiveAudioUrl}
-            type="button"
-            title="Stop playback"
-            aria-label="Stop playback"
-          >
-            <TransportIcon name="stop" />
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                className="icon-button"
+                onClick={onTogglePlayback}
+                disabled={!effectiveAudioUrl}
+                type="button"
+                variant="toolbar"
+                size="icon"
+                aria-label={playPending ? "Preparing playback" : isPlaying ? "Pause playback" : "Play playback"}
+              >
+                <TransportIcon name={playPending ? "loading" : isPlaying ? "pause" : "play"} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{playPending ? "Preparing playback" : isPlaying ? "Pause playback" : "Play playback"}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                className="icon-button"
+                onClick={() => {
+                  setDisplayTime(0);
+                  onStop();
+                }}
+                disabled={!effectiveAudioUrl}
+                type="button"
+                variant="toolbar"
+                size="icon"
+                aria-label="Stop playback"
+              >
+                <TransportIcon name="stop" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Stop playback</TooltipContent>
+          </Tooltip>
         </div>
         <div className="transport-stat">
           <span>Measure</span>

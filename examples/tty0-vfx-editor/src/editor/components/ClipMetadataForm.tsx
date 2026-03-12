@@ -1,6 +1,9 @@
 import { ChromaticBulgeGridClip } from "../../types";
 import { isLegacyClip } from "../../vfx";
 import { ClipFieldIcon } from "./icons";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 
 export function ClipMetadataForm({
   selectedClip,
@@ -24,17 +27,17 @@ export function ClipMetadataForm({
   return (
     <div className="step-list lfo-clip-fields">
       <div className="clip-field-grid">
-        <label className="clip-input-field field-span-2" title="Clip name">
+        <Label className="clip-input-field field-span-2" title="Clip name">
           <span className="compact-field-icon clip-input-icon" aria-hidden="true">
             <ClipFieldIcon name="name" />
           </span>
-          <input aria-label="Clip name" value={selectedClip.name} onChange={(event) => onChangeName(event.target.value)} />
-        </label>
-        <label className="clip-input-field field-span-2" title="Length / period">
+          <Input aria-label="Clip name" value={selectedClip.name} onChange={(event) => onChangeName(event.target.value)} />
+        </Label>
+        <Label className="clip-input-field field-span-2" title="Length / period">
           <span className="compact-field-icon clip-input-icon" aria-hidden="true">
             <ClipFieldIcon name="length" />
           </span>
-          <select
+          <NativeSelect
             aria-label="Length / period"
             value={selectedClipBeatOption}
             onChange={(event) => onChangeBeatValue(Number(event.target.value))}
@@ -49,38 +52,38 @@ export function ClipMetadataForm({
                 {option.label}
               </option>
             ))}
-          </select>
-        </label>
+          </NativeSelect>
+        </Label>
         {isLegacyClip(selectedClip) ? (
-          <p className="empty-copy field-span-2">
+          <p className="field-span-2 rounded-lg border border-editor-amber/30 bg-editor-amber/8 px-3 py-2 text-sm text-muted-foreground">
             Legacy step clip detected. This layout preserves playback, but LFO editing is only available for LFO clips.
           </p>
         ) : (
           <>
-            <label className="clip-input-field" title="Minimum value">
+            <Label className="clip-input-field" title="Minimum value">
               <span className="compact-field-icon clip-input-icon" aria-hidden="true">
                 <ClipFieldIcon name="min" />
               </span>
-              <input
+              <Input
                 aria-label="Minimum value"
                 type="number"
                 step={0.01}
                 value={selectedClip.source?.min ?? 0}
                 onChange={(event) => onChangeMin(Number(event.target.value))}
               />
-            </label>
-            <label className="clip-input-field" title="Maximum value">
+            </Label>
+            <Label className="clip-input-field" title="Maximum value">
               <span className="compact-field-icon clip-input-icon" aria-hidden="true">
                 <ClipFieldIcon name="max" />
               </span>
-              <input
+              <Input
                 aria-label="Maximum value"
                 type="number"
                 step={0.01}
                 value={selectedClip.source?.max ?? 0}
                 onChange={(event) => onChangeMax(Number(event.target.value))}
               />
-            </label>
+            </Label>
           </>
         )}
       </div>
