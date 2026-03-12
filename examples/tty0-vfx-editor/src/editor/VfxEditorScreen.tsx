@@ -173,6 +173,8 @@ export function VfxEditorScreen() {
       isPlaying={previewState.isPlaying}
       onReady={() => arrangementActions.setPreviewReady(true)}
       timelineIndex={arrangementState.timelineIndex}
+      className={desktopLayout ? "preview-column-resizable" : "preview-column-grid"}
+      panelClassName={desktopLayout ? "preview-panel-resizable" : "preview-panel-grid"}
     />
   );
 
@@ -204,7 +206,7 @@ export function VfxEditorScreen() {
             <ResizablePanel defaultSize={74} minSize={55}>
               <ResizablePanelGroup orientation="vertical" className="resizable-shell">
                 <ResizablePanel defaultSize={58} minSize={38}>
-                  <section className="workspace-row timeline-row">
+                  <section className="workspace-row">
                     <ResizablePanelGroup orientation="horizontal" className="resizable-shell">
                       <ResizablePanel defaultSize={28} minSize={18} className="timeline-sidebar">
                         {propertyPanel}
@@ -219,7 +221,7 @@ export function VfxEditorScreen() {
                 </ResizablePanel>
                 <ResizableHandle />
                 <ResizablePanel defaultSize={42} minSize={26}>
-                  <section className="workspace-row clip-row">
+                  <section className="workspace-row">
                     <ResizablePanelGroup orientation="horizontal" className="resizable-shell">
                       <ResizablePanel defaultSize={26} minSize={16}>
                         {clipLibraryPanel}

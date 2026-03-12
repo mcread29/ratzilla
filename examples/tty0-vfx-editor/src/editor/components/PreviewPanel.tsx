@@ -1,6 +1,7 @@
 import { TrackVisualizerConfig } from "../../types";
 import { buildTimelineIndex } from "../../vfx";
 import { PreviewCanvas } from "./PreviewCanvas";
+import { cn } from "@/lib/utils";
 
 export function PreviewPanel({
   config,
@@ -9,6 +10,8 @@ export function PreviewPanel({
   isPlaying,
   onReady,
   timelineIndex,
+  className,
+  panelClassName,
 }: {
   config: TrackVisualizerConfig;
   audioRef: { current: HTMLAudioElement | null };
@@ -16,10 +19,12 @@ export function PreviewPanel({
   isPlaying: boolean;
   onReady: () => void;
   timelineIndex: ReturnType<typeof buildTimelineIndex>;
+  className?: string;
+  panelClassName?: string;
 }) {
   return (
-    <aside className="preview-column">
-      <section className="panel preview-panel">
+    <aside className={cn("preview-column", className)}>
+      <section className={cn("panel preview-panel", panelClassName)}>
         <PreviewCanvas
           config={config}
           audioRef={audioRef}
