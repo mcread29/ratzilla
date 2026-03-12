@@ -29,6 +29,16 @@ export type TimelineIndex = {
   placementsByTrack: Map<number, IndexedTimelinePlacement[]>;
 };
 
+export type ShapeSegment = {
+  index: number;
+  left: LfoPoint;
+  right: LfoPoint;
+  midpointX: number;
+  midpointY: number;
+  controlX: number;
+  controlY: number;
+};
+
 const SHARED_LFO_IMPORT_ERROR =
   "Import failed: shared LFO shape libraries are no longer supported. Each LFO clip must embed its own shape.";
 
@@ -435,7 +445,7 @@ function applyLfoValueToState(
 }
 
 export function sampleLfoShape(shape: ChromaticBulgeGridLfoShape, phase: number): number {
-  const points = shape.points;
+  const points = normalizeShapePoints(shape.points);
   if (!points.length) return 0;
   if (points.length === 1) return points[0].value;
   const normalizedPhase = ((phase % 1) + 1) % 1;
@@ -445,7 +455,7 @@ export function sampleLfoShape(shape: ChromaticBulgeGridLfoShape, phase: number)
     if (normalizedPhase <= right.phase) {
       const span = Math.max(0.0001, right.phase - left.phase);
       const t = clamp01((normalizedPhase - left.phase) / span);
-      return lerp(left.value, right.value, t);
+      return quadraticBezier(left.value, controlValue(left, right), right.value, t);
     }
   }
   const first = points[0];
@@ -627,12 +637,22 @@ function normalizeShaderState(
 
 function normalizeShapePoints(points: LfoPoint[]): LfoPoint[] {
   const next = (points ?? [])
-    .map((point) => ({
-      phase: clamp01(point.phase),
-      value: clamp01(point.value),
-    }))
+    .map((point) =>
+      normalizedPoint({
+        phase: clamp01(point.phase),
+        value: clamp01(point.value),
+        curve_to_next: clamp(point.curve_to_next ?? 0, -1, 1),
+      }),
+    )
     .sort((left, right) => left.phase - right.phase);
-  return dedupePoints(next).slice(0, 64);
+  const normalized = dedupePoints(next).slice(0, 64);
+  if (normalized.length) {
+    normalized[normalized.length - 1] = normalizedPoint({
+      ...normalized[normalized.length - 1],
+      curve_to_next: 0,
+    });
+  }
+  return normalized;
 }
 
 function dedupePoints(points: LfoPoint[]): LfoPoint[] {
@@ -731,16 +751,43 @@ function palette(index: number): [number, number, number] {
 }
 
 export function shapePath(shape: ChromaticBulgeGridLfoShape, width: number, height: number, paddingY = 0): string {
-  if (!shape.points.length) return "";
-  const safePadding = Math.max(0, Math.min(height / 2 - 1, paddingY));
-  const usableHeight = Math.max(1, height - safePadding * 2);
-  return shape.points
-    .map((current, index) => {
-      const x = current.phase * width;
-      const y = safePadding + (1 - current.value) * usableHeight;
-      return `${index === 0 ? "M" : "L"} ${x} ${y}`;
-    })
-    .join(" ");
+  const points = normalizeShapePoints(shape.points);
+  if (!points.length) return "";
+  if (points.length === 1) {
+    return `M ${points[0].phase * width} ${valueToEditorY(points[0].value, height, paddingY)}`;
+  }
+  const first = points[0];
+  const commands = [`M ${first.phase * width} ${valueToEditorY(first.value, height, paddingY)}`];
+  for (const segment of shapeSegments(shape, width, height, paddingY)) {
+    commands.push(
+      `Q ${segment.controlX} ${segment.controlY} ${segment.right.phase * width} ${valueToEditorY(segment.right.value, height, paddingY)}`,
+    );
+  }
+  return commands.join(" ");
+}
+
+export function shapeSegments(
+  shape: ChromaticBulgeGridLfoShape,
+  width: number,
+  height: number,
+  paddingY = 0,
+): ShapeSegment[] {
+  const points = normalizeShapePoints(shape.points);
+  if (points.length < 2) return [];
+  return points.slice(0, -1).map((left, index) => {
+    const right = points[index + 1];
+    const midpointX = ((left.phase + right.phase) * width) / 2;
+    const midpointY = valueToEditorY((left.value + right.value) / 2, height, paddingY);
+    return {
+      index,
+      left,
+      right,
+      midpointX,
+      midpointY,
+      controlX: midpointX,
+      controlY: valueToEditorY(controlValue(left, right), height, paddingY),
+    };
+  });
 }
 
 export function pointLabel(point: LfoPoint): string {
@@ -749,6 +796,44 @@ export function pointLabel(point: LfoPoint): string {
 
 function point(phase: number, value: number): LfoPoint {
   return { phase, value };
+}
+
+function normalizedPoint(point: LfoPoint): LfoPoint {
+  const curveToNext = clamp(point.curve_to_next ?? 0, -1, 1);
+  return curveToNext === 0
+    ? { phase: point.phase, value: point.value }
+    : { phase: point.phase, value: point.value, curve_to_next: curveToNext };
+}
+
+export function controlValue(left: LfoPoint, right: LfoPoint): number {
+  const curveToNext = clamp(left.curve_to_next ?? 0, -1, 1);
+  const midpoint = (left.value + right.value) / 2;
+  return curveToNext >= 0
+    ? lerp(midpoint, 1, curveToNext)
+    : lerp(midpoint, 0, Math.abs(curveToNext));
+}
+
+export function curveFromControlValue(left: LfoPoint, right: LfoPoint, nextControlValue: number): number {
+  const midpoint = (left.value + right.value) / 2;
+  const clampedControl = clamp01(nextControlValue);
+  if (Math.abs(clampedControl - midpoint) < 0.0001) {
+    return 0;
+  }
+  if (clampedControl > midpoint) {
+    return midpoint >= 1 ? 0 : clamp((clampedControl - midpoint) / Math.max(0.0001, 1 - midpoint), 0, 1);
+  }
+  return -clamp((midpoint - clampedControl) / Math.max(0.0001, midpoint), 0, 1);
+}
+
+function quadraticBezier(a: number, control: number, b: number, t: number): number {
+  const inverse = 1 - t;
+  return inverse * inverse * a + 2 * inverse * t * control + t * t * b;
+}
+
+function valueToEditorY(value: number, height: number, paddingY = 0): number {
+  const safePadding = Math.max(0, Math.min(height / 2 - 1, paddingY));
+  const usableHeight = Math.max(1, height - safePadding * 2);
+  return safePadding + (1 - value) * usableHeight;
 }
 
 function finiteOr(value: number | undefined, fallback: number): number {

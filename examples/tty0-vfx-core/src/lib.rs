@@ -274,6 +274,8 @@ pub struct ChromaticBulgeGridLfoShape {
 pub struct LfoPoint {
     pub phase: f32,
     pub value: f32,
+    #[serde(default, skip_serializing_if = "lfo_curve_is_zero")]
+    pub curve_to_next: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -741,6 +743,7 @@ impl ChromaticBulgeGridLfoShape {
         for point in &mut normalized.points {
             point.phase = point.phase.clamp(0.0, 1.0);
             point.value = point.value.clamp(0.0, 1.0);
+            point.curve_to_next = point.curve_to_next.clamp(-1.0, 1.0);
         }
         normalized
             .points
@@ -749,6 +752,9 @@ impl ChromaticBulgeGridLfoShape {
             .points
             .dedup_by(|left, right| (left.phase - right.phase).abs() < 0.0001);
         normalized.points.truncate(64);
+        if let Some(last) = normalized.points.last_mut() {
+            last.curve_to_next = 0.0;
+        }
         normalized
     }
 }
@@ -1880,7 +1886,7 @@ fn sample_lfo_shape(shape: &ChromaticBulgeGridLfoShape, phase: f32) -> f32 {
         if phase <= right.phase {
             let span = (right.phase - left.phase).max(0.0001);
             let t = ((phase - left.phase) / span).clamp(0.0, 1.0);
-            return lerp(left.value, right.value, t);
+            return quadratic_bezier(left.value, lfo_control_value(left, right), right.value, t);
         }
     }
     let first = points[0];
@@ -1995,6 +2001,24 @@ fn base_float_for_lane(base: ChromaticBulgeGridShaderState, lane: ChromaticBulge
 
 fn lerp(start: f32, end: f32, t: f32) -> f32 {
     start + (end - start) * t
+}
+
+fn quadratic_bezier(start: f32, control: f32, end: f32, t: f32) -> f32 {
+    let inverse = 1.0 - t;
+    inverse * inverse * start + 2.0 * inverse * t * control + t * t * end
+}
+
+fn lfo_control_value(left: LfoPoint, right: LfoPoint) -> f32 {
+    let midpoint = (left.value + right.value) * 0.5;
+    if left.curve_to_next >= 0.0 {
+        lerp(midpoint, 1.0, left.curve_to_next)
+    } else {
+        lerp(midpoint, 0.0, left.curve_to_next.abs())
+    }
+}
+
+fn lfo_curve_is_zero(value: &f32) -> bool {
+    value.abs() < 0.0001
 }
 
 fn clamp_color(value: [f32; 3]) -> [f32; 3] {
@@ -2303,14 +2327,17 @@ mod tests {
                                 LfoPoint {
                                     phase: 0.0,
                                     value: 0.0,
+                                    curve_to_next: 0.0,
                                 },
                                 LfoPoint {
                                     phase: 0.5,
                                     value: 1.0,
+                                    curve_to_next: 0.0,
                                 },
                                 LfoPoint {
                                     phase: 1.0,
                                     value: 0.0,
+                                    curve_to_next: 0.0,
                                 },
                             ],
                         },
@@ -2339,6 +2366,128 @@ mod tests {
             timeline_preview: false,
         });
         assert!((resolved.uniforms.bulge_amount - 0.4).abs() < 0.0001);
+    }
+
+    #[test]
+    fn curved_lfo_segments_preserve_linear_legacy_behavior() {
+        let shape = ChromaticBulgeGridLfoShape {
+            interpolation: LfoInterpolation::Linear,
+            points: vec![
+                LfoPoint {
+                    phase: 0.0,
+                    value: 0.2,
+                    curve_to_next: 0.0,
+                },
+                LfoPoint {
+                    phase: 0.75,
+                    value: 0.8,
+                    curve_to_next: 0.0,
+                },
+            ],
+        };
+        let sampled = sample_lfo_shape(&shape, 0.375);
+        assert!((sampled - 0.5).abs() < 0.0001);
+    }
+
+    #[test]
+    fn curved_lfo_segments_bow_up_and_down() {
+        let bowed_up = ChromaticBulgeGridLfoShape {
+            interpolation: LfoInterpolation::Linear,
+            points: vec![
+                LfoPoint {
+                    phase: 0.0,
+                    value: 0.0,
+                    curve_to_next: 1.0,
+                },
+                LfoPoint {
+                    phase: 1.0,
+                    value: 1.0,
+                    curve_to_next: 0.0,
+                },
+            ],
+        };
+        let bowed_down = ChromaticBulgeGridLfoShape {
+            interpolation: LfoInterpolation::Linear,
+            points: vec![
+                LfoPoint {
+                    phase: 0.0,
+                    value: 0.0,
+                    curve_to_next: -1.0,
+                },
+                LfoPoint {
+                    phase: 1.0,
+                    value: 1.0,
+                    curve_to_next: 0.0,
+                },
+            ],
+        };
+
+        assert!((sample_lfo_shape(&bowed_up, 0.25) - 0.4375).abs() < 0.0001);
+        assert!((sample_lfo_shape(&bowed_down, 0.25) - 0.0625).abs() < 0.0001);
+    }
+
+    #[test]
+    fn lfo_shape_normalization_clamps_curve_and_zeroes_last_segment() {
+        let normalized = ChromaticBulgeGridLfoShape {
+            interpolation: LfoInterpolation::Linear,
+            points: vec![
+                LfoPoint {
+                    phase: 0.5,
+                    value: 0.4,
+                    curve_to_next: 2.0,
+                },
+                LfoPoint {
+                    phase: 1.2,
+                    value: -1.0,
+                    curve_to_next: -2.0,
+                },
+            ],
+        }
+        .normalized();
+
+        assert_eq!(normalized.points[0].curve_to_next, 1.0);
+        assert_eq!(normalized.points[1].curve_to_next, 0.0);
+        assert_eq!(normalized.points[1].phase, 1.0);
+        assert_eq!(normalized.points[1].value, 0.0);
+    }
+
+    #[test]
+    fn lfo_shape_json_round_trip_omits_zero_curves() {
+        let shape = ChromaticBulgeGridLfoShape {
+            interpolation: LfoInterpolation::Linear,
+            points: vec![
+                LfoPoint {
+                    phase: 0.0,
+                    value: 0.0,
+                    curve_to_next: 0.4,
+                },
+                LfoPoint {
+                    phase: 1.0,
+                    value: 1.0,
+                    curve_to_next: 0.0,
+                },
+            ],
+        };
+
+        let value = serde_json::to_value(&shape).unwrap();
+        let points = value
+            .get("points")
+            .and_then(serde_json::Value::as_array)
+            .unwrap();
+        assert!(
+            (points[0]
+                .get("curve_to_next")
+                .and_then(serde_json::Value::as_f64)
+                .unwrap()
+                - 0.4)
+                .abs()
+                < 0.0001
+        );
+        assert!(points[1].get("curve_to_next").is_none());
+
+        let round_trip: ChromaticBulgeGridLfoShape = serde_json::from_value(value).unwrap();
+        assert!((round_trip.points[0].curve_to_next - 0.4).abs() < 0.0001);
+        assert_eq!(round_trip.points[1].curve_to_next, 0.0);
     }
 
     #[test]
@@ -2400,10 +2549,12 @@ mod tests {
                                 LfoPoint {
                                     phase: 0.25,
                                     value: 0.0,
+                                    curve_to_next: 0.0,
                                 },
                                 LfoPoint {
                                     phase: 0.25,
                                     value: 1.0,
+                                    curve_to_next: 0.0,
                                 },
                             ],
                         },
@@ -2462,6 +2613,7 @@ mod tests {
                             points: vec![LfoPoint {
                                 phase: 0.0,
                                 value: 0.0,
+                                curve_to_next: 0.0,
                             }],
                         },
                         min: 0.0,

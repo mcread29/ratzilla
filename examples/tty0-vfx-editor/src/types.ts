@@ -112,6 +112,7 @@ export type LfoInterpolation = "linear";
 export interface LfoPoint {
   phase: number;
   value: number;
+  curve_to_next?: number;
 }
 
 export interface ChromaticBulgeGridLfoShape {
