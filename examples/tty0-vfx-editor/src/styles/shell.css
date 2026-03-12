@@ -361,8 +361,9 @@
   display: grid;
   grid-template-columns: 176px minmax(0, 1fr);
   gap: 0.6rem;
-  align-items: start;
+  align-items: stretch;
   flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
 }
@@ -566,7 +567,7 @@
   background: var(--editor-cyan);
 }
 
-.resizable-shell-handle[aria-orientation="vertical"]::after {
+.resizable-shell-handle[aria-orientation="horizontal"]::after {
   width: 2.25rem;
   height: 2px;
 }
