@@ -203,31 +203,31 @@ export function VfxEditorScreen() {
       <main className={desktopLayout ? "workspace-resizable" : "workspace"}>
         {desktopLayout ? (
           <ResizablePanelGroup orientation="horizontal" className="resizable-shell">
-            <ResizablePanel defaultSize="74%" minSize="55%">
+            <ResizablePanel defaultSize="74%" minSize="55%" className="resizable-panel-frame">
               <ResizablePanelGroup orientation="vertical" className="resizable-shell">
-                <ResizablePanel defaultSize="50%" minSize="30%" maxSize="50%">
-                  <section className="workspace-row">
+                <ResizablePanel defaultSize="50%" minSize="30%" maxSize="50%" className="resizable-panel-frame">
+                  <section className="workspace-row workspace-row-resizable">
                     <ResizablePanelGroup orientation="horizontal" className="resizable-shell">
                       <ResizablePanel defaultSize="28%" minSize="18%" className="timeline-sidebar">
                         {propertyPanel}
                         {sessionPanel}
                       </ResizablePanel>
                       <ResizableHandle withHandle />
-                      <ResizablePanel defaultSize="72%" minSize="40%">
+                      <ResizablePanel defaultSize="72%" minSize="40%" className="resizable-panel-frame">
                         {arrangementPanel}
                       </ResizablePanel>
                     </ResizablePanelGroup>
                   </section>
                 </ResizablePanel>
                 <ResizableHandle />
-                <ResizablePanel defaultSize="50%" minSize="50%">
-                  <section className="workspace-row">
+                <ResizablePanel defaultSize="50%" minSize="50%" className="resizable-panel-frame">
+                  <section className="workspace-row workspace-row-resizable">
                     <ResizablePanelGroup orientation="horizontal" className="resizable-shell">
-                      <ResizablePanel defaultSize="26%" minSize="16%">
+                      <ResizablePanel defaultSize="26%" minSize="16%" className="resizable-panel-frame">
                         {clipLibraryPanel}
                       </ResizablePanel>
                       <ResizableHandle withHandle />
-                      <ResizablePanel defaultSize="74%" minSize="34%">
+                      <ResizablePanel defaultSize="74%" minSize="34%" className="resizable-panel-frame">
                         {clipEditorPanel}
                       </ResizablePanel>
                     </ResizablePanelGroup>
@@ -236,7 +236,7 @@ export function VfxEditorScreen() {
               </ResizablePanelGroup>
             </ResizablePanel>
             <ResizableHandle withHandle />
-            <ResizablePanel defaultSize="26%" minSize="18%" maxSize="40%">
+            <ResizablePanel defaultSize="26%" minSize="18%" maxSize="40%" className="resizable-panel-frame">
               {previewPanel}
             </ResizablePanel>
           </ResizablePanelGroup>

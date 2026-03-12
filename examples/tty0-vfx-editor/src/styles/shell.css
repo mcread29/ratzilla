@@ -126,6 +126,16 @@
   gap: 2px;
 }
 
+.workspace-row-resizable {
+  height: 100%;
+  min-height: 0;
+}
+
+.workspace-row-resizable > .resizable-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .timeline-row {
   grid-template-columns: minmax(220px, 0.33fr) minmax(0, 1fr);
   min-height: 0;
@@ -222,6 +232,12 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  min-height: 0;
+}
+
+.library-panel,
+.clip-editor-panel {
+  height: 100%;
 }
 
 .clip-editor-panel {
@@ -526,6 +542,18 @@
 }
 
 .resizable-shell {
+  min-height: 0;
+}
+
+.resizable-panel-frame {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.resizable-panel-frame > * {
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
 }
 
