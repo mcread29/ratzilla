@@ -21,7 +21,6 @@ import {
   normalizeClipLfoShape,
   normalizedConfig,
   phaseToEditorX,
-  pointLabel,
   primaryLane,
   resolveNormalizedChromaticBulgeGrid,
   shapeSegments,
@@ -2216,6 +2215,8 @@ function ShapeEditorPanel({
         : [],
     [normalizedShape],
   );
+  const selectedPoint =
+    normalizedShape && selectedPointIndex != null ? normalizedShape.points[selectedPointIndex] ?? null : null;
 
   function commit(points: LfoPoint[]) {
     const normalized = normalizeClipLfoShape({ interpolation: "linear", points });
@@ -2294,17 +2295,16 @@ function ShapeEditorPanel({
                 ))}
               </div>
             </div>
-            <div className="shape-point-list vertical">
-              {normalizedShape.points.map((point, index) => (
-                <button
-                  key={`${index}-${point.phase}-${point.value}`}
-                  className={`list-item ${selectedPointIndex === index ? "selected" : ""}`}
-                  onClick={() => onSelectPoint(index)}
-                >
-                  <strong>Point {index + 1}</strong>
-                  <span>{pointLabel(point)}</span>
-                </button>
-              ))}
+            <div className="shape-point-readout">
+              {selectedPoint ? (
+                <>
+                  <strong>{`Point ${selectedPointIndex! + 1}`}</strong>
+                  <span>{`x ${selectedPoint.phase.toFixed(3)}`}</span>
+                  <span>{`y ${selectedPoint.value.toFixed(3)}`}</span>
+                </>
+              ) : (
+                <span className="empty-copy">No point selected.</span>
+              )}
             </div>
           </>
         ) : (
