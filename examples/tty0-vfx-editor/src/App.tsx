@@ -1455,6 +1455,7 @@ export default function App() {
           <section className="panel preview-panel">
             <PreviewCanvas
               config={normalizedDraft}
+              audioRef={audioRef}
               playbackTimeRef={playbackTimeRef}
               isPlaying={isPlaying}
               onReady={() => setPreviewReady(true)}
@@ -1847,11 +1848,13 @@ function ClipActionIcon({ name }: { name: "add" | "copy" | "delete" }) {
 
 function PreviewCanvas({
   config,
+  audioRef,
   playbackTimeRef,
   isPlaying,
   onReady,
 }: {
   config: TrackVisualizerConfig;
+  audioRef: { current: HTMLAudioElement | null };
   playbackTimeRef: { current: number };
   isPlaying: boolean;
   onReady: () => void;
@@ -1882,11 +1885,13 @@ function PreviewCanvas({
     let frame = 0;
     let announcedReady = false;
     const render = () => {
-      const currentTime = playbackTimeRef.current;
+      const audio = audioRef.current;
+      const currentTime = audio ? audio.currentTime : playbackTimeRef.current;
+      const currentIsPlaying = audio ? !audio.paused && !audio.ended : isPlayingRef.current;
       const currentUniforms = resolveNormalizedChromaticBulgeGrid(configRef.current, {
         currentTimeSecs: currentTime,
         visualTimeSecs: currentTime,
-        isPlaying: isPlayingRef.current,
+        isPlaying: currentIsPlaying,
         timelinePreview: true,
       }).uniforms;
       const dpr = window.devicePixelRatio || 1;
@@ -1931,7 +1936,7 @@ function PreviewCanvas({
       gl.deleteProgram(program);
       if (vao) gl.deleteVertexArray(vao);
     };
-  }, [onReady, playbackTimeRef]);
+  }, [audioRef, onReady, playbackTimeRef]);
 
   return <canvas ref={canvasRef} className="preview-canvas" />;
 }
