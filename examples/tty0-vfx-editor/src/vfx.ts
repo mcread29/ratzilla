@@ -17,6 +17,7 @@ import {
 
 export const LANE_ORDER: LaneId[] = [
   "motion_rate",
+  "motion_rate_y",
   "lattice_density",
   "circle_radius",
   "circle_falloff_start",
@@ -25,16 +26,10 @@ export const LANE_ORDER: LaneId[] = [
   "rim_guard",
   "rim_exponent",
   "rim_warp",
-  "spacing_max_px",
-  "spacing_min_px",
   "dot_size",
   "outer_dot_scale",
   "edge_softness",
   "chromatic_aberration",
-  "scroll_base",
-  "scroll_motion_scale",
-  "scroll_motion_floor",
-  "scroll_motion_ceiling",
   "cold_color",
   "hot_color",
   "color_cycle_rate",
@@ -50,6 +45,7 @@ export function isColorLane(lane: LaneId): boolean {
 export function defaultShaderState(): ChromaticBulgeGridShaderState {
   return {
     motion_rate: 1,
+    motion_rate_y: 0,
     lattice_density: 6,
     circle_radius: 0.24,
     circle_falloff_start: 0.78,
@@ -58,16 +54,10 @@ export function defaultShaderState(): ChromaticBulgeGridShaderState {
     rim_guard: 0.55,
     rim_exponent: 1.8,
     rim_warp: 0.18,
-    spacing_max_px: 22,
-    spacing_min_px: 12,
     dot_size: 0.16,
     outer_dot_scale: 0.33,
     edge_softness: 1,
     chromatic_aberration: 0.28,
-    scroll_base: 28,
-    scroll_motion_scale: 42,
-    scroll_motion_floor: 0.2,
-    scroll_motion_ceiling: 2.8,
     cold_color: [1, 1, 1],
     hot_color: [1, 1, 1],
     color_cycle_rate: 0.16,
@@ -120,12 +110,40 @@ export function normalizedConfig(config: TrackVisualizerConfig): TrackVisualizer
     const base = defaultShaderState();
     next.params.shader_states = { playing: base, idle: base };
   }
+  next.params.shader_states.playing = normalizeShaderState(next.params.shader_states.playing);
   next.params.shader_states.idle = structuredClone(next.params.shader_states.playing);
   if (next.timeline) {
     next.automation = null;
     next.timeline = normalizeTimeline(next.timeline);
   }
   return next;
+}
+
+function normalizeShaderState(
+  state: Partial<ChromaticBulgeGridShaderState> | undefined,
+): ChromaticBulgeGridShaderState {
+  const defaults = defaultShaderState();
+  const next = structuredClone(state ?? {});
+  return {
+    motion_rate: next.motion_rate ?? defaults.motion_rate,
+    motion_rate_y: next.motion_rate_y ?? defaults.motion_rate_y,
+    lattice_density: next.lattice_density ?? defaults.lattice_density,
+    circle_radius: next.circle_radius ?? defaults.circle_radius,
+    circle_falloff_start: next.circle_falloff_start ?? defaults.circle_falloff_start,
+    circle_falloff_end: next.circle_falloff_end ?? defaults.circle_falloff_end,
+    bulge_amount: next.bulge_amount ?? defaults.bulge_amount,
+    rim_guard: next.rim_guard ?? defaults.rim_guard,
+    rim_exponent: next.rim_exponent ?? defaults.rim_exponent,
+    rim_warp: next.rim_warp ?? defaults.rim_warp,
+    dot_size: next.dot_size ?? defaults.dot_size,
+    outer_dot_scale: next.outer_dot_scale ?? defaults.outer_dot_scale,
+    edge_softness: next.edge_softness ?? defaults.edge_softness,
+    chromatic_aberration: next.chromatic_aberration ?? defaults.chromatic_aberration,
+    cold_color: next.cold_color ?? defaults.cold_color,
+    hot_color: next.hot_color ?? defaults.hot_color,
+    color_cycle_rate: next.color_cycle_rate ?? defaults.color_cycle_rate,
+    inner_alpha: next.inner_alpha ?? defaults.inner_alpha,
+  };
 }
 
 export function normalizeTimeline(
@@ -138,25 +156,45 @@ export function normalizeTimeline(
   next.clips = next.clips.map((clip) => ({
     ...clip,
     length_beats: Math.max(0.0001, clip.length_beats || 1),
+    authoring: normalizeAuthoring(clip.authoring),
     lanes: sortLanes(clip.lanes ?? {}),
   }));
+  const clipTrackById = new Map(
+    next.clips.map((clip) => [clip.id, primaryLane(clip)?.index ?? 0] as const),
+  );
   next.arrangement = next.arrangement.map((placement) => ({
     ...placement,
     start_beat: Math.max(0, placement.start_beat || 0),
+    track: clipTrackById.get(placement.clip_id) ?? placement.track ?? 0,
     repeats: Math.max(1, placement.repeats || 1),
   }));
   return next;
 }
 
 function sortLanes(lanes: ChromaticBulgeGridAutomationLanes): ChromaticBulgeGridAutomationLanes {
-  const next = structuredClone(lanes);
+  const next = {} as ChromaticBulgeGridAutomationLanes;
   for (const lane of LANE_ORDER) {
-    const keyframes = next[lane];
+    const keyframes = structuredClone(lanes[lane] ?? []);
     if (keyframes) {
       keyframes.sort((a, b) => a.beat - b.beat);
+      if (keyframes.length > 0) {
+        (next as Record<string, unknown>)[lane] = keyframes;
+      }
     }
   }
   return next;
+}
+
+function normalizeAuthoring(
+  authoring: ChromaticBulgeGridClipAuthoring | undefined,
+): ChromaticBulgeGridClipAuthoring | undefined {
+  if (!authoring) {
+    return undefined;
+  }
+  const lane = authoring.tracks[0]?.lane;
+  return {
+    tracks: lane && LANE_ORDER.includes(lane) ? [structuredClone(authoring.tracks[0])] : [],
+  };
 }
 
 export function compileAuthoringLanes(
@@ -401,32 +439,38 @@ function resolveTimelineState(
   base: ChromaticBulgeGridShaderState,
   beat: number,
 ): ChromaticBulgeGridShaderState | null {
-  const active = timeline.arrangement
-    .map((placement) => {
-      const clip = timeline.clips.find((candidate) => candidate.id === placement.clip_id);
-      if (!clip) return null;
-      const endBeat = placement.start_beat + clip.length_beats * Math.max(1, placement.repeats);
-      if (beat < placement.start_beat || beat >= endBeat) return null;
-      const localBeat =
-        clip.length_beats <= 0
-          ? 0
-          : Math.max(0, Math.min(clip.length_beats, (beat - placement.start_beat) % clip.length_beats));
-      return { clip, localBeat, track: placement.track, startBeat: placement.start_beat };
-    })
-    .filter(Boolean)
-    .sort((left, right) => {
-      const a = left!;
-      const b = right!;
-      return a.track - b.track || a.startBeat - b.startBeat;
-    }) as Array<{
+  const held = new Map<number, {
     clip: ChromaticBulgeGridClip;
     localBeat: number;
     track: number;
     startBeat: number;
-  }>;
-  if (active.length === 0) return null;
+  }>();
+  for (const placement of timeline.arrangement) {
+    const clip = timeline.clips.find((candidate) => candidate.id === placement.clip_id);
+    if (!clip || beat < placement.start_beat) {
+      continue;
+    }
+    const endBeat = placement.start_beat + clip.length_beats * Math.max(1, placement.repeats);
+    const localBeat =
+      clip.length_beats <= 0
+        ? 0
+        : beat < endBeat
+          ? Math.max(0, Math.min(clip.length_beats, (beat - placement.start_beat) % clip.length_beats))
+          : clip.length_beats;
+    const current = held.get(placement.track);
+    if (!current || placement.start_beat >= current.startBeat) {
+      held.set(placement.track, {
+        clip,
+        localBeat,
+        track: placement.track,
+        startBeat: placement.start_beat,
+      });
+    }
+  }
+  const resolved = Array.from(held.values()).sort((left, right) => left.track - right.track);
+  if (resolved.length === 0) return null;
   let state = structuredClone(base);
-  for (const item of active) {
+  for (const item of resolved) {
     state = applyLanesToState(state, item.clip.lanes, item.localBeat);
   }
   return state;

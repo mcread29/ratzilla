@@ -206,6 +206,7 @@ fn lerp(start: f32, end: f32, t: f32) -> f32 {
 fn base_float_for_lane(base: ChromaticBulgeGridShaderState, lane: ChromaticBulgeGridLaneId) -> f32 {
     match lane {
         ChromaticBulgeGridLaneId::MotionRate => base.motion_rate,
+        ChromaticBulgeGridLaneId::MotionRateY => base.motion_rate_y,
         ChromaticBulgeGridLaneId::LatticeDensity => base.lattice_density,
         ChromaticBulgeGridLaneId::CircleRadius => base.circle_radius,
         ChromaticBulgeGridLaneId::CircleFalloffStart => base.circle_falloff_start,
@@ -214,16 +215,10 @@ fn base_float_for_lane(base: ChromaticBulgeGridShaderState, lane: ChromaticBulge
         ChromaticBulgeGridLaneId::RimGuard => base.rim_guard,
         ChromaticBulgeGridLaneId::RimExponent => base.rim_exponent,
         ChromaticBulgeGridLaneId::RimWarp => base.rim_warp,
-        ChromaticBulgeGridLaneId::SpacingMaxPx => base.spacing_max_px,
-        ChromaticBulgeGridLaneId::SpacingMinPx => base.spacing_min_px,
         ChromaticBulgeGridLaneId::DotSize => base.dot_size,
         ChromaticBulgeGridLaneId::OuterDotScale => base.outer_dot_scale,
         ChromaticBulgeGridLaneId::EdgeSoftness => base.edge_softness,
         ChromaticBulgeGridLaneId::ChromaticAberration => base.chromatic_aberration,
-        ChromaticBulgeGridLaneId::ScrollBase => base.scroll_base,
-        ChromaticBulgeGridLaneId::ScrollMotionScale => base.scroll_motion_scale,
-        ChromaticBulgeGridLaneId::ScrollMotionFloor => base.scroll_motion_floor,
-        ChromaticBulgeGridLaneId::ScrollMotionCeiling => base.scroll_motion_ceiling,
         ChromaticBulgeGridLaneId::ColorCycleRate => base.color_cycle_rate,
         ChromaticBulgeGridLaneId::InnerAlpha => base.inner_alpha,
         ChromaticBulgeGridLaneId::ColdColor | ChromaticBulgeGridLaneId::HotColor => {
@@ -249,6 +244,7 @@ fn float_lane_mut(
 ) -> &mut Vec<FloatKeyframe> {
     match lane {
         ChromaticBulgeGridLaneId::MotionRate => &mut lanes.motion_rate,
+        ChromaticBulgeGridLaneId::MotionRateY => &mut lanes.motion_rate_y,
         ChromaticBulgeGridLaneId::LatticeDensity => &mut lanes.lattice_density,
         ChromaticBulgeGridLaneId::CircleRadius => &mut lanes.circle_radius,
         ChromaticBulgeGridLaneId::CircleFalloffStart => &mut lanes.circle_falloff_start,
@@ -257,16 +253,10 @@ fn float_lane_mut(
         ChromaticBulgeGridLaneId::RimGuard => &mut lanes.rim_guard,
         ChromaticBulgeGridLaneId::RimExponent => &mut lanes.rim_exponent,
         ChromaticBulgeGridLaneId::RimWarp => &mut lanes.rim_warp,
-        ChromaticBulgeGridLaneId::SpacingMaxPx => &mut lanes.spacing_max_px,
-        ChromaticBulgeGridLaneId::SpacingMinPx => &mut lanes.spacing_min_px,
         ChromaticBulgeGridLaneId::DotSize => &mut lanes.dot_size,
         ChromaticBulgeGridLaneId::OuterDotScale => &mut lanes.outer_dot_scale,
         ChromaticBulgeGridLaneId::EdgeSoftness => &mut lanes.edge_softness,
         ChromaticBulgeGridLaneId::ChromaticAberration => &mut lanes.chromatic_aberration,
-        ChromaticBulgeGridLaneId::ScrollBase => &mut lanes.scroll_base,
-        ChromaticBulgeGridLaneId::ScrollMotionScale => &mut lanes.scroll_motion_scale,
-        ChromaticBulgeGridLaneId::ScrollMotionFloor => &mut lanes.scroll_motion_floor,
-        ChromaticBulgeGridLaneId::ScrollMotionCeiling => &mut lanes.scroll_motion_ceiling,
         ChromaticBulgeGridLaneId::ColorCycleRate => &mut lanes.color_cycle_rate,
         ChromaticBulgeGridLaneId::InnerAlpha => &mut lanes.inner_alpha,
         ChromaticBulgeGridLaneId::ColdColor | ChromaticBulgeGridLaneId::HotColor => {

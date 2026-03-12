@@ -22,7 +22,7 @@ in vec2 v_uv;
 
 uniform vec2 u_resolution;
 uniform float u_time;
-uniform float u_motion_rate;
+uniform vec2 u_motion_rate;
 uniform float u_lattice_density;
 uniform float u_circle_radius;
 uniform float u_circle_falloff_start;
@@ -31,22 +31,18 @@ uniform float u_bulge_amount;
 uniform float u_rim_guard;
 uniform float u_rim_exponent;
 uniform float u_rim_warp;
-uniform float u_spacing_max_px;
-uniform float u_spacing_min_px;
 uniform float u_dot_size;
 uniform float u_outer_dot_scale;
 uniform float u_edge_softness;
 uniform float u_chromatic_aberration;
-uniform float u_scroll_base;
-uniform float u_scroll_motion_scale;
-uniform float u_scroll_motion_floor;
-uniform float u_scroll_motion_ceiling;
 uniform vec3 u_cold_color;
 uniform vec3 u_hot_color;
-uniform float u_color_cycle_rate;
 uniform float u_inner_alpha;
 
 out vec4 out_color;
+
+const float GRID_SPACING_MAX_PX = 22.0;
+const float GRID_SPACING_MIN_PX = 12.0;
 
 float dot_mask(vec2 sample_px, float spacing_px, float radius_px, float edge_px) {
   vec2 local = mod(sample_px + 0.5 * spacing_px, spacing_px) - 0.5 * spacing_px;
@@ -67,11 +63,11 @@ void main() {
   vec2 sphere_xy = lens_radius > 0.0 ? lens_delta / lens_radius : vec2(0.0);
   vec3 sphere_normal = normalize(vec3(sphere_xy, max(hemisphere, 0.001)));
   float density = clamp((u_lattice_density - 2.0) / 10.0, 0.0, 1.0);
-  float spacing_px = mix(u_spacing_max_px, u_spacing_min_px, density);
+  float spacing_px = mix(GRID_SPACING_MAX_PX, GRID_SPACING_MIN_PX, density);
   float base_radius_px = spacing_px * u_dot_size;
-  float scroll_px = u_time * (u_scroll_base + u_scroll_motion_scale * clamp(u_motion_rate - u_scroll_motion_floor, 0.0, u_scroll_motion_ceiling));
+  vec2 motion_px = u_time * u_motion_rate * 60.0;
   vec2 base_sample_px = frag_px;
-  base_sample_px.x += scroll_px;
+  base_sample_px += motion_px;
   vec2 sphere_offset = frag_px - center;
   float center_profile = falloff * hemisphere;
   float magnify = 1.0 - center_profile * u_bulge_amount;
@@ -80,7 +76,7 @@ void main() {
   float rim_profile = falloff * pow(clamp(1.0 - sphere_normal.z, 0.0, 1.0), u_rim_exponent);
   float rimWarp = rim_profile * u_rim_warp;
   vec2 sphere_sample_px = warped_screen_px + rim_direction * rimWarp;
-  sphere_sample_px.x += scroll_px;
+  sphere_sample_px += motion_px;
   float sphere_mix = clamp(falloff * hemisphere, 0.0, 1.0);
   float dot_radius_px = mix(base_radius_px * u_outer_dot_scale, base_radius_px, sphere_mix);
   vec2 final_sample_px = mix(base_sample_px, sphere_sample_px, sphere_mix);
@@ -89,9 +85,7 @@ void main() {
   float mask_g = dot_mask(final_sample_px, spacing_px, dot_radius_px, u_edge_softness);
   float mask_r = dot_mask(final_sample_px + chroma_offset, spacing_px, dot_radius_px, u_edge_softness);
   float mask_b = dot_mask(final_sample_px - chroma_offset, spacing_px, dot_radius_px, u_edge_softness);
-  float color_phase = 0.5 + 0.5 * sin(u_time * u_color_cycle_rate);
-  vec3 base_color = mix(u_cold_color, u_hot_color, color_phase);
-  vec3 dot_color = mix(vec3(1.0), base_color, sphere_mix);
+  vec3 dot_color = mix(u_cold_color, u_hot_color, sphere_mix);
   float outer_alpha = mask_g;
   float inner_alpha = mask_g * u_inner_alpha;
   float alpha = mix(outer_alpha, inner_alpha, sphere_mix);

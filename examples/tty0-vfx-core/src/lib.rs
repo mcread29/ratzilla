@@ -28,7 +28,7 @@ in vec2 v_uv;
 
 uniform vec2 u_resolution;
 uniform float u_time;
-uniform float u_motion_rate;
+uniform vec2 u_motion_rate;
 uniform float u_lattice_density;
 uniform float u_circle_radius;
 uniform float u_circle_falloff_start;
@@ -37,22 +37,18 @@ uniform float u_bulge_amount;
 uniform float u_rim_guard;
 uniform float u_rim_exponent;
 uniform float u_rim_warp;
-uniform float u_spacing_max_px;
-uniform float u_spacing_min_px;
 uniform float u_dot_size;
 uniform float u_outer_dot_scale;
 uniform float u_edge_softness;
 uniform float u_chromatic_aberration;
-uniform float u_scroll_base;
-uniform float u_scroll_motion_scale;
-uniform float u_scroll_motion_floor;
-uniform float u_scroll_motion_ceiling;
 uniform vec3 u_cold_color;
 uniform vec3 u_hot_color;
-uniform float u_color_cycle_rate;
 uniform float u_inner_alpha;
 
 out vec4 out_color;
+
+const float GRID_SPACING_MAX_PX = 22.0;
+const float GRID_SPACING_MIN_PX = 12.0;
 
 float dot_mask(vec2 sample_px, float spacing_px, float radius_px, float edge_px) {
   vec2 local = mod(sample_px + 0.5 * spacing_px, spacing_px) - 0.5 * spacing_px;
@@ -75,18 +71,11 @@ void main() {
   vec3 sphere_normal = normalize(vec3(sphere_xy, max(hemisphere, 0.001)));
 
   float density = clamp((u_lattice_density - 2.0) / 10.0, 0.0, 1.0);
-  float spacing_px = mix(u_spacing_max_px, u_spacing_min_px, density);
+  float spacing_px = mix(GRID_SPACING_MAX_PX, GRID_SPACING_MIN_PX, density);
   float base_radius_px = spacing_px * u_dot_size;
-  float scroll_px = u_time * (
-    u_scroll_base
-    + u_scroll_motion_scale * clamp(
-      u_motion_rate - u_scroll_motion_floor,
-      0.0,
-      u_scroll_motion_ceiling
-    )
-  );
+  vec2 motion_px = u_time * u_motion_rate * 60.0;
   vec2 base_sample_px = frag_px;
-  base_sample_px.x += scroll_px;
+  base_sample_px += motion_px;
 
   vec2 sphere_offset = frag_px - center;
   float center_profile = falloff * hemisphere;
@@ -96,7 +85,7 @@ void main() {
   float rim_profile = falloff * pow(clamp(1.0 - sphere_normal.z, 0.0, 1.0), u_rim_exponent);
   float rim_warp = rim_profile * u_rim_warp;
   vec2 sphere_sample_px = warped_screen_px + rim_direction * rim_warp;
-  sphere_sample_px.x += scroll_px;
+  sphere_sample_px += motion_px;
   float sphere_mix = clamp(falloff * hemisphere, 0.0, 1.0);
   float dot_radius_px = mix(base_radius_px * u_outer_dot_scale, base_radius_px, sphere_mix);
   float edge_px = u_edge_softness;
@@ -119,9 +108,7 @@ void main() {
     edge_px
   );
 
-  float color_phase = 0.5 + 0.5 * sin(u_time * u_color_cycle_rate);
-  vec3 base_color = mix(u_cold_color, u_hot_color, color_phase);
-  vec3 dot_color = mix(vec3(1.0), base_color, sphere_mix);
+  vec3 dot_color = mix(u_cold_color, u_hot_color, sphere_mix);
 
   float outer_alpha = mask_g;
   float inner_alpha = mask_g * u_inner_alpha;
@@ -186,6 +173,8 @@ pub struct ChromaticBulgeGridShaderStates {
 pub struct ChromaticBulgeGridShaderState {
     #[serde(default = "default_motion_rate")]
     pub motion_rate: f32,
+    #[serde(default = "default_motion_rate_y")]
+    pub motion_rate_y: f32,
     #[serde(default = "default_shader_lattice_density")]
     pub lattice_density: f32,
     #[serde(default = "default_circle_radius")]
@@ -202,10 +191,6 @@ pub struct ChromaticBulgeGridShaderState {
     pub rim_exponent: f32,
     #[serde(default = "default_rim_warp")]
     pub rim_warp: f32,
-    #[serde(default = "default_spacing_max_px")]
-    pub spacing_max_px: f32,
-    #[serde(default = "default_spacing_min_px")]
-    pub spacing_min_px: f32,
     #[serde(default = "default_dot_size")]
     pub dot_size: f32,
     #[serde(default = "default_outer_dot_scale")]
@@ -214,14 +199,6 @@ pub struct ChromaticBulgeGridShaderState {
     pub edge_softness: f32,
     #[serde(default = "default_chromatic_aberration")]
     pub chromatic_aberration: f32,
-    #[serde(default = "default_scroll_base")]
-    pub scroll_base: f32,
-    #[serde(default = "default_scroll_motion_scale")]
-    pub scroll_motion_scale: f32,
-    #[serde(default = "default_scroll_motion_floor")]
-    pub scroll_motion_floor: f32,
-    #[serde(default = "default_scroll_motion_ceiling")]
-    pub scroll_motion_ceiling: f32,
     #[serde(default = "default_cold_color")]
     pub cold_color: [f32; 3],
     #[serde(default = "default_hot_color")]
@@ -320,6 +297,7 @@ pub enum ClipTweenEase {
 #[serde(rename_all = "snake_case")]
 pub enum ChromaticBulgeGridLaneId {
     MotionRate,
+    MotionRateY,
     LatticeDensity,
     CircleRadius,
     CircleFalloffStart,
@@ -328,16 +306,10 @@ pub enum ChromaticBulgeGridLaneId {
     RimGuard,
     RimExponent,
     RimWarp,
-    SpacingMaxPx,
-    SpacingMinPx,
     DotSize,
     OuterDotScale,
     EdgeSoftness,
     ChromaticAberration,
-    ScrollBase,
-    ScrollMotionScale,
-    ScrollMotionFloor,
-    ScrollMotionCeiling,
     ColdColor,
     HotColor,
     ColorCycleRate,
@@ -348,6 +320,8 @@ pub enum ChromaticBulgeGridLaneId {
 pub struct ChromaticBulgeGridAutomationLanes {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub motion_rate: Vec<FloatKeyframe>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub motion_rate_y: Vec<FloatKeyframe>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub lattice_density: Vec<FloatKeyframe>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -365,10 +339,6 @@ pub struct ChromaticBulgeGridAutomationLanes {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rim_warp: Vec<FloatKeyframe>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub spacing_max_px: Vec<FloatKeyframe>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub spacing_min_px: Vec<FloatKeyframe>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dot_size: Vec<FloatKeyframe>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub outer_dot_scale: Vec<FloatKeyframe>,
@@ -376,14 +346,6 @@ pub struct ChromaticBulgeGridAutomationLanes {
     pub edge_softness: Vec<FloatKeyframe>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chromatic_aberration: Vec<FloatKeyframe>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub scroll_base: Vec<FloatKeyframe>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub scroll_motion_scale: Vec<FloatKeyframe>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub scroll_motion_floor: Vec<FloatKeyframe>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub scroll_motion_ceiling: Vec<FloatKeyframe>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cold_color: Vec<ColorKeyframe>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -438,6 +400,7 @@ pub struct ChromaticBulgeGridUniforms {
     pub resolution: [f32; 2],
     pub time: f32,
     pub motion_rate: f32,
+    pub motion_rate_y: f32,
     pub lattice_density: f32,
     pub circle_radius: f32,
     pub circle_falloff_start: f32,
@@ -446,16 +409,10 @@ pub struct ChromaticBulgeGridUniforms {
     pub rim_guard: f32,
     pub rim_exponent: f32,
     pub rim_warp: f32,
-    pub spacing_max_px: f32,
-    pub spacing_min_px: f32,
     pub dot_size: f32,
     pub outer_dot_scale: f32,
     pub edge_softness: f32,
     pub chromatic_aberration: f32,
-    pub scroll_base: f32,
-    pub scroll_motion_scale: f32,
-    pub scroll_motion_floor: f32,
-    pub scroll_motion_ceiling: f32,
     pub cold_color: [f32; 3],
     pub hot_color: [f32; 3],
     pub color_cycle_rate: f32,
@@ -499,6 +456,7 @@ impl Default for ChromaticBulgeGridShaderState {
     fn default() -> Self {
         Self {
             motion_rate: default_motion_rate(),
+            motion_rate_y: default_motion_rate_y(),
             lattice_density: default_shader_lattice_density(),
             circle_radius: default_circle_radius(),
             circle_falloff_start: default_circle_falloff_start(),
@@ -507,16 +465,10 @@ impl Default for ChromaticBulgeGridShaderState {
             rim_guard: default_rim_guard(),
             rim_exponent: default_rim_exponent(),
             rim_warp: default_rim_warp(),
-            spacing_max_px: default_spacing_max_px(),
-            spacing_min_px: default_spacing_min_px(),
             dot_size: default_dot_size(),
             outer_dot_scale: default_outer_dot_scale(),
             edge_softness: default_edge_softness(),
             chromatic_aberration: default_chromatic_aberration(),
-            scroll_base: default_scroll_base(),
-            scroll_motion_scale: default_scroll_motion_scale(),
-            scroll_motion_floor: default_scroll_motion_floor(),
-            scroll_motion_ceiling: default_scroll_motion_ceiling(),
             cold_color: default_cold_color(),
             hot_color: default_hot_color(),
             color_cycle_rate: default_color_cycle_rate(),
@@ -549,8 +501,9 @@ impl TrackVisualizerMode {
 }
 
 impl ChromaticBulgeGridLaneId {
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 18] = [
         Self::MotionRate,
+        Self::MotionRateY,
         Self::LatticeDensity,
         Self::CircleRadius,
         Self::CircleFalloffStart,
@@ -559,16 +512,10 @@ impl ChromaticBulgeGridLaneId {
         Self::RimGuard,
         Self::RimExponent,
         Self::RimWarp,
-        Self::SpacingMaxPx,
-        Self::SpacingMinPx,
         Self::DotSize,
         Self::OuterDotScale,
         Self::EdgeSoftness,
         Self::ChromaticAberration,
-        Self::ScrollBase,
-        Self::ScrollMotionScale,
-        Self::ScrollMotionFloor,
-        Self::ScrollMotionCeiling,
         Self::ColdColor,
         Self::HotColor,
         Self::ColorCycleRate,
@@ -578,6 +525,7 @@ impl ChromaticBulgeGridLaneId {
     pub fn label(self) -> &'static str {
         match self {
             Self::MotionRate => "motion_rate",
+            Self::MotionRateY => "motion_rate_y",
             Self::LatticeDensity => "lattice_density",
             Self::CircleRadius => "circle_radius",
             Self::CircleFalloffStart => "circle_falloff_start",
@@ -586,16 +534,10 @@ impl ChromaticBulgeGridLaneId {
             Self::RimGuard => "rim_guard",
             Self::RimExponent => "rim_exponent",
             Self::RimWarp => "rim_warp",
-            Self::SpacingMaxPx => "spacing_max_px",
-            Self::SpacingMinPx => "spacing_min_px",
             Self::DotSize => "dot_size",
             Self::OuterDotScale => "outer_dot_scale",
             Self::EdgeSoftness => "edge_softness",
             Self::ChromaticAberration => "chromatic_aberration",
-            Self::ScrollBase => "scroll_base",
-            Self::ScrollMotionScale => "scroll_motion_scale",
-            Self::ScrollMotionFloor => "scroll_motion_floor",
-            Self::ScrollMotionCeiling => "scroll_motion_ceiling",
             Self::ColdColor => "cold_color",
             Self::HotColor => "hot_color",
             Self::ColorCycleRate => "color_cycle_rate",
@@ -669,6 +611,7 @@ impl ChromaticBulgeGridShaderState {
     pub fn from_legacy_params(params: &TrackVisualizerParams) -> Self {
         Self {
             motion_rate: params.motion_rate,
+            motion_rate_y: default_motion_rate_y(),
             lattice_density: params.lattice_density as f32,
             ..Self::default()
         }
@@ -676,7 +619,8 @@ impl ChromaticBulgeGridShaderState {
 
     pub fn clamp(self) -> Self {
         Self {
-            motion_rate: self.motion_rate.clamp(0.2, 3.0),
+            motion_rate: self.motion_rate.clamp(-4.0, 4.0),
+            motion_rate_y: self.motion_rate_y.clamp(-4.0, 4.0),
             lattice_density: self.lattice_density.clamp(2.0, 12.0),
             circle_radius: self.circle_radius.clamp(0.02, 0.95),
             circle_falloff_start: self.circle_falloff_start.clamp(0.0, 1.0),
@@ -685,16 +629,10 @@ impl ChromaticBulgeGridShaderState {
             rim_guard: self.rim_guard.clamp(0.01, 2.0),
             rim_exponent: self.rim_exponent.clamp(0.1, 6.0),
             rim_warp: self.rim_warp.clamp(0.0, 64.0),
-            spacing_max_px: self.spacing_max_px.clamp(4.0, 64.0),
-            spacing_min_px: self.spacing_min_px.clamp(2.0, 48.0),
             dot_size: self.dot_size.clamp(0.02, 1.0),
             outer_dot_scale: self.outer_dot_scale.clamp(0.02, 2.0),
             edge_softness: self.edge_softness.clamp(0.1, 8.0),
             chromatic_aberration: self.chromatic_aberration.clamp(0.0, 24.0),
-            scroll_base: self.scroll_base.clamp(0.0, 200.0),
-            scroll_motion_scale: self.scroll_motion_scale.clamp(0.0, 200.0),
-            scroll_motion_floor: self.scroll_motion_floor.clamp(0.0, 4.0),
-            scroll_motion_ceiling: self.scroll_motion_ceiling.clamp(0.0, 8.0),
             cold_color: clamp_color(self.cold_color),
             hot_color: clamp_color(self.hot_color),
             color_cycle_rate: self.color_cycle_rate.clamp(0.0, 6.0),
@@ -707,6 +645,7 @@ impl ChromaticBulgeGridShaderState {
             resolution,
             time,
             motion_rate: self.motion_rate,
+            motion_rate_y: self.motion_rate_y,
             lattice_density: self.lattice_density,
             circle_radius: self.circle_radius,
             circle_falloff_start: self.circle_falloff_start,
@@ -715,16 +654,10 @@ impl ChromaticBulgeGridShaderState {
             rim_guard: self.rim_guard,
             rim_exponent: self.rim_exponent,
             rim_warp: self.rim_warp,
-            spacing_max_px: self.spacing_max_px,
-            spacing_min_px: self.spacing_min_px,
             dot_size: self.dot_size,
             outer_dot_scale: self.outer_dot_scale,
             edge_softness: self.edge_softness,
             chromatic_aberration: self.chromatic_aberration,
-            scroll_base: self.scroll_base,
-            scroll_motion_scale: self.scroll_motion_scale,
-            scroll_motion_floor: self.scroll_motion_floor,
-            scroll_motion_ceiling: self.scroll_motion_ceiling,
             cold_color: self.cold_color,
             hot_color: self.hot_color,
             color_cycle_rate: self.color_cycle_rate,
@@ -883,15 +816,48 @@ impl ChromaticBulgeGridClipTimeline {
         base: ChromaticBulgeGridShaderState,
         beat: f32,
     ) -> Option<ChromaticBulgeGridShaderState> {
-        let active = self.active_clips_at_beat(beat);
-        if active.is_empty() {
+        let held = self.held_clips_at_beat(beat);
+        if held.is_empty() {
             return None;
         }
         let mut state = base;
-        for (clip, local_beat) in active {
+        for (clip, local_beat) in held {
             state = clip.apply_to_state(state, local_beat);
         }
         Some(state)
+    }
+
+    pub fn held_clips_at_beat(&self, beat: f32) -> Vec<(&ChromaticBulgeGridClip, f32)> {
+        let beat = beat.max(0.0);
+        let mut held: Vec<Option<(f32, &ChromaticBulgeGridClip, f32)>> =
+            vec![None; ChromaticBulgeGridLaneId::ALL.len()];
+        for placement in &self.arrangement {
+            let Some(clip) = self.clip_by_id(&placement.clip_id) else {
+                continue;
+            };
+            if beat < placement.start_beat {
+                continue;
+            }
+            let end = placement.end_beat(clip);
+            let local = if clip.length_beats <= 0.0 {
+                0.0
+            } else if beat < end {
+                ((beat - placement.start_beat) % clip.length_beats).clamp(0.0, clip.length_beats)
+            } else {
+                clip.length_beats
+            };
+            let slot = &mut held[placement.track as usize];
+            if slot
+                .map(|(start_beat, _, _)| placement.start_beat >= start_beat)
+                .unwrap_or(true)
+            {
+                *slot = Some((placement.start_beat, clip, local));
+            }
+        }
+        held.into_iter()
+            .flatten()
+            .map(|(_, clip, local)| (clip, local))
+            .collect()
     }
 
     pub fn active_clips_at_beat(&self, beat: f32) -> Vec<(&ChromaticBulgeGridClip, f32)> {
@@ -931,6 +897,7 @@ impl ChromaticBulgeGridClipTimeline {
 impl ChromaticBulgeGridAutomationLanes {
     pub fn sort_all(&mut self) {
         sort_float_keyframes(&mut self.motion_rate);
+        sort_float_keyframes(&mut self.motion_rate_y);
         sort_float_keyframes(&mut self.lattice_density);
         sort_float_keyframes(&mut self.circle_radius);
         sort_float_keyframes(&mut self.circle_falloff_start);
@@ -939,16 +906,10 @@ impl ChromaticBulgeGridAutomationLanes {
         sort_float_keyframes(&mut self.rim_guard);
         sort_float_keyframes(&mut self.rim_exponent);
         sort_float_keyframes(&mut self.rim_warp);
-        sort_float_keyframes(&mut self.spacing_max_px);
-        sort_float_keyframes(&mut self.spacing_min_px);
         sort_float_keyframes(&mut self.dot_size);
         sort_float_keyframes(&mut self.outer_dot_scale);
         sort_float_keyframes(&mut self.edge_softness);
         sort_float_keyframes(&mut self.chromatic_aberration);
-        sort_float_keyframes(&mut self.scroll_base);
-        sort_float_keyframes(&mut self.scroll_motion_scale);
-        sort_float_keyframes(&mut self.scroll_motion_floor);
-        sort_float_keyframes(&mut self.scroll_motion_ceiling);
         sort_color_keyframes(&mut self.cold_color);
         sort_color_keyframes(&mut self.hot_color);
         sort_float_keyframes(&mut self.color_cycle_rate);
@@ -969,6 +930,7 @@ impl ChromaticBulgeGridAutomationLanes {
     pub fn lane_has_values(&self, lane: ChromaticBulgeGridLaneId) -> bool {
         match lane {
             ChromaticBulgeGridLaneId::MotionRate => !self.motion_rate.is_empty(),
+            ChromaticBulgeGridLaneId::MotionRateY => !self.motion_rate_y.is_empty(),
             ChromaticBulgeGridLaneId::LatticeDensity => !self.lattice_density.is_empty(),
             ChromaticBulgeGridLaneId::CircleRadius => !self.circle_radius.is_empty(),
             ChromaticBulgeGridLaneId::CircleFalloffStart => !self.circle_falloff_start.is_empty(),
@@ -977,16 +939,10 @@ impl ChromaticBulgeGridAutomationLanes {
             ChromaticBulgeGridLaneId::RimGuard => !self.rim_guard.is_empty(),
             ChromaticBulgeGridLaneId::RimExponent => !self.rim_exponent.is_empty(),
             ChromaticBulgeGridLaneId::RimWarp => !self.rim_warp.is_empty(),
-            ChromaticBulgeGridLaneId::SpacingMaxPx => !self.spacing_max_px.is_empty(),
-            ChromaticBulgeGridLaneId::SpacingMinPx => !self.spacing_min_px.is_empty(),
             ChromaticBulgeGridLaneId::DotSize => !self.dot_size.is_empty(),
             ChromaticBulgeGridLaneId::OuterDotScale => !self.outer_dot_scale.is_empty(),
             ChromaticBulgeGridLaneId::EdgeSoftness => !self.edge_softness.is_empty(),
             ChromaticBulgeGridLaneId::ChromaticAberration => !self.chromatic_aberration.is_empty(),
-            ChromaticBulgeGridLaneId::ScrollBase => !self.scroll_base.is_empty(),
-            ChromaticBulgeGridLaneId::ScrollMotionScale => !self.scroll_motion_scale.is_empty(),
-            ChromaticBulgeGridLaneId::ScrollMotionFloor => !self.scroll_motion_floor.is_empty(),
-            ChromaticBulgeGridLaneId::ScrollMotionCeiling => !self.scroll_motion_ceiling.is_empty(),
             ChromaticBulgeGridLaneId::ColdColor => !self.cold_color.is_empty(),
             ChromaticBulgeGridLaneId::HotColor => !self.hot_color.is_empty(),
             ChromaticBulgeGridLaneId::ColorCycleRate => !self.color_cycle_rate.is_empty(),
@@ -998,6 +954,9 @@ impl ChromaticBulgeGridAutomationLanes {
         let mut subset = Self::default();
         match lane {
             ChromaticBulgeGridLaneId::MotionRate => subset.motion_rate = self.motion_rate.clone(),
+            ChromaticBulgeGridLaneId::MotionRateY => {
+                subset.motion_rate_y = self.motion_rate_y.clone()
+            }
             ChromaticBulgeGridLaneId::LatticeDensity => {
                 subset.lattice_density = self.lattice_density.clone()
             }
@@ -1018,12 +977,6 @@ impl ChromaticBulgeGridAutomationLanes {
                 subset.rim_exponent = self.rim_exponent.clone()
             }
             ChromaticBulgeGridLaneId::RimWarp => subset.rim_warp = self.rim_warp.clone(),
-            ChromaticBulgeGridLaneId::SpacingMaxPx => {
-                subset.spacing_max_px = self.spacing_max_px.clone()
-            }
-            ChromaticBulgeGridLaneId::SpacingMinPx => {
-                subset.spacing_min_px = self.spacing_min_px.clone()
-            }
             ChromaticBulgeGridLaneId::DotSize => subset.dot_size = self.dot_size.clone(),
             ChromaticBulgeGridLaneId::OuterDotScale => {
                 subset.outer_dot_scale = self.outer_dot_scale.clone()
@@ -1033,16 +986,6 @@ impl ChromaticBulgeGridAutomationLanes {
             }
             ChromaticBulgeGridLaneId::ChromaticAberration => {
                 subset.chromatic_aberration = self.chromatic_aberration.clone()
-            }
-            ChromaticBulgeGridLaneId::ScrollBase => subset.scroll_base = self.scroll_base.clone(),
-            ChromaticBulgeGridLaneId::ScrollMotionScale => {
-                subset.scroll_motion_scale = self.scroll_motion_scale.clone()
-            }
-            ChromaticBulgeGridLaneId::ScrollMotionFloor => {
-                subset.scroll_motion_floor = self.scroll_motion_floor.clone()
-            }
-            ChromaticBulgeGridLaneId::ScrollMotionCeiling => {
-                subset.scroll_motion_ceiling = self.scroll_motion_ceiling.clone()
             }
             ChromaticBulgeGridLaneId::ColdColor => subset.cold_color = self.cold_color.clone(),
             ChromaticBulgeGridLaneId::HotColor => subset.hot_color = self.hot_color.clone(),
@@ -1133,6 +1076,7 @@ pub fn compile_authoring_lanes(
     ) -> &mut Vec<FloatKeyframe> {
         match lane {
             ChromaticBulgeGridLaneId::MotionRate => &mut lanes.motion_rate,
+            ChromaticBulgeGridLaneId::MotionRateY => &mut lanes.motion_rate_y,
             ChromaticBulgeGridLaneId::LatticeDensity => &mut lanes.lattice_density,
             ChromaticBulgeGridLaneId::CircleRadius => &mut lanes.circle_radius,
             ChromaticBulgeGridLaneId::CircleFalloffStart => &mut lanes.circle_falloff_start,
@@ -1141,16 +1085,10 @@ pub fn compile_authoring_lanes(
             ChromaticBulgeGridLaneId::RimGuard => &mut lanes.rim_guard,
             ChromaticBulgeGridLaneId::RimExponent => &mut lanes.rim_exponent,
             ChromaticBulgeGridLaneId::RimWarp => &mut lanes.rim_warp,
-            ChromaticBulgeGridLaneId::SpacingMaxPx => &mut lanes.spacing_max_px,
-            ChromaticBulgeGridLaneId::SpacingMinPx => &mut lanes.spacing_min_px,
             ChromaticBulgeGridLaneId::DotSize => &mut lanes.dot_size,
             ChromaticBulgeGridLaneId::OuterDotScale => &mut lanes.outer_dot_scale,
             ChromaticBulgeGridLaneId::EdgeSoftness => &mut lanes.edge_softness,
             ChromaticBulgeGridLaneId::ChromaticAberration => &mut lanes.chromatic_aberration,
-            ChromaticBulgeGridLaneId::ScrollBase => &mut lanes.scroll_base,
-            ChromaticBulgeGridLaneId::ScrollMotionScale => &mut lanes.scroll_motion_scale,
-            ChromaticBulgeGridLaneId::ScrollMotionFloor => &mut lanes.scroll_motion_floor,
-            ChromaticBulgeGridLaneId::ScrollMotionCeiling => &mut lanes.scroll_motion_ceiling,
             ChromaticBulgeGridLaneId::ColorCycleRate => &mut lanes.color_cycle_rate,
             ChromaticBulgeGridLaneId::InnerAlpha => &mut lanes.inner_alpha,
             ChromaticBulgeGridLaneId::ColdColor | ChromaticBulgeGridLaneId::HotColor => {
@@ -1531,6 +1469,10 @@ fn validate_automation_lanes(
             lanes.motion_rate.iter().map(|k| k.beat).collect::<Vec<_>>(),
         ),
         (
+            "motion_rate_y",
+            lanes.motion_rate_y.iter().map(|k| k.beat).collect::<Vec<_>>(),
+        ),
+        (
             "lattice_density",
             lanes
                 .lattice_density
@@ -1587,22 +1529,6 @@ fn validate_automation_lanes(
             lanes.rim_warp.iter().map(|k| k.beat).collect::<Vec<_>>(),
         ),
         (
-            "spacing_max_px",
-            lanes
-                .spacing_max_px
-                .iter()
-                .map(|k| k.beat)
-                .collect::<Vec<_>>(),
-        ),
-        (
-            "spacing_min_px",
-            lanes
-                .spacing_min_px
-                .iter()
-                .map(|k| k.beat)
-                .collect::<Vec<_>>(),
-        ),
-        (
             "dot_size",
             lanes.dot_size.iter().map(|k| k.beat).collect::<Vec<_>>(),
         ),
@@ -1626,34 +1552,6 @@ fn validate_automation_lanes(
             "chromatic_aberration",
             lanes
                 .chromatic_aberration
-                .iter()
-                .map(|k| k.beat)
-                .collect::<Vec<_>>(),
-        ),
-        (
-            "scroll_base",
-            lanes.scroll_base.iter().map(|k| k.beat).collect::<Vec<_>>(),
-        ),
-        (
-            "scroll_motion_scale",
-            lanes
-                .scroll_motion_scale
-                .iter()
-                .map(|k| k.beat)
-                .collect::<Vec<_>>(),
-        ),
-        (
-            "scroll_motion_floor",
-            lanes
-                .scroll_motion_floor
-                .iter()
-                .map(|k| k.beat)
-                .collect::<Vec<_>>(),
-        ),
-        (
-            "scroll_motion_ceiling",
-            lanes
-                .scroll_motion_ceiling
                 .iter()
                 .map(|k| k.beat)
                 .collect::<Vec<_>>(),
@@ -1722,6 +1620,7 @@ fn apply_lanes_to_state(
 ) -> ChromaticBulgeGridShaderState {
     ChromaticBulgeGridShaderState {
         motion_rate: sample_float_lane(&lanes.motion_rate, beat, base.motion_rate),
+        motion_rate_y: sample_float_lane(&lanes.motion_rate_y, beat, base.motion_rate_y),
         lattice_density: sample_float_lane(&lanes.lattice_density, beat, base.lattice_density),
         circle_radius: sample_float_lane(&lanes.circle_radius, beat, base.circle_radius),
         circle_falloff_start: sample_float_lane(
@@ -1738,8 +1637,6 @@ fn apply_lanes_to_state(
         rim_guard: sample_float_lane(&lanes.rim_guard, beat, base.rim_guard),
         rim_exponent: sample_float_lane(&lanes.rim_exponent, beat, base.rim_exponent),
         rim_warp: sample_float_lane(&lanes.rim_warp, beat, base.rim_warp),
-        spacing_max_px: sample_float_lane(&lanes.spacing_max_px, beat, base.spacing_max_px),
-        spacing_min_px: sample_float_lane(&lanes.spacing_min_px, beat, base.spacing_min_px),
         dot_size: sample_float_lane(&lanes.dot_size, beat, base.dot_size),
         outer_dot_scale: sample_float_lane(&lanes.outer_dot_scale, beat, base.outer_dot_scale),
         edge_softness: sample_float_lane(&lanes.edge_softness, beat, base.edge_softness),
@@ -1747,22 +1644,6 @@ fn apply_lanes_to_state(
             &lanes.chromatic_aberration,
             beat,
             base.chromatic_aberration,
-        ),
-        scroll_base: sample_float_lane(&lanes.scroll_base, beat, base.scroll_base),
-        scroll_motion_scale: sample_float_lane(
-            &lanes.scroll_motion_scale,
-            beat,
-            base.scroll_motion_scale,
-        ),
-        scroll_motion_floor: sample_float_lane(
-            &lanes.scroll_motion_floor,
-            beat,
-            base.scroll_motion_floor,
-        ),
-        scroll_motion_ceiling: sample_float_lane(
-            &lanes.scroll_motion_ceiling,
-            beat,
-            base.scroll_motion_ceiling,
         ),
         cold_color: sample_color_lane(&lanes.cold_color, beat, base.cold_color),
         hot_color: sample_color_lane(&lanes.hot_color, beat, base.hot_color),
@@ -1828,6 +1709,7 @@ fn sample_color_lane(keyframes: &[ColorKeyframe], beat: f32, base: [f32; 3]) -> 
 fn base_float_for_lane(base: ChromaticBulgeGridShaderState, lane: ChromaticBulgeGridLaneId) -> f32 {
     match lane {
         ChromaticBulgeGridLaneId::MotionRate => base.motion_rate,
+        ChromaticBulgeGridLaneId::MotionRateY => base.motion_rate_y,
         ChromaticBulgeGridLaneId::LatticeDensity => base.lattice_density,
         ChromaticBulgeGridLaneId::CircleRadius => base.circle_radius,
         ChromaticBulgeGridLaneId::CircleFalloffStart => base.circle_falloff_start,
@@ -1836,16 +1718,10 @@ fn base_float_for_lane(base: ChromaticBulgeGridShaderState, lane: ChromaticBulge
         ChromaticBulgeGridLaneId::RimGuard => base.rim_guard,
         ChromaticBulgeGridLaneId::RimExponent => base.rim_exponent,
         ChromaticBulgeGridLaneId::RimWarp => base.rim_warp,
-        ChromaticBulgeGridLaneId::SpacingMaxPx => base.spacing_max_px,
-        ChromaticBulgeGridLaneId::SpacingMinPx => base.spacing_min_px,
         ChromaticBulgeGridLaneId::DotSize => base.dot_size,
         ChromaticBulgeGridLaneId::OuterDotScale => base.outer_dot_scale,
         ChromaticBulgeGridLaneId::EdgeSoftness => base.edge_softness,
         ChromaticBulgeGridLaneId::ChromaticAberration => base.chromatic_aberration,
-        ChromaticBulgeGridLaneId::ScrollBase => base.scroll_base,
-        ChromaticBulgeGridLaneId::ScrollMotionScale => base.scroll_motion_scale,
-        ChromaticBulgeGridLaneId::ScrollMotionFloor => base.scroll_motion_floor,
-        ChromaticBulgeGridLaneId::ScrollMotionCeiling => base.scroll_motion_ceiling,
         ChromaticBulgeGridLaneId::ColorCycleRate => base.color_cycle_rate,
         ChromaticBulgeGridLaneId::InnerAlpha => base.inner_alpha,
         ChromaticBulgeGridLaneId::ColdColor | ChromaticBulgeGridLaneId::HotColor => unreachable!(),
@@ -1874,6 +1750,9 @@ fn sort_color_keyframes(keyframes: &mut [ColorKeyframe]) {
 
 fn default_motion_rate() -> f32 {
     1.0
+}
+fn default_motion_rate_y() -> f32 {
+    0.0
 }
 fn default_bpm() -> f32 {
     120.0
@@ -1943,12 +1822,6 @@ fn default_rim_exponent() -> f32 {
 fn default_rim_warp() -> f32 {
     0.18
 }
-fn default_spacing_max_px() -> f32 {
-    22.0
-}
-fn default_spacing_min_px() -> f32 {
-    12.0
-}
 fn default_dot_size() -> f32 {
     0.16
 }
@@ -1960,18 +1833,6 @@ fn default_edge_softness() -> f32 {
 }
 fn default_chromatic_aberration() -> f32 {
     0.28
-}
-fn default_scroll_base() -> f32 {
-    28.0
-}
-fn default_scroll_motion_scale() -> f32 {
-    42.0
-}
-fn default_scroll_motion_floor() -> f32 {
-    0.2
-}
-fn default_scroll_motion_ceiling() -> f32 {
-    2.8
 }
 fn default_cold_color() -> [f32; 3] {
     [1.0, 1.0, 1.0]

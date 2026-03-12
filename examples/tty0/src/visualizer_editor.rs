@@ -182,6 +182,7 @@ enum SaveFeedback {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ParameterField {
     MotionRate,
+    MotionRateY,
     LatticeDensity,
     CircleRadius,
     CircleFalloffStart,
@@ -190,16 +191,10 @@ pub enum ParameterField {
     RimGuard,
     RimExponent,
     RimWarp,
-    SpacingMaxPx,
-    SpacingMinPx,
     DotSize,
     OuterDotScale,
     EdgeSoftness,
     ChromaticAberration,
-    ScrollBase,
-    ScrollMotionScale,
-    ScrollMotionFloor,
-    ScrollMotionCeiling,
     ColdColorR,
     ColdColorG,
     ColdColorB,
@@ -2320,6 +2315,7 @@ impl ChromaticBulgeGridEditorDraft {
         let state = self.base_state();
         match lane {
             ChromaticBulgeGridLaneId::MotionRate => state.motion_rate,
+            ChromaticBulgeGridLaneId::MotionRateY => state.motion_rate_y,
             ChromaticBulgeGridLaneId::LatticeDensity => state.lattice_density,
             ChromaticBulgeGridLaneId::CircleRadius => state.circle_radius,
             ChromaticBulgeGridLaneId::CircleFalloffStart => state.circle_falloff_start,
@@ -2328,16 +2324,10 @@ impl ChromaticBulgeGridEditorDraft {
             ChromaticBulgeGridLaneId::RimGuard => state.rim_guard,
             ChromaticBulgeGridLaneId::RimExponent => state.rim_exponent,
             ChromaticBulgeGridLaneId::RimWarp => state.rim_warp,
-            ChromaticBulgeGridLaneId::SpacingMaxPx => state.spacing_max_px,
-            ChromaticBulgeGridLaneId::SpacingMinPx => state.spacing_min_px,
             ChromaticBulgeGridLaneId::DotSize => state.dot_size,
             ChromaticBulgeGridLaneId::OuterDotScale => state.outer_dot_scale,
             ChromaticBulgeGridLaneId::EdgeSoftness => state.edge_softness,
             ChromaticBulgeGridLaneId::ChromaticAberration => state.chromatic_aberration,
-            ChromaticBulgeGridLaneId::ScrollBase => state.scroll_base,
-            ChromaticBulgeGridLaneId::ScrollMotionScale => state.scroll_motion_scale,
-            ChromaticBulgeGridLaneId::ScrollMotionFloor => state.scroll_motion_floor,
-            ChromaticBulgeGridLaneId::ScrollMotionCeiling => state.scroll_motion_ceiling,
             ChromaticBulgeGridLaneId::ColorCycleRate => state.color_cycle_rate,
             ChromaticBulgeGridLaneId::InnerAlpha => state.inner_alpha,
             ChromaticBulgeGridLaneId::ColdColor | ChromaticBulgeGridLaneId::HotColor => 0.0,
@@ -2521,8 +2511,9 @@ impl NumericEditTarget {
 }
 
 impl ParameterField {
-    pub const ALL: [Self; 27] = [
+    pub const ALL: [Self; 22] = [
         Self::MotionRate,
+        Self::MotionRateY,
         Self::LatticeDensity,
         Self::CircleRadius,
         Self::CircleFalloffStart,
@@ -2531,16 +2522,10 @@ impl ParameterField {
         Self::RimGuard,
         Self::RimExponent,
         Self::RimWarp,
-        Self::SpacingMaxPx,
-        Self::SpacingMinPx,
         Self::DotSize,
         Self::OuterDotScale,
         Self::EdgeSoftness,
         Self::ChromaticAberration,
-        Self::ScrollBase,
-        Self::ScrollMotionScale,
-        Self::ScrollMotionFloor,
-        Self::ScrollMotionCeiling,
         Self::ColdColorR,
         Self::ColdColorG,
         Self::ColdColorB,
@@ -2554,6 +2539,7 @@ impl ParameterField {
     fn label(self) -> &'static str {
         match self {
             Self::MotionRate => "motion_rate",
+            Self::MotionRateY => "motion_rate_y",
             Self::LatticeDensity => "lattice_density",
             Self::CircleRadius => "circle_radius",
             Self::CircleFalloffStart => "circle_falloff_start",
@@ -2562,16 +2548,10 @@ impl ParameterField {
             Self::RimGuard => "rim_guard",
             Self::RimExponent => "rim_exponent",
             Self::RimWarp => "rim_warp",
-            Self::SpacingMaxPx => "spacing_max_px",
-            Self::SpacingMinPx => "spacing_min_px",
             Self::DotSize => "dot_size",
             Self::OuterDotScale => "outer_dot_scale",
             Self::EdgeSoftness => "edge_softness",
             Self::ChromaticAberration => "chromatic_aberration",
-            Self::ScrollBase => "scroll_base",
-            Self::ScrollMotionScale => "scroll_motion_scale",
-            Self::ScrollMotionFloor => "scroll_motion_floor",
-            Self::ScrollMotionCeiling => "scroll_motion_ceiling",
             Self::ColdColorR => "cold_color.r",
             Self::ColdColorG => "cold_color.g",
             Self::ColdColorB => "cold_color.b",
@@ -2744,6 +2724,7 @@ fn set_parameter_field(
 ) {
     match field {
         ParameterField::MotionRate => state.motion_rate = value,
+        ParameterField::MotionRateY => state.motion_rate_y = value,
         ParameterField::LatticeDensity => state.lattice_density = value,
         ParameterField::CircleRadius => state.circle_radius = value,
         ParameterField::CircleFalloffStart => state.circle_falloff_start = value,
@@ -2752,16 +2733,10 @@ fn set_parameter_field(
         ParameterField::RimGuard => state.rim_guard = value,
         ParameterField::RimExponent => state.rim_exponent = value,
         ParameterField::RimWarp => state.rim_warp = value,
-        ParameterField::SpacingMaxPx => state.spacing_max_px = value,
-        ParameterField::SpacingMinPx => state.spacing_min_px = value,
         ParameterField::DotSize => state.dot_size = value,
         ParameterField::OuterDotScale => state.outer_dot_scale = value,
         ParameterField::EdgeSoftness => state.edge_softness = value,
         ParameterField::ChromaticAberration => state.chromatic_aberration = value,
-        ParameterField::ScrollBase => state.scroll_base = value,
-        ParameterField::ScrollMotionScale => state.scroll_motion_scale = value,
-        ParameterField::ScrollMotionFloor => state.scroll_motion_floor = value,
-        ParameterField::ScrollMotionCeiling => state.scroll_motion_ceiling = value,
         ParameterField::ColdColorR => state.cold_color[0] = value,
         ParameterField::ColdColorG => state.cold_color[1] = value,
         ParameterField::ColdColorB => state.cold_color[2] = value,
@@ -2776,6 +2751,7 @@ fn set_parameter_field(
 fn parameter_value(state: ChromaticBulgeGridShaderState, field: ParameterField) -> f32 {
     match field {
         ParameterField::MotionRate => state.motion_rate,
+        ParameterField::MotionRateY => state.motion_rate_y,
         ParameterField::LatticeDensity => state.lattice_density,
         ParameterField::CircleRadius => state.circle_radius,
         ParameterField::CircleFalloffStart => state.circle_falloff_start,
@@ -2784,16 +2760,10 @@ fn parameter_value(state: ChromaticBulgeGridShaderState, field: ParameterField) 
         ParameterField::RimGuard => state.rim_guard,
         ParameterField::RimExponent => state.rim_exponent,
         ParameterField::RimWarp => state.rim_warp,
-        ParameterField::SpacingMaxPx => state.spacing_max_px,
-        ParameterField::SpacingMinPx => state.spacing_min_px,
         ParameterField::DotSize => state.dot_size,
         ParameterField::OuterDotScale => state.outer_dot_scale,
         ParameterField::EdgeSoftness => state.edge_softness,
         ParameterField::ChromaticAberration => state.chromatic_aberration,
-        ParameterField::ScrollBase => state.scroll_base,
-        ParameterField::ScrollMotionScale => state.scroll_motion_scale,
-        ParameterField::ScrollMotionFloor => state.scroll_motion_floor,
-        ParameterField::ScrollMotionCeiling => state.scroll_motion_ceiling,
         ParameterField::ColdColorR => state.cold_color[0],
         ParameterField::ColdColorG => state.cold_color[1],
         ParameterField::ColdColorB => state.cold_color[2],
@@ -2811,18 +2781,13 @@ fn format_parameter_value(state: ChromaticBulgeGridShaderState, field: Parameter
 
 fn parameter_step(field: ParameterField, coarse: bool) -> f32 {
     let step = match field {
-        ParameterField::SpacingMaxPx | ParameterField::SpacingMinPx => 2.0,
         ParameterField::ColdColorR
         | ParameterField::ColdColorG
         | ParameterField::ColdColorB
         | ParameterField::HotColorR
         | ParameterField::HotColorG
         | ParameterField::HotColorB => 0.02,
-        ParameterField::LatticeDensity
-        | ParameterField::ScrollBase
-        | ParameterField::ScrollMotionScale
-        | ParameterField::ScrollMotionFloor
-        | ParameterField::ScrollMotionCeiling => 0.05,
+        ParameterField::LatticeDensity => 0.05,
         _ => 0.01,
     };
     if coarse {
@@ -3128,10 +3093,10 @@ mod tests {
     #[test]
     fn base_field_edits_keep_playing_and_idle_in_sync() {
         let mut draft = seeded_draft();
-        draft.set_base_field(ParameterField::ScrollBase, 1.75);
+        draft.set_base_field(ParameterField::MotionRateY, 1.75);
         let states = draft.working.params.shader_states.expect("shader states");
-        assert_eq!(states.playing.scroll_base, 1.75);
-        assert_eq!(states.idle.scroll_base, 1.75);
+        assert_eq!(states.playing.motion_rate_y, 1.75);
+        assert_eq!(states.idle.motion_rate_y, 1.75);
     }
 
     #[test]

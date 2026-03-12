@@ -67,7 +67,7 @@ struct PanelPixelRect {
 struct UniformSet {
     resolution: (f32, f32),
     time: f32,
-    motion_rate: f32,
+    motion_rate: (f32, f32),
     lattice_density: f32,
     circle_radius: f32,
     circle_falloff_start: f32,
@@ -76,19 +76,12 @@ struct UniformSet {
     rim_guard: f32,
     rim_exponent: f32,
     rim_warp: f32,
-    spacing_max_px: f32,
-    spacing_min_px: f32,
     dot_size: f32,
     outer_dot_scale: f32,
     edge_softness: f32,
     chromatic_aberration: f32,
-    scroll_base: f32,
-    scroll_motion_scale: f32,
-    scroll_motion_floor: f32,
-    scroll_motion_ceiling: f32,
     cold_color: [f32; 3],
     hot_color: [f32; 3],
-    color_cycle_rate: f32,
     inner_alpha: f32,
 }
 
@@ -116,19 +109,12 @@ struct SceneUniformLocations {
     rim_guard: glow::UniformLocation,
     rim_exponent: glow::UniformLocation,
     rim_warp: glow::UniformLocation,
-    spacing_max_px: glow::UniformLocation,
-    spacing_min_px: glow::UniformLocation,
     dot_size: glow::UniformLocation,
     outer_dot_scale: glow::UniformLocation,
     edge_softness: glow::UniformLocation,
     chromatic_aberration: glow::UniformLocation,
-    scroll_base: glow::UniformLocation,
-    scroll_motion_scale: glow::UniformLocation,
-    scroll_motion_floor: glow::UniformLocation,
-    scroll_motion_ceiling: glow::UniformLocation,
     cold_color: glow::UniformLocation,
     hot_color: glow::UniformLocation,
-    color_cycle_rate: glow::UniformLocation,
     inner_alpha: glow::UniformLocation,
 }
 
@@ -349,9 +335,10 @@ impl PanelShaderRuntime {
                 uniforms.resolution.1,
             );
             gl.uniform_1_f32(Some(&resources.scene_uniforms.time), uniforms.time);
-            gl.uniform_1_f32(
+            gl.uniform_2_f32(
                 Some(&resources.scene_uniforms.motion_rate),
-                uniforms.motion_rate,
+                uniforms.motion_rate.0,
+                uniforms.motion_rate.1,
             );
             gl.uniform_1_f32(
                 Some(&resources.scene_uniforms.lattice_density),
@@ -382,14 +369,6 @@ impl PanelShaderRuntime {
                 uniforms.rim_exponent,
             );
             gl.uniform_1_f32(Some(&resources.scene_uniforms.rim_warp), uniforms.rim_warp);
-            gl.uniform_1_f32(
-                Some(&resources.scene_uniforms.spacing_max_px),
-                uniforms.spacing_max_px,
-            );
-            gl.uniform_1_f32(
-                Some(&resources.scene_uniforms.spacing_min_px),
-                uniforms.spacing_min_px,
-            );
             gl.uniform_1_f32(Some(&resources.scene_uniforms.dot_size), uniforms.dot_size);
             gl.uniform_1_f32(
                 Some(&resources.scene_uniforms.outer_dot_scale),
@@ -403,22 +382,6 @@ impl PanelShaderRuntime {
                 Some(&resources.scene_uniforms.chromatic_aberration),
                 uniforms.chromatic_aberration,
             );
-            gl.uniform_1_f32(
-                Some(&resources.scene_uniforms.scroll_base),
-                uniforms.scroll_base,
-            );
-            gl.uniform_1_f32(
-                Some(&resources.scene_uniforms.scroll_motion_scale),
-                uniforms.scroll_motion_scale,
-            );
-            gl.uniform_1_f32(
-                Some(&resources.scene_uniforms.scroll_motion_floor),
-                uniforms.scroll_motion_floor,
-            );
-            gl.uniform_1_f32(
-                Some(&resources.scene_uniforms.scroll_motion_ceiling),
-                uniforms.scroll_motion_ceiling,
-            );
             gl.uniform_3_f32(
                 Some(&resources.scene_uniforms.cold_color),
                 uniforms.cold_color[0],
@@ -430,10 +393,6 @@ impl PanelShaderRuntime {
                 uniforms.hot_color[0],
                 uniforms.hot_color[1],
                 uniforms.hot_color[2],
-            );
-            gl.uniform_1_f32(
-                Some(&resources.scene_uniforms.color_cycle_rate),
-                uniforms.color_cycle_rate,
             );
             gl.uniform_1_f32(
                 Some(&resources.scene_uniforms.inner_alpha),
@@ -539,19 +498,15 @@ impl UniformSet {
         cell_size: (i32, i32),
     ) -> Self {
         let shader_state = request.shader_state.clamp();
-        let spacing_max_px = shader_state.spacing_max_px.clamp(2.0, 64.0);
-        let spacing_min_px = shader_state.spacing_min_px.clamp(2.0, spacing_max_px);
-        let lattice_density = resolve_lattice_density(
-            shader_state.lattice_density,
-            cell_size.1,
-            spacing_max_px,
-            spacing_min_px,
-        );
+        let lattice_density = resolve_lattice_density(shader_state.lattice_density, cell_size.1);
 
         Self {
             resolution: (width as f32, height as f32),
             time: request.playback.visual_time_secs.max(0.0),
-            motion_rate: shader_state.motion_rate.clamp(0.2, 3.0),
+            motion_rate: (
+                shader_state.motion_rate.clamp(-4.0, 4.0),
+                shader_state.motion_rate_y.clamp(-4.0, 4.0),
+            ),
             lattice_density,
             circle_radius: shader_state.circle_radius.clamp(0.05, 0.48),
             circle_falloff_start: shader_state.circle_falloff_start.clamp(0.0, 0.98),
@@ -563,19 +518,12 @@ impl UniformSet {
             rim_guard: shader_state.rim_guard.clamp(0.05, 1.0),
             rim_exponent: shader_state.rim_exponent.clamp(0.2, 4.0),
             rim_warp: shader_state.rim_warp.clamp(0.0, 1.0),
-            spacing_max_px,
-            spacing_min_px,
             dot_size: shader_state.dot_size.clamp(0.02, 0.5),
             outer_dot_scale: shader_state.outer_dot_scale.clamp(0.02, 1.0),
             edge_softness: shader_state.edge_softness.clamp(0.1, 8.0),
             chromatic_aberration: shader_state.chromatic_aberration.clamp(0.0, 4.0),
-            scroll_base: shader_state.scroll_base.clamp(0.0, 256.0),
-            scroll_motion_scale: shader_state.scroll_motion_scale.clamp(0.0, 256.0),
-            scroll_motion_floor: shader_state.scroll_motion_floor.clamp(0.0, 3.0),
-            scroll_motion_ceiling: shader_state.scroll_motion_ceiling.clamp(0.0, 4.0),
             cold_color: shader_state.cold_color.map(|value| value.clamp(0.0, 1.0)),
             hot_color: shader_state.hot_color.map(|value| value.clamp(0.0, 1.0)),
-            color_cycle_rate: shader_state.color_cycle_rate.clamp(0.0, 4.0),
             inner_alpha: shader_state.inner_alpha.clamp(0.0, 1.0),
         }
     }
@@ -584,8 +532,6 @@ impl UniformSet {
 fn resolve_lattice_density(
     lattice_density: f32,
     cell_height_px: i32,
-    spacing_max_px: f32,
-    spacing_min_px: f32,
 ) -> f32 {
     let density = lattice_density.clamp(2.0, 12.0);
     if (density - 6.0).abs() > f32::EPSILON {
@@ -593,13 +539,7 @@ fn resolve_lattice_density(
     }
 
     let cell_height = cell_height_px.max(1) as f32;
-    let spacing_span = (spacing_max_px - spacing_min_px).abs();
-    if spacing_span <= f32::EPSILON {
-        return density;
-    }
-
-    let normalized =
-        ((spacing_max_px - cell_height) / (spacing_max_px - spacing_min_px)).clamp(0.0, 1.0);
+    let normalized = ((22.0 - cell_height) / (22.0 - 12.0)).clamp(0.0, 1.0);
     (2.0 + normalized * 10.0).clamp(2.0, 12.0)
 }
 
@@ -636,8 +576,6 @@ impl RuntimeResources {
                 rim_guard: uniform_location(gl, scene_program, "u_rim_guard")?,
                 rim_exponent: uniform_location(gl, scene_program, "u_rim_exponent")?,
                 rim_warp: uniform_location(gl, scene_program, "u_rim_warp")?,
-                spacing_max_px: uniform_location(gl, scene_program, "u_spacing_max_px")?,
-                spacing_min_px: uniform_location(gl, scene_program, "u_spacing_min_px")?,
                 dot_size: uniform_location(gl, scene_program, "u_dot_size")?,
                 outer_dot_scale: uniform_location(gl, scene_program, "u_outer_dot_scale")?,
                 edge_softness: uniform_location(gl, scene_program, "u_edge_softness")?,
@@ -646,17 +584,8 @@ impl RuntimeResources {
                     scene_program,
                     "u_chromatic_aberration",
                 )?,
-                scroll_base: uniform_location(gl, scene_program, "u_scroll_base")?,
-                scroll_motion_scale: uniform_location(gl, scene_program, "u_scroll_motion_scale")?,
-                scroll_motion_floor: uniform_location(gl, scene_program, "u_scroll_motion_floor")?,
-                scroll_motion_ceiling: uniform_location(
-                    gl,
-                    scene_program,
-                    "u_scroll_motion_ceiling",
-                )?,
                 cold_color: uniform_location(gl, scene_program, "u_cold_color")?,
                 hot_color: uniform_location(gl, scene_program, "u_hot_color")?,
-                color_cycle_rate: uniform_location(gl, scene_program, "u_color_cycle_rate")?,
                 inner_alpha: uniform_location(gl, scene_program, "u_inner_alpha")?,
             },
             blit_uniforms: BlitUniformLocations {
