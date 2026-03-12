@@ -1,4 +1,4 @@
-import { ChangeEvent, MouseEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, MouseEvent, ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ChromaticBulgeGridShaderState,
   ClipPlacement,
@@ -9,7 +9,6 @@ import {
 } from "./types";
 import {
   buildTimelineIndex,
-  clipSummary,
   curveFromControlValue,
   defaultLfoClip,
   createPlacement,
@@ -21,6 +20,7 @@ import {
   LANE_ORDER,
   normalizeClipLfoShape,
   normalizedConfig,
+  phaseToEditorX,
   pointLabel,
   primaryLane,
   resolveNormalizedChromaticBulgeGrid,
@@ -29,6 +29,7 @@ import {
   syncClipAuthoring,
   timelineFromConfig,
   totalBeats,
+  valueToEditorY,
 } from "./vfx";
 import {
   importRecordFromJson,
@@ -41,11 +42,17 @@ type DragState =
   | { kind: "scrub" };
 
 type TimelineTool = "select" | "pencil";
+type ShapeInteractionMode = "add" | "move" | "delete";
 
 type PlacementClipboardEntry = {
   clipId: string;
   offsetBeats: number;
   repeats: number;
+};
+
+type ClipDropIndicator = {
+  clipId: string;
+  position: "before" | "after";
 };
 
 const TRACK_HEIGHT = 28;
@@ -61,6 +68,17 @@ const SHAPE_EDITOR_WIDTH = 320;
 const SHAPE_EDITOR_HEIGHT = 180;
 const SHAPE_EDITOR_VERTICAL_PADDING = 10;
 const SHAPE_EDITOR_BOUND_INSET = 2;
+const SHAPE_EDITOR_HANDLE_INSET = 6;
+const LFO_POINT_SNAP = 0.025;
+const CLIP_LENGTH_BAR_OPTIONS = [
+  { label: "4 bars", bars: 4 },
+  { label: "3 bars", bars: 3 },
+  { label: "2 bars", bars: 2 },
+  { label: "1 bar", bars: 1 },
+  { label: "1/2 bar", bars: 0.5 },
+  { label: "1/4 bar", bars: 0.25 },
+  { label: "1/8 bar", bars: 0.125 },
+] as const;
 const HIDDEN_EDITOR_LANES = new Set<LaneId>(["color_cycle_rate"]);
 const EDITOR_LANES = LANE_ORDER.filter((lane) => !HIDDEN_EDITOR_LANES.has(lane));
 
@@ -87,15 +105,15 @@ export default function App() {
   const [audioReady, setAudioReady] = useState(false);
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
   const [playPending, setPlayPending] = useState(false);
-  const [clipEditorHeight, setClipEditorHeight] = useState<number | null>(null);
   const [arrangementViewportWidth, setArrangementViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
   const [timelineZoom, setTimelineZoom] = useState(32);
   const [timelineTool, setTimelineTool] = useState<TimelineTool>("select");
   const [placementClipboard, setPlacementClipboard] = useState<PlacementClipboardEntry[]>([]);
   const [importedAudioUrl, setImportedAudioUrl] = useState<string | null>(null);
+  const [draggedClipId, setDraggedClipId] = useState<string | null>(null);
+  const [clipDropIndicator, setClipDropIndicator] = useState<ClipDropIndicator | null>(null);
   const playbackTimeRef = useRef(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const clipFieldsRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -126,9 +144,20 @@ export default function App() {
     () => (loaded ? draftSnapshot !== loaded.savedSnapshot : false),
     [draftSnapshot, loaded],
   );
+  const clipLengthOptions = useMemo(
+    () =>
+      CLIP_LENGTH_BAR_OPTIONS.map((option) => ({
+        label: option.label,
+        beats: timeline.beats_per_measure * option.bars,
+      })),
+    [timeline.beats_per_measure],
+  );
   const effectiveAudioUrl = importedAudioUrl ?? loaded?.audioUrl ?? null;
   const baseState = draft.params.shader_states?.playing;
   const selectedLaneMeta = laneMeta(selectedLane);
+  const selectedClipBeatValue = selectedClip?.length_beats ?? 0;
+  const selectedClipBeatOption =
+    clipLengthOptions.find((option) => Math.abs(option.beats - selectedClipBeatValue) < 0.0001)?.beats.toString() ?? "";
   const totalDurationSeconds =
     typeof audioDuration === "number" && Number.isFinite(audioDuration) && audioDuration > 0
       ? audioDuration
@@ -159,20 +188,6 @@ export default function App() {
       audioRef.current.pause();
     }
   }, [effectiveAudioUrl]);
-
-  useLayoutEffect(() => {
-    const element = clipFieldsRef.current;
-    if (!element) return;
-
-    const updateHeight = () => {
-      setClipEditorHeight(Math.ceil(element.getBoundingClientRect().height));
-    };
-
-    updateHeight();
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [selectedClip?.id, selectedLane, draft]);
 
   useEffect(() => {
     if (!playPending || !previewReady || !audioReady || !audioRef.current) return;
@@ -321,6 +336,21 @@ export default function App() {
       const clip = nextTimeline.clips.find((candidate) => candidate.id === selectedClip.id);
       if (!clip?.source || clip.source.kind !== "lfo") return current;
       clip.source.shape.points = points;
+      current.timeline = nextTimeline;
+      return current;
+    });
+  }
+
+  function updateSelectedClipBeatValue(rawValue: number) {
+    const nextValue = Math.max(0.25, rawValue);
+    updateDraft((current) => {
+      const nextTimeline = timelineFromConfig(current);
+      const clip = nextTimeline.clips.find((candidate) => candidate.id === selectedClip?.id);
+      if (!clip) return current;
+      clip.length_beats = nextValue;
+      if (clip.source?.kind === "lfo") {
+        clip.source.period_beats = nextValue;
+      }
       current.timeline = nextTimeline;
       return current;
     });
@@ -495,6 +525,68 @@ export default function App() {
 
   function addPlacement() {
     placeSelectedClipAtBeat(currentBeat());
+  }
+
+  function clipDropPosition(event: DragEvent<HTMLButtonElement>): "before" | "after" {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+  }
+
+  function reorderClip(draggedId: string, targetId: string, position: "before" | "after") {
+    if (draggedId === targetId) return;
+    updateDraft((current) => {
+      const nextTimeline = timelineFromConfig(current);
+      const fromIndex = nextTimeline.clips.findIndex((clip) => clip.id === draggedId);
+      const targetIndex = nextTimeline.clips.findIndex((clip) => clip.id === targetId);
+      if (fromIndex < 0 || targetIndex < 0) {
+        return current;
+      }
+      const [draggedClip] = nextTimeline.clips.splice(fromIndex, 1);
+      let insertIndex = targetIndex + (position === "after" ? 1 : 0);
+      if (fromIndex < targetIndex) {
+        insertIndex -= 1;
+      }
+      nextTimeline.clips.splice(Math.max(0, insertIndex), 0, draggedClip);
+      current.timeline = nextTimeline;
+      return current;
+    });
+  }
+
+  function handleClipDragStart(event: DragEvent<HTMLButtonElement>, clipId: string) {
+    setDraggedClipId(clipId);
+    setClipDropIndicator(null);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", clipId);
+  }
+
+  function handleClipDragOver(event: DragEvent<HTMLButtonElement>, targetId: string) {
+    if (!draggedClipId || draggedClipId === targetId) {
+      setClipDropIndicator(null);
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setClipDropIndicator({
+      clipId: targetId,
+      position: clipDropPosition(event),
+    });
+  }
+
+  function handleClipDrop(event: DragEvent<HTMLButtonElement>, targetId: string) {
+    if (!draggedClipId || draggedClipId === targetId) {
+      setDraggedClipId(null);
+      setClipDropIndicator(null);
+      return;
+    }
+    event.preventDefault();
+    reorderClip(draggedClipId, targetId, clipDropPosition(event));
+    setDraggedClipId(null);
+    setClipDropIndicator(null);
+  }
+
+  function clearClipDragState() {
+    setDraggedClipId(null);
+    setClipDropIndicator(null);
   }
 
   function deleteSelectedPlacements() {
@@ -791,128 +883,131 @@ export default function App() {
 
             <section className="panel arrangement-panel">
               <div className="inline-actions arrangement-toolbar">
-                <label className="compact-field">
-                  BPM
-                  <input
-                    type="number"
-                    step={0.1}
-                    value={timeline.bpm}
-                    onChange={(event) =>
-                      updateDraft((current) => {
-                        const nextTimeline = timelineFromConfig(current);
-                        nextTimeline.bpm = Math.max(1, Number(event.target.value));
-                        current.timeline = nextTimeline;
-                        return current;
-                      })
-                    }
-                  />
-                </label>
-                <label className="compact-field">
-                  Measures
-                  <input
-                    type="number"
-                    step={1}
-                    min={1}
-                    value={timeline.measures}
-                    onChange={(event) =>
-                      updateDraft((current) => {
-                        const nextTimeline = timelineFromConfig(current);
-                        nextTimeline.measures = Math.max(1, Math.round(Number(event.target.value)));
-                        current.timeline = nextTimeline;
-                        return current;
-                      })
-                    }
-                  />
-                </label>
-                <label className="compact-field">
-                  Beats/Measure
-                  <input
-                    type="number"
-                    step={1}
-                    min={1}
-                    value={timeline.beats_per_measure}
-                    onChange={(event) =>
-                      updateDraft((current) => {
-                        const nextTimeline = timelineFromConfig(current);
-                        nextTimeline.beats_per_measure = Math.max(
-                          1,
-                          Math.round(Number(event.target.value)),
-                        );
-                        current.timeline = nextTimeline;
-                        return current;
-                      })
-                    }
-                  />
-                </label>
-                <label className="compact-field">
-                  Zoom
-                  <input
-                    type="range"
-                    min={minTimelineZoom}
-                    max={maxTimelineZoom}
-                    step={0.25}
-                    value={timelineZoom}
-                    onChange={(event) => setTimelineZoom(Number(event.target.value))}
-                  />
-                </label>
-                <div className="tool-toggle" role="group" aria-label="Timeline tool">
+                <div className="arrangement-toolbar-fields">
+                  <label className="compact-field">
+                    <span className="compact-field-icon" aria-hidden="true">
+                      <TimelineFieldIcon name="bpm" />
+                    </span>
+                    <input
+                      type="number"
+                      step={0.1}
+                      aria-label="BPM"
+                      value={timeline.bpm}
+                      onChange={(event) =>
+                        updateDraft((current) => {
+                          const nextTimeline = timelineFromConfig(current);
+                          nextTimeline.bpm = Math.max(1, Number(event.target.value));
+                          current.timeline = nextTimeline;
+                          return current;
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="compact-field">
+                    <span className="compact-field-icon" aria-hidden="true">
+                      <TimelineFieldIcon name="measures" />
+                    </span>
+                    <input
+                      type="number"
+                      step={1}
+                      min={1}
+                      aria-label="Measures"
+                      value={timeline.measures}
+                      onChange={(event) =>
+                        updateDraft((current) => {
+                          const nextTimeline = timelineFromConfig(current);
+                          nextTimeline.measures = Math.max(1, Math.round(Number(event.target.value)));
+                          current.timeline = nextTimeline;
+                          return current;
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="compact-field">
+                    <span className="compact-field-icon" aria-hidden="true">
+                      <TimelineFieldIcon name="time" />
+                    </span>
+                    <input
+                      type="number"
+                      step={1}
+                      min={1}
+                      aria-label="Time"
+                      value={timeline.beats_per_measure}
+                      onChange={(event) =>
+                        updateDraft((current) => {
+                          const nextTimeline = timelineFromConfig(current);
+                          nextTimeline.beats_per_measure = Math.max(
+                            1,
+                            Math.round(Number(event.target.value)),
+                          );
+                          current.timeline = nextTimeline;
+                          return current;
+                        })
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="arrangement-toolbar-actions">
+                  <div className="tool-toggle" role="group" aria-label="Timeline tool">
+                    <button
+                      className={timelineTool === "select" ? "active" : ""}
+                      onClick={() => setTimelineTool("select")}
+                      type="button"
+                      title="Select tool"
+                      aria-label="Select tool"
+                      aria-pressed={timelineTool === "select"}
+                    >
+                      <TimelineToolIcon name="select" />
+                    </button>
+                    <button
+                      className={timelineTool === "pencil" ? "active" : ""}
+                      onClick={() => setTimelineTool("pencil")}
+                      type="button"
+                      title="Pencil tool"
+                      aria-label="Pencil tool"
+                      aria-pressed={timelineTool === "pencil"}
+                    >
+                      <TimelineToolIcon name="pencil" />
+                    </button>
+                  </div>
                   <button
-                    className={timelineTool === "select" ? "active" : ""}
-                    onClick={() => setTimelineTool("select")}
+                    className="icon-button"
+                    onClick={addPlacement}
+                    disabled={!selectedClip}
                     type="button"
-                    title="Select tool"
-                    aria-label="Select tool"
-                    aria-pressed={timelineTool === "select"}
+                    title="Place selected clip"
+                    aria-label="Place selected clip"
                   >
-                    <TimelineToolIcon name="select" />
+                    <TimelineActionIcon name="place" />
                   </button>
                   <button
-                    className={timelineTool === "pencil" ? "active" : ""}
-                    onClick={() => setTimelineTool("pencil")}
+                    className="icon-button"
+                    onClick={copySelectedPlacements}
+                    disabled={!selectedPlacementIndices.length}
                     type="button"
-                    title="Pencil tool"
-                    aria-label="Pencil tool"
-                    aria-pressed={timelineTool === "pencil"}
+                    title={`Copy placement${selectedPlacementIndices.length === 1 ? "" : "s"}`}
+                    aria-label={`Copy placement${selectedPlacementIndices.length === 1 ? "" : "s"}`}
                   >
-                    <TimelineToolIcon name="pencil" />
+                    <TimelineActionIcon name="copy" />
+                  </button>
+                  <button
+                    className="icon-button"
+                    onClick={deleteSelectedPlacements}
+                    disabled={!selectedPlacementIndices.length}
+                    type="button"
+                    title={`Delete placement${selectedPlacementIndices.length === 1 ? "" : "s"}`}
+                    aria-label={`Delete placement${selectedPlacementIndices.length === 1 ? "" : "s"}`}
+                  >
+                    <TimelineActionIcon name="delete" />
                   </button>
                 </div>
-                <button
-                  className="icon-button"
-                  onClick={addPlacement}
-                  disabled={!selectedClip}
-                  type="button"
-                  title="Place selected clip"
-                  aria-label="Place selected clip"
-                >
-                  <TimelineActionIcon name="place" />
-                </button>
-                <button
-                  className="icon-button"
-                  onClick={copySelectedPlacements}
-                  disabled={!selectedPlacementIndices.length}
-                  type="button"
-                  title={`Copy placement${selectedPlacementIndices.length === 1 ? "" : "s"}`}
-                  aria-label={`Copy placement${selectedPlacementIndices.length === 1 ? "" : "s"}`}
-                >
-                  <TimelineActionIcon name="copy" />
-                </button>
-                <button
-                  className="icon-button"
-                  onClick={deleteSelectedPlacements}
-                  disabled={!selectedPlacementIndices.length}
-                  type="button"
-                  title={`Delete placement${selectedPlacementIndices.length === 1 ? "" : "s"}`}
-                  aria-label={`Delete placement${selectedPlacementIndices.length === 1 ? "" : "s"}`}
-                >
-                  <TimelineActionIcon name="delete" />
-                </button>
               </div>
               <ArrangementGrid
                 audioRef={audioRef}
                 indexedPlacements={timelineIndex.placements}
                 isPlaying={isPlaying}
                 onViewportWidthChange={setArrangementViewportWidth}
+                onTimelineZoomChange={setTimelineZoom}
                 onCommitPlacement={updatePlacementAtIndex}
                 onPlaceSelectedClipAtBeat={placeSelectedClipAtBeat}
                 onResetSelection={() => {
@@ -933,6 +1028,8 @@ export default function App() {
                 selectedPlacementSet={selectedPlacementSet}
                 timeline={timeline}
                 timelineTool={timelineTool}
+                minTimelineZoom={minTimelineZoom}
+                maxTimelineZoom={maxTimelineZoom}
                 timelineWidth={timelineWidth}
                 timelineZoom={timelineZoom}
               />
@@ -993,25 +1090,37 @@ export default function App() {
                   </button>
                 </div>
               </div>
-              <p className="empty-copy">Current track: {selectedLaneMeta.label}</p>
               <div className="list">
                 {laneClips.map((clip) => (
                   <button
                     key={clip.id}
-                    className={`clip-card ${selectedClipId === clip.id ? "selected" : ""}`}
+                    className={[
+                      "clip-card",
+                      selectedClipId === clip.id ? "selected" : "",
+                      draggedClipId === clip.id ? "dragging" : "",
+                      clipDropIndicator?.clipId === clip.id ? `drop-${clipDropIndicator.position}` : "",
+                    ].filter(Boolean).join(" ")}
+                    draggable
                     onClick={() => {
                       setSelectedClipId(clip.id);
                       setSelectedLane(visibleLane(primaryLane(clip)?.lane ?? selectedLane));
                       clearPlacementSelection();
                     }}
+                    onDragStart={(event) => handleClipDragStart(event, clip.id)}
+                    onDragOver={(event) => handleClipDragOver(event, clip.id)}
+                    onDrop={(event) => handleClipDrop(event, clip.id)}
+                    onDragEnd={clearClipDragState}
                   >
                     <span
                       className="clip-swatch"
                       style={{ background: `rgb(${clip.color.map((channel) => Math.round(channel * 255)).join(" ")})` }}
                     />
-                    <div>
-                      <strong>{clip.name}</strong>
-                      <span>{clipSummary(clip)}</span>
+                    <div className="clip-card-copy">
+                      <div className="clip-card-title">
+                        <span>{formatClipBarLength(clip.length_beats, timeline.beats_per_measure)}</span>
+                        <strong>{clip.name}</strong>
+                      </div>
+                      <span>{clipListRangeLabel(clip)}</span>
                     </div>
                   </button>
                 ))}
@@ -1021,137 +1130,106 @@ export default function App() {
 
             <section className="panel clip-editor-panel">
               {selectedClip ? (
-                <div className="clip-editor">
-                  <div ref={clipFieldsRef} className="step-list lfo-clip-fields">
-                    <p className="empty-copy">Editing track: {selectedLaneMeta.label}</p>
-                    <div className="clip-field-grid">
-                      <label className="field-span-2">
-                        Name
-                        <input
-                          value={selectedClip.name}
-                          onChange={(event) =>
-                            updateDraft((current) => {
-                              const nextTimeline = timelineFromConfig(current);
-                              const clip = nextTimeline.clips.find((candidate) => candidate.id === selectedClip.id);
-                              if (!clip) return current;
-                              clip.name = event.target.value;
-                              current.timeline = nextTimeline;
-                              return current;
-                            })
-                          }
-                        />
-                      </label>
-                      <label>
-                        Length Beats
-                        <input
-                          type="number"
-                          step={0.25}
-                          value={selectedClip.length_beats}
-                          onChange={(event) =>
-                            updateDraft((current) => {
-                              const nextTimeline = timelineFromConfig(current);
-                              const clip = nextTimeline.clips.find((candidate) => candidate.id === selectedClip.id);
-                              if (!clip) return current;
-                              clip.length_beats = Math.max(0.25, Number(event.target.value));
-                              current.timeline = nextTimeline;
-                              return current;
-                            })
-                          }
-                        />
-                      </label>
-                      {isLegacyClip(selectedClip) ? (
-                        <p className="empty-copy field-span-2">Legacy step clip detected. This layout preserves playback, but LFO editing is only available for LFO clips.</p>
-                      ) : (
-                        <>
-                          <label>
-                            Lane
-                            <select
-                              value={selectedClip.source?.lane ?? selectedLane}
-                              onChange={(event) =>
-                                updateDraft((current) => {
-                                  const nextTimeline = timelineFromConfig(current);
-                                  const clip = nextTimeline.clips.find((candidate) => candidate.id === selectedClip.id);
-                                  if (!clip?.source || clip.source.kind !== "lfo") return current;
-                                  clip.source.lane = event.target.value as LaneId;
-                                  current.timeline = nextTimeline;
-                                  setSelectedLane(event.target.value as LaneId);
-                                  return current;
-                                })
-                              }
-                            >
-                              {EDITOR_LANES.filter((lane) => !isColorLane(lane)).map((lane) => (
-                                <option key={lane} value={lane}>
-                                  {laneMeta(lane).label}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            Min
-                            <input
-                              type="number"
-                              step={0.01}
-                              value={selectedClip.source?.min ?? 0}
-                              onChange={(event) =>
-                                updateDraft((current) => {
-                                  const nextTimeline = timelineFromConfig(current);
-                                  const clip = nextTimeline.clips.find((candidate) => candidate.id === selectedClip.id);
-                                  if (!clip?.source || clip.source.kind !== "lfo") return current;
-                                  clip.source.min = Number(event.target.value);
-                                  current.timeline = nextTimeline;
-                                  return current;
-                                })
-                              }
-                            />
-                          </label>
-                          <label>
-                            Max
-                            <input
-                              type="number"
-                              step={0.01}
-                              value={selectedClip.source?.max ?? 0}
-                              onChange={(event) =>
-                                updateDraft((current) => {
-                                  const nextTimeline = timelineFromConfig(current);
-                                  const clip = nextTimeline.clips.find((candidate) => candidate.id === selectedClip.id);
-                                  if (!clip?.source || clip.source.kind !== "lfo") return current;
-                                  clip.source.max = Number(event.target.value);
-                                  current.timeline = nextTimeline;
-                                  return current;
-                                })
-                              }
-                            />
-                          </label>
-                          <label className="field-span-2">
-                            Period Beats
-                            <input
-                              type="number"
-                              step={0.25}
-                              value={selectedClip.source?.period_beats ?? 4}
-                              onChange={(event) =>
-                                updateDraft((current) => {
-                                  const nextTimeline = timelineFromConfig(current);
-                                  const clip = nextTimeline.clips.find((candidate) => candidate.id === selectedClip.id);
-                                  if (!clip?.source || clip.source.kind !== "lfo") return current;
-                                  clip.source.period_beats = Math.max(0.25, Number(event.target.value));
-                                  current.timeline = nextTimeline;
-                                  return current;
-                                })
-                              }
-                            />
-                          </label>
-                        </>
-                      )}
+                <ShapeEditorPanel
+                  onCommitShape={commitSelectedClipShape}
+                  onSelectPoint={setSelectedPointIndex}
+                  selectedPointIndex={selectedPointIndex}
+                  shape={selectedShape}
+                  sidebarTop={
+                    <div className="step-list lfo-clip-fields">
+                      <div className="clip-field-grid">
+                        <label className="clip-input-field field-span-2" title="Clip name">
+                          <span className="compact-field-icon clip-input-icon" aria-hidden="true">
+                            <ClipFieldIcon name="name" />
+                          </span>
+                          <input
+                            aria-label="Clip name"
+                            value={selectedClip.name}
+                            onChange={(event) =>
+                              updateDraft((current) => {
+                                const nextTimeline = timelineFromConfig(current);
+                                const clip = nextTimeline.clips.find((candidate) => candidate.id === selectedClip.id);
+                                if (!clip) return current;
+                                clip.name = event.target.value;
+                                current.timeline = nextTimeline;
+                                return current;
+                              })
+                            }
+                          />
+                        </label>
+                        <label className="clip-input-field field-span-2" title="Length / period">
+                          <span className="compact-field-icon clip-input-icon" aria-hidden="true">
+                            <ClipFieldIcon name="length" />
+                          </span>
+                          <select
+                            aria-label="Length / period"
+                            value={selectedClipBeatOption}
+                            onChange={(event) => updateSelectedClipBeatValue(Number(event.target.value))}
+                          >
+                            {selectedClipBeatOption ? null : (
+                              <option value="" disabled>
+                                {`${selectedClipBeatValue.toFixed(2)} beats (custom)`}
+                              </option>
+                            )}
+                            {clipLengthOptions.map((option) => (
+                              <option key={option.label} value={option.beats}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {isLegacyClip(selectedClip) ? (
+                          <p className="empty-copy field-span-2">Legacy step clip detected. This layout preserves playback, but LFO editing is only available for LFO clips.</p>
+                        ) : (
+                          <>
+                            <label className="clip-input-field" title="Minimum value">
+                              <span className="compact-field-icon clip-input-icon" aria-hidden="true">
+                                <ClipFieldIcon name="min" />
+                              </span>
+                              <input
+                                aria-label="Minimum value"
+                                type="number"
+                                step={0.01}
+                                value={selectedClip.source?.min ?? 0}
+                                onChange={(event) =>
+                                  updateDraft((current) => {
+                                    const nextTimeline = timelineFromConfig(current);
+                                    const clip = nextTimeline.clips.find((candidate) => candidate.id === selectedClip.id);
+                                    if (!clip?.source || clip.source.kind !== "lfo") return current;
+                                    clip.source.min = Number(event.target.value);
+                                    current.timeline = nextTimeline;
+                                    return current;
+                                  })
+                                }
+                              />
+                            </label>
+                            <label className="clip-input-field" title="Maximum value">
+                              <span className="compact-field-icon clip-input-icon" aria-hidden="true">
+                                <ClipFieldIcon name="max" />
+                              </span>
+                              <input
+                                aria-label="Maximum value"
+                                type="number"
+                                step={0.01}
+                                value={selectedClip.source?.max ?? 0}
+                                onChange={(event) =>
+                                  updateDraft((current) => {
+                                    const nextTimeline = timelineFromConfig(current);
+                                    const clip = nextTimeline.clips.find((candidate) => candidate.id === selectedClip.id);
+                                    if (!clip?.source || clip.source.kind !== "lfo") return current;
+                                    clip.source.max = Number(event.target.value);
+                                    current.timeline = nextTimeline;
+                                    return current;
+                                  })
+                                }
+                              />
+                            </label>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <ShapeEditorPanel
-                    clipEditorHeight={clipEditorHeight}
-                    onCommitShape={commitSelectedClipShape}
-                    onSelectPoint={setSelectedPointIndex}
-                    selectedPointIndex={selectedPointIndex}
-                    shape={selectedShape}
-                  />
-                </div>
+                  }
+                />
               ) : (
                 <p>Select or create a clip.</p>
               )}
@@ -1485,26 +1563,70 @@ function pointerToPoint(svg: SVGSVGElement, clientX: number, clientY: number): L
     return { phase: 0, value: 0 };
   }
   const local = svgPoint.matrixTransform(inverse);
-  const phase = Math.max(0, Math.min(1, local.x / SHAPE_EDITOR_WIDTH));
-  const value = Math.max(
-    0,
-    Math.min(
-      1,
-      1 - ((local.y - SHAPE_EDITOR_VERTICAL_PADDING) / (SHAPE_EDITOR_HEIGHT - SHAPE_EDITOR_VERTICAL_PADDING * 2)),
-    ),
-  );
-  return { phase, value };
+  const phase = editorXToPhase(local.x);
+  const value = editorYToValue(local.y);
+  return {
+    phase: snapLfoPointCoordinate(phase),
+    value: snapLfoPointCoordinate(value),
+  };
 }
 
 function shapeEditorY(value: number): number {
-  return SHAPE_EDITOR_VERTICAL_PADDING + (1 - value) * (SHAPE_EDITOR_HEIGHT - SHAPE_EDITOR_VERTICAL_PADDING * 2);
+  return valueToEditorY(value, SHAPE_EDITOR_HEIGHT, SHAPE_EDITOR_VERTICAL_PADDING + SHAPE_EDITOR_HANDLE_INSET);
+}
+
+function shapeEditorX(phase: number): number {
+  return phaseToEditorX(phase, SHAPE_EDITOR_WIDTH, SHAPE_EDITOR_BOUND_INSET + SHAPE_EDITOR_HANDLE_INSET);
+}
+
+function snapLfoPointCoordinate(value: number): number {
+  return Math.max(0, Math.min(1, Math.round(value / LFO_POINT_SNAP) * LFO_POINT_SNAP));
+}
+
+function editorXToPhase(editorX: number): number {
+  const padding = SHAPE_EDITOR_BOUND_INSET + SHAPE_EDITOR_HANDLE_INSET;
+  const usableWidth = Math.max(1, SHAPE_EDITOR_WIDTH - padding * 2);
+  return Math.max(0, Math.min(1, (editorX - padding) / usableWidth));
+}
+
+function editorYToValue(editorY: number): number {
+  const padding = SHAPE_EDITOR_VERTICAL_PADDING + SHAPE_EDITOR_HANDLE_INSET;
+  const usableHeight = Math.max(1, SHAPE_EDITOR_HEIGHT - padding * 2);
+  return Math.max(0, Math.min(1, 1 - ((editorY - padding) / usableHeight)));
+}
+
+function clipListRangeLabel(clip: { source?: { kind: "lfo"; min: number; max: number } }): string {
+  if (!clip.source?.kind) {
+    return "Legacy step clip";
+  }
+  return `${clip.source.min.toFixed(2)}-${clip.source.max.toFixed(2)}`;
+}
+
+function formatClipBarLength(lengthBeats: number, beatsPerMeasure: number): string {
+  const bars = lengthBeats / Math.max(1, beatsPerMeasure);
+  const wholeBars = Math.round(bars);
+  if (Math.abs(bars - wholeBars) < 0.0001) {
+    return `${wholeBars}`;
+  }
+
+  for (const denominator of [2, 4, 8, 16]) {
+    const numerator = Math.round(bars * denominator);
+    if (Math.abs(bars - numerator / denominator) < 0.0001) {
+      return `${numerator}/${denominator}`;
+    }
+  }
+
+  return bars.toFixed(2);
 }
 
 function ArrangementGrid({
   audioRef,
   indexedPlacements,
   isPlaying,
+  maxTimelineZoom,
+  minTimelineZoom,
   onViewportWidthChange,
+  onTimelineZoomChange,
   onCommitPlacement,
   onPlaceSelectedClipAtBeat,
   onResetSelection,
@@ -1523,7 +1645,10 @@ function ArrangementGrid({
   audioRef: { current: HTMLAudioElement | null };
   indexedPlacements: IndexedTimelinePlacement[];
   isPlaying: boolean;
+  maxTimelineZoom: number;
+  minTimelineZoom: number;
   onViewportWidthChange: (width: number) => void;
+  onTimelineZoomChange: (zoom: number | ((current: number) => number)) => void;
   onCommitPlacement: (index: number, next: ClipPlacement) => void;
   onPlaceSelectedClipAtBeat: (beat: number) => void;
   onResetSelection: () => void;
@@ -1540,7 +1665,12 @@ function ArrangementGrid({
   timelineZoom: number;
 }) {
   const arrangementRef = useRef<HTMLDivElement | null>(null);
-  const scrollbarDragRef = useRef<{ pointerId: number; startClientX: number; startScrollLeft: number } | null>(null);
+  const scrollbarDragRef = useRef<
+    | { kind: "move"; pointerId: number; startClientX: number; startStartBeat: number; spanBeats: number }
+    | { kind: "resize-left"; pointerId: number; startClientX: number; startStartBeat: number; endBeat: number }
+    | { kind: "resize-right"; pointerId: number; startClientX: number; startBeat: number; startEndBeat: number }
+    | null
+  >(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [previewPlacement, setPreviewPlacement] = useState<{ placement: ClipPlacement; placementIndex: number } | null>(null);
   const [scrollLeft, setScrollLeft] = useState(0);
@@ -1551,16 +1681,12 @@ function ArrangementGrid({
   const currentBeat = Math.max(0, displayTime) * timeline.bpm / 60;
   const visibleTimelineWidth = Math.max(1, scrollRegionWidth - TIMELINE_LABEL_WIDTH);
   const maxScrollLeft = Math.max(0, timelineWidth - visibleTimelineWidth);
-  const scrollbarThumbWidth =
-    maxScrollLeft === 0
-      ? visibleTimelineWidth
-      : Math.min(
-          visibleTimelineWidth,
-          Math.max(36, (visibleTimelineWidth / Math.max(timelineWidth, 1)) * visibleTimelineWidth),
-        );
-  const scrollbarTravel = Math.max(0, visibleTimelineWidth - scrollbarThumbWidth);
-  const scrollbarThumbLeft =
-    maxScrollLeft === 0 || scrollbarTravel === 0 ? 0 : (scrollLeft / maxScrollLeft) * scrollbarTravel;
+  const visibleStartBeat = timelineZoom <= 0 ? 0 : scrollLeft / timelineZoom;
+  const visibleBeatSpan = timelineZoom <= 0 ? totalTimelineBeats : Math.min(totalTimelineBeats, visibleTimelineWidth / timelineZoom);
+  const visibleEndBeat = Math.min(totalTimelineBeats, visibleStartBeat + visibleBeatSpan);
+  const overviewPxPerBeat = totalTimelineBeats <= 0 ? 0 : visibleTimelineWidth / totalTimelineBeats;
+  const scrollbarThumbWidth = totalTimelineBeats <= 0 ? visibleTimelineWidth : visibleBeatSpan * overviewPxPerBeat;
+  const scrollbarThumbLeft = totalTimelineBeats <= 0 ? 0 : visibleStartBeat * overviewPxPerBeat;
 
   useLayoutEffect(() => {
     const element = arrangementRef.current;
@@ -1597,11 +1723,22 @@ function ArrangementGrid({
     return Math.max(0, Math.min(maxScrollLeft, next));
   }
 
-  function scrollLeftFromThumbOffset(offset: number): number {
-    if (scrollbarTravel === 0) {
+  function viewportFromOverview(offset: number): number {
+    if (overviewPxPerBeat <= 0) {
       return 0;
     }
-    return (Math.max(0, Math.min(scrollbarTravel, offset)) / scrollbarTravel) * maxScrollLeft;
+    return Math.max(0, Math.min(totalTimelineBeats, offset / overviewPxPerBeat));
+  }
+
+  function applyViewport(startBeat: number, endBeat: number) {
+    const minVisibleBeats = Math.min(totalTimelineBeats, visibleTimelineWidth / maxTimelineZoom);
+    const maxVisibleBeats = Math.min(totalTimelineBeats, visibleTimelineWidth / Math.max(minTimelineZoom, 0.0001));
+    const spanBeats = Math.max(minVisibleBeats, Math.min(maxVisibleBeats, endBeat - startBeat));
+    const maxStartBeat = Math.max(0, totalTimelineBeats - spanBeats);
+    const clampedStartBeat = Math.max(0, Math.min(maxStartBeat, startBeat));
+    const nextZoom = Math.max(minTimelineZoom, Math.min(maxTimelineZoom, visibleTimelineWidth / Math.max(spanBeats, 0.0001)));
+    onTimelineZoomChange(nextZoom);
+    setScrollLeft(clampedStartBeat * nextZoom);
   }
 
   function snapPlacementStart(beat: number, placementIndex: number): number {
@@ -1674,8 +1811,9 @@ function ArrangementGrid({
                 return;
               }
               const rect = event.currentTarget.getBoundingClientRect();
-              const nextThumbLeft = event.clientX - rect.left - scrollbarThumbWidth / 2;
-              setScrollLeft(clampScrollLeft(scrollLeftFromThumbOffset(nextThumbLeft)));
+              const centerBeat = viewportFromOverview(event.clientX - rect.left);
+              const nextStartBeat = centerBeat - visibleBeatSpan / 2;
+              applyViewport(nextStartBeat, nextStartBeat + visibleBeatSpan);
             }}
           >
             <div
@@ -1685,20 +1823,22 @@ function ArrangementGrid({
                 event.preventDefault();
                 event.stopPropagation();
                 scrollbarDragRef.current = {
+                  kind: "move",
                   pointerId: event.pointerId,
                   startClientX: event.clientX,
-                  startScrollLeft: scrollLeft,
+                  startStartBeat: visibleStartBeat,
+                  spanBeats: visibleBeatSpan,
                 };
                 event.currentTarget.setPointerCapture(event.pointerId);
               }}
               onPointerMove={(event) => {
                 const drag = scrollbarDragRef.current;
-                if (!drag || drag.pointerId !== event.pointerId || scrollbarTravel === 0) {
+                if (!drag || drag.pointerId !== event.pointerId || drag.kind !== "move" || overviewPxPerBeat <= 0) {
                   return;
                 }
-                const delta = event.clientX - drag.startClientX;
-                const nextScrollLeft = drag.startScrollLeft + (delta / scrollbarTravel) * maxScrollLeft;
-                setScrollLeft(clampScrollLeft(nextScrollLeft));
+                const deltaBeats = (event.clientX - drag.startClientX) / overviewPxPerBeat;
+                const nextStartBeat = drag.startStartBeat + deltaBeats;
+                applyViewport(nextStartBeat, nextStartBeat + drag.spanBeats);
               }}
               onPointerUp={(event) => {
                 if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -1712,7 +1852,78 @@ function ArrangementGrid({
               onLostPointerCapture={() => {
                 scrollbarDragRef.current = null;
               }}
-            />
+            >
+              <div
+                className="arrangement-top-scrollbar-handle left"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  scrollbarDragRef.current = {
+                    kind: "resize-left",
+                    pointerId: event.pointerId,
+                    startClientX: event.clientX,
+                    startStartBeat: visibleStartBeat,
+                    endBeat: visibleEndBeat,
+                  };
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                }}
+                onPointerMove={(event) => {
+                  const drag = scrollbarDragRef.current;
+                  if (!drag || drag.pointerId !== event.pointerId || drag.kind !== "resize-left" || overviewPxPerBeat <= 0) {
+                    return;
+                  }
+                  const deltaBeats = (event.clientX - drag.startClientX) / overviewPxPerBeat;
+                  applyViewport(drag.startStartBeat + deltaBeats, drag.endBeat);
+                }}
+                onPointerUp={(event) => {
+                  if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                  }
+                  scrollbarDragRef.current = null;
+                }}
+                onPointerCancel={() => {
+                  scrollbarDragRef.current = null;
+                }}
+                onLostPointerCapture={() => {
+                  scrollbarDragRef.current = null;
+                }}
+              />
+              <div
+                className="arrangement-top-scrollbar-handle right"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  scrollbarDragRef.current = {
+                    kind: "resize-right",
+                    pointerId: event.pointerId,
+                    startClientX: event.clientX,
+                    startBeat: visibleStartBeat,
+                    startEndBeat: visibleEndBeat,
+                  };
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                }}
+                onPointerMove={(event) => {
+                  const drag = scrollbarDragRef.current;
+                  if (!drag || drag.pointerId !== event.pointerId || drag.kind !== "resize-right" || overviewPxPerBeat <= 0) {
+                    return;
+                  }
+                  const deltaBeats = (event.clientX - drag.startClientX) / overviewPxPerBeat;
+                  applyViewport(drag.startBeat, drag.startEndBeat + deltaBeats);
+                }}
+                onPointerUp={(event) => {
+                  if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                  }
+                  scrollbarDragRef.current = null;
+                }}
+                onPointerCancel={() => {
+                  scrollbarDragRef.current = null;
+                }}
+                onLostPointerCapture={() => {
+                  scrollbarDragRef.current = null;
+                }}
+              />
+            </div>
           </div>
         </div>
         <div
@@ -1959,21 +2170,22 @@ function PlaybackTransport({
 }
 
 function ShapeEditorPanel({
-  clipEditorHeight,
   onCommitShape,
   onSelectPoint,
   selectedPointIndex,
+  sidebarTop,
   shape,
 }: {
-  clipEditorHeight: number | null;
   onCommitShape: (points: LfoPoint[]) => void;
   onSelectPoint: (index: number | null) => void;
   selectedPointIndex: number | null;
+  sidebarTop?: ReactNode;
   shape: { interpolation: "linear"; points: LfoPoint[] } | null;
 }) {
   const shapeSvgRef = useRef<SVGSVGElement | null>(null);
   const draftPointsRef = useRef<LfoPoint[]>(shape?.points ?? []);
   const [draftPoints, setDraftPoints] = useState<LfoPoint[]>(shape?.points ?? []);
+  const [interactionMode, setInteractionMode] = useState<ShapeInteractionMode>("add");
   const [shapeDragIndex, setShapeDragIndex] = useState<number | null>(null);
   const [curveDragIndex, setCurveDragIndex] = useState<number | null>(null);
   const [selectedSegmentIndex, setSelectedSegmentIndex] = useState<number | null>(null);
@@ -1994,7 +2206,13 @@ function ShapeEditorPanel({
   const segments = useMemo(
     () =>
       normalizedShape
-        ? shapeSegments(normalizedShape, SHAPE_EDITOR_WIDTH, SHAPE_EDITOR_HEIGHT, SHAPE_EDITOR_VERTICAL_PADDING)
+        ? shapeSegments(
+            normalizedShape,
+            SHAPE_EDITOR_WIDTH,
+            SHAPE_EDITOR_HEIGHT,
+            SHAPE_EDITOR_VERTICAL_PADDING + SHAPE_EDITOR_HANDLE_INSET,
+            SHAPE_EDITOR_BOUND_INSET + SHAPE_EDITOR_HANDLE_INSET,
+          )
         : [],
     [normalizedShape],
   );
@@ -2037,39 +2255,76 @@ function ShapeEditorPanel({
     );
   }
 
+  function deletePoint(index: number) {
+    if (!normalizedShape || normalizedShape.points.length <= 1) {
+      return;
+    }
+    const nextPoints = normalizedShape.points.filter((_, pointIndex) => pointIndex !== index);
+    updateDraftPoints(() => nextPoints);
+    onSelectPoint(nextPoints.length ? Math.min(index, nextPoints.length - 1) : null);
+    setSelectedSegmentIndex(null);
+    commit(nextPoints);
+  }
+
   return (
-    <>
-      <div className="shape-point-column" style={clipEditorHeight ? { height: `${clipEditorHeight}px` } : undefined}>
+    <div className="clip-editor">
+      <div className="clip-editor-sidebar">
+        {sidebarTop}
+        <div className="clip-editor-divider" />
+        <div className="shape-point-column">
         {normalizedShape ? (
-          <div className="shape-point-list vertical">
-            {normalizedShape.points.map((point, index) => (
-              <button
-                key={`${index}-${point.phase}-${point.value}`}
-                className={`list-item ${selectedPointIndex === index ? "selected" : ""}`}
-                onClick={() => onSelectPoint(index)}
-              >
-                <strong>Point {index + 1}</strong>
-                <span>{pointLabel(point)}</span>
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="lfo-shape-toolbar">
+              <div className="tool-toggle" role="group" aria-label="LFO edit mode">
+                {(["add", "move", "delete"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    className={interactionMode === mode ? "active" : ""}
+                    onClick={() => {
+                      finalizeDrag();
+                      setInteractionMode(mode);
+                    }}
+                    type="button"
+                    title={`${mode[0].toUpperCase()}${mode.slice(1)} mode`}
+                    aria-label={`${mode[0].toUpperCase()}${mode.slice(1)} mode`}
+                    aria-pressed={interactionMode === mode}
+                  >
+                    <ShapeModeIcon name={mode} />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="shape-point-list vertical">
+              {normalizedShape.points.map((point, index) => (
+                <button
+                  key={`${index}-${point.phase}-${point.value}`}
+                  className={`list-item ${selectedPointIndex === index ? "selected" : ""}`}
+                  onClick={() => onSelectPoint(index)}
+                >
+                  <strong>Point {index + 1}</strong>
+                  <span>{pointLabel(point)}</span>
+                </button>
+              ))}
+            </div>
+          </>
         ) : (
-          <p>Select a shape to edit.</p>
+          <p className="empty-copy">Select a shape to edit.</p>
         )}
       </div>
-      <div className="step-inspector lfo-shape-inspector" style={clipEditorHeight ? { height: `${clipEditorHeight}px` } : undefined}>
+      </div>
+      <div className="step-inspector lfo-shape-inspector">
         {normalizedShape ? (
           <div className="shape-editor-frame">
             <svg
               ref={shapeSvgRef}
-              className="shape-editor"
+              className={`shape-editor shape-editor-${interactionMode}`}
               viewBox={`0 0 ${SHAPE_EDITOR_WIDTH} ${SHAPE_EDITOR_HEIGHT}`}
               onPointerDown={(event) => {
                 const svg = shapeSvgRef.current;
                 if (!svg) return;
                 const role =
                   event.target instanceof SVGElement ? event.target.dataset.shapeRole : null;
-                if (role) {
+                if (role || interactionMode !== "add") {
                   return;
                 }
                 event.currentTarget.setPointerCapture(event.pointerId);
@@ -2133,7 +2388,13 @@ function ShapeEditorPanel({
               <path className="shape-grid" d={`M ${SHAPE_EDITOR_WIDTH / 2} 0 L ${SHAPE_EDITOR_WIDTH / 2} ${SHAPE_EDITOR_HEIGHT}`} />
               <path
                 className="shape-curve"
-                d={shapePath(normalizedShape, SHAPE_EDITOR_WIDTH, SHAPE_EDITOR_HEIGHT, SHAPE_EDITOR_VERTICAL_PADDING)}
+                d={shapePath(
+                  normalizedShape,
+                  SHAPE_EDITOR_WIDTH,
+                  SHAPE_EDITOR_HEIGHT,
+                  SHAPE_EDITOR_VERTICAL_PADDING + SHAPE_EDITOR_HANDLE_INSET,
+                  SHAPE_EDITOR_BOUND_INSET + SHAPE_EDITOR_HANDLE_INSET,
+                )}
               />
               {segments.map((segment) => {
                 const active = selectedSegmentIndex === segment.index || curveDragIndex === segment.index;
@@ -2155,12 +2416,18 @@ function ShapeEditorPanel({
                       cy={segment.controlY}
                       r={4}
                       onPointerDown={(event) => {
+                        if (interactionMode !== "move") {
+                          return;
+                        }
                         event.stopPropagation();
                         event.currentTarget.setPointerCapture(event.pointerId);
                         setSelectedSegmentIndex(segment.index);
                         setCurveDragIndex(segment.index);
                       }}
                       onDoubleClick={(event) => {
+                        if (interactionMode !== "move") {
+                          return;
+                        }
                         event.stopPropagation();
                         const next = normalizedShape.points.map((point, index) =>
                           index === segment.index ? setCurve(point, 0) : point,
@@ -2178,11 +2445,18 @@ function ShapeEditorPanel({
                   key={`${index}-${point.phase}-${point.value}`}
                   data-shape-role="point"
                   className={selectedPointIndex === index ? "shape-point selected" : "shape-point"}
-                  cx={point.phase * SHAPE_EDITOR_WIDTH}
+                  cx={shapeEditorX(point.phase)}
                   cy={shapeEditorY(point.value)}
                   r={5}
                   onPointerDown={(event) => {
                     event.stopPropagation();
+                    if (interactionMode === "delete") {
+                      deletePoint(index);
+                      return;
+                    }
+                    if (interactionMode !== "add" && interactionMode !== "move") {
+                      return;
+                    }
                     event.currentTarget.setPointerCapture(event.pointerId);
                     onSelectPoint(index);
                     setSelectedSegmentIndex(null);
@@ -2194,7 +2468,7 @@ function ShapeEditorPanel({
           </div>
         ) : null}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -2366,6 +2640,121 @@ function TimelineToolIcon({ name }: { name: TimelineTool }) {
         <>
           <path d="M4.5 15.5 6 11.8 13.9 3.9a1.3 1.3 0 0 1 1.8 0l0.4 0.4a1.3 1.3 0 0 1 0 1.8L8.2 14l-3.7 1.5Z" {...commonProps} />
           <path d="M12.8 5 15 7.2" {...commonProps} />
+        </>
+      ) : null}
+    </svg>
+  );
+}
+
+function TimelineFieldIcon({ name }: { name: "bpm" | "measures" | "time" }) {
+  const commonProps = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    strokeWidth: 1.7,
+  };
+
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      {name === "bpm" ? (
+        <>
+          <path d="M5 15.5V8.5a1 1 0 0 1 1-1h8.5" {...commonProps} />
+          <path d="M10 10 13.2 6.8" {...commonProps} />
+          <path d="M5.5 15.5h9" {...commonProps} />
+        </>
+      ) : null}
+      {name === "measures" ? (
+        <>
+          <rect x="4.5" y="5" width="11" height="10" rx="0.5" {...commonProps} />
+          <path d="M8.2 5v10" {...commonProps} />
+          <path d="M11.8 5v10" {...commonProps} />
+        </>
+      ) : null}
+      {name === "time" ? (
+        <>
+          <circle cx="10" cy="10" r="5.5" {...commonProps} />
+          <path d="M10 7.3v3.1l2.2 1.5" {...commonProps} />
+        </>
+      ) : null}
+    </svg>
+  );
+}
+
+function ClipFieldIcon({ name }: { name: "name" | "length" | "min" | "max" }) {
+  const commonProps = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    strokeWidth: 1.7,
+  };
+
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      {name === "name" ? (
+        <>
+          <path d="M4.5 5.5h11" {...commonProps} />
+          <path d="M10 5.5v9" {...commonProps} />
+          <path d="M6.5 14.5h7" {...commonProps} />
+        </>
+      ) : null}
+      {name === "length" ? (
+        <>
+          <path d="M4.5 10h11" {...commonProps} />
+          <path d="M7.2 7.2 4.5 10l2.7 2.8" {...commonProps} />
+          <path d="M12.8 7.2 15.5 10l-2.7 2.8" {...commonProps} />
+        </>
+      ) : null}
+      {name === "min" ? (
+        <>
+          <path d="M10 4.5v11" {...commonProps} />
+          <path d="M6.8 12.3 10 15.5l3.2-3.2" {...commonProps} />
+          <path d="M5 15.5h10" {...commonProps} />
+        </>
+      ) : null}
+      {name === "max" ? (
+        <>
+          <path d="M10 15.5v-11" {...commonProps} />
+          <path d="M6.8 7.7 10 4.5l3.2 3.2" {...commonProps} />
+          <path d="M5 4.5h10" {...commonProps} />
+        </>
+      ) : null}
+    </svg>
+  );
+}
+
+function ShapeModeIcon({ name }: { name: ShapeInteractionMode }) {
+  const commonProps = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    strokeWidth: 1.7,
+  };
+
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      {name === "add" ? (
+        <>
+          <path d="M10 4.5v11" {...commonProps} />
+          <path d="M4.5 10h11" {...commonProps} />
+        </>
+      ) : null}
+      {name === "move" ? (
+        <>
+          <path d="M10 3.8v12.4" {...commonProps} />
+          <path d="M3.8 10h12.4" {...commonProps} />
+          <path d="M7.8 6.2 10 4l2.2 2.2" {...commonProps} />
+          <path d="M7.8 13.8 10 16l2.2-2.2" {...commonProps} />
+          <path d="M6.2 7.8 4 10l2.2 2.2" {...commonProps} />
+          <path d="M13.8 7.8 16 10l-2.2 2.2" {...commonProps} />
+        </>
+      ) : null}
+      {name === "delete" ? (
+        <>
+          <path d="M5.5 5.5 14.5 14.5" {...commonProps} />
+          <path d="M14.5 5.5 5.5 14.5" {...commonProps} />
         </>
       ) : null}
     </svg>

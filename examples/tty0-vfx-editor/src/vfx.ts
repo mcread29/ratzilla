@@ -591,7 +591,7 @@ export function isLegacyClip(clip: ChromaticBulgeGridClip): boolean {
 
 export function clipSummary(clip: ChromaticBulgeGridClip): string {
   if (!clip.source?.kind) return "Legacy step clip";
-  return `${clip.source.min.toFixed(2)}-${clip.source.max.toFixed(2)} · ${clip.source.period_beats.toFixed(2)}b`;
+  return `${clip.source.min.toFixed(2)}-${clip.source.max.toFixed(2)} · ${clip.length_beats.toFixed(2)}b`;
 }
 
 function laneDefaultSpan(lane: LaneId): number {
@@ -750,17 +750,23 @@ function palette(index: number): [number, number, number] {
   return colors[index % colors.length];
 }
 
-export function shapePath(shape: ChromaticBulgeGridLfoShape, width: number, height: number, paddingY = 0): string {
+export function shapePath(
+  shape: ChromaticBulgeGridLfoShape,
+  width: number,
+  height: number,
+  paddingY = 0,
+  paddingX = 0,
+): string {
   const points = normalizeShapePoints(shape.points);
   if (!points.length) return "";
   if (points.length === 1) {
-    return `M ${points[0].phase * width} ${valueToEditorY(points[0].value, height, paddingY)}`;
+    return `M ${phaseToEditorX(points[0].phase, width, paddingX)} ${valueToEditorY(points[0].value, height, paddingY)}`;
   }
   const first = points[0];
-  const commands = [`M ${first.phase * width} ${valueToEditorY(first.value, height, paddingY)}`];
-  for (const segment of shapeSegments(shape, width, height, paddingY)) {
+  const commands = [`M ${phaseToEditorX(first.phase, width, paddingX)} ${valueToEditorY(first.value, height, paddingY)}`];
+  for (const segment of shapeSegments(shape, width, height, paddingY, paddingX)) {
     commands.push(
-      `Q ${segment.controlX} ${segment.controlY} ${segment.right.phase * width} ${valueToEditorY(segment.right.value, height, paddingY)}`,
+      `Q ${segment.controlX} ${segment.controlY} ${phaseToEditorX(segment.right.phase, width, paddingX)} ${valueToEditorY(segment.right.value, height, paddingY)}`,
     );
   }
   return commands.join(" ");
@@ -771,12 +777,13 @@ export function shapeSegments(
   width: number,
   height: number,
   paddingY = 0,
+  paddingX = 0,
 ): ShapeSegment[] {
   const points = normalizeShapePoints(shape.points);
   if (points.length < 2) return [];
   return points.slice(0, -1).map((left, index) => {
     const right = points[index + 1];
-    const midpointX = ((left.phase + right.phase) * width) / 2;
+    const midpointX = phaseToEditorX((left.phase + right.phase) / 2, width, paddingX);
     const midpointY = valueToEditorY((left.value + right.value) / 2, height, paddingY);
     return {
       index,
@@ -830,10 +837,16 @@ function quadraticBezier(a: number, control: number, b: number, t: number): numb
   return inverse * inverse * a + 2 * inverse * t * control + t * t * b;
 }
 
-function valueToEditorY(value: number, height: number, paddingY = 0): number {
+export function valueToEditorY(value: number, height: number, paddingY = 0): number {
   const safePadding = Math.max(0, Math.min(height / 2 - 1, paddingY));
   const usableHeight = Math.max(1, height - safePadding * 2);
   return safePadding + (1 - value) * usableHeight;
+}
+
+export function phaseToEditorX(phase: number, width: number, paddingX = 0): number {
+  const safePadding = Math.max(0, Math.min(width / 2 - 1, paddingX));
+  const usableWidth = Math.max(1, width - safePadding * 2);
+  return safePadding + phase * usableWidth;
 }
 
 function finiteOr(value: number | undefined, fallback: number): number {
