@@ -4,7 +4,14 @@ import { Group, Panel, Separator } from "react-resizable-panels";
 import { cn } from "@/lib/utils";
 
 function ResizablePanelGroup({ className, ...props }: React.ComponentProps<typeof Group>) {
-  return <Group data-slot="resizable-panel-group" className={cn("flex h-full w-full data-[orientation=vertical]:flex-col", className)} {...props} />;
+  return (
+    <Group
+      data-slot="resizable-panel-group"
+      resizeTargetMinimumSize={{ fine: 6, coarse: 12 }}
+      className={cn("flex h-full w-full data-[orientation=vertical]:flex-col", className)}
+      {...props}
+    />
+  );
 }
 
 function ResizablePanel(props: React.ComponentProps<typeof Panel>) {

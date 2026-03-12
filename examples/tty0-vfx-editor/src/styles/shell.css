@@ -224,6 +224,10 @@
   gap: 0.5rem;
 }
 
+.clip-editor-panel {
+  overflow: hidden;
+}
+
 .arrangement-panel {
   display: flex;
   flex-direction: column;
@@ -359,7 +363,9 @@
   gap: 0.6rem;
   align-items: stretch;
   flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .clip-editor-sidebar {
@@ -550,7 +556,7 @@
   background: var(--editor-cyan);
 }
 
-.resizable-shell-handle[data-orientation="vertical"]::after {
+.resizable-shell-handle[aria-orientation="vertical"]::after {
   width: 2.25rem;
   height: 2px;
 }
