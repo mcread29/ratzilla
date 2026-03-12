@@ -1,0 +1,350 @@
+.arrangement-grid {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--editor-surface);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.arrangement-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.arrangement-top-scrollbar {
+  margin-left: var(--timeline-label-width);
+  padding: 0;
+  background: #0f1418;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.arrangement-top-scrollbar-track {
+  position: relative;
+  height: 14px;
+  background: var(--editor-surface);
+}
+
+.arrangement-top-scrollbar-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 14px;
+  background: rgba(110, 220, 212, 0.8);
+  border: 1px solid rgba(8, 17, 18, 0.8);
+  border-radius: 0;
+  cursor: grab;
+}
+
+.arrangement-top-scrollbar-thumb:active {
+  cursor: grabbing;
+}
+
+.arrangement-top-scrollbar-handle {
+  position: absolute;
+  top: -1px;
+  width: 8px;
+  height: calc(100% + 2px);
+  background: rgba(8, 17, 18, 0.3);
+  cursor: ew-resize;
+}
+
+.arrangement-top-scrollbar-handle.left {
+  left: -1px;
+}
+
+.arrangement-top-scrollbar-handle.right {
+  right: -1px;
+}
+
+.arrangement-scroll-region {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.arrangement-scroll-region::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.arrangement-surface {
+  position: relative;
+  min-height: 100%;
+}
+
+.arrangement-label-overlay {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--timeline-label-width);
+  pointer-events: none;
+  z-index: 5;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  background: #10161a;
+  box-shadow: 1px 0 0 rgba(255, 255, 255, 0.04);
+}
+
+.ruler-row {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  min-height: 21px;
+  margin-left: var(--timeline-label-width);
+  overflow: hidden;
+  background: #0f1418;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ruler-track {
+  position: relative;
+  height: 21px;
+  box-shadow: inset -1px 0 0 rgba(234, 182, 92, 0.22);
+}
+
+.ruler-spacer {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 6;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: #0f1418;
+  pointer-events: none;
+}
+
+.ruler-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.ruler-mark.bar {
+  background: rgba(234, 182, 92, 0.22);
+}
+
+.ruler-mark span {
+  position: absolute;
+  top: 6px;
+  left: 4px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.track-row {
+  position: relative;
+  margin-left: var(--timeline-label-width);
+  min-height: 28px;
+  overflow: hidden;
+}
+
+.track-label {
+  position: absolute;
+  left: 0;
+  width: var(--timeline-label-width);
+  z-index: 6;
+  border-radius: 0;
+  border-left: none;
+  border-top: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  text-align: left;
+  background: #10161a;
+  pointer-events: auto;
+}
+
+.track-lane {
+  position: relative;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    var(--editor-surface);
+  background-size: var(--timeline-grid, 32px) 100%, auto;
+}
+
+.placement {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 8px;
+  color: #081112;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.55rem;
+  justify-content: space-between;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  transition: background-color 120ms ease, opacity 120ms ease;
+  z-index: 1;
+}
+
+.placement.selected {
+  z-index: 2;
+}
+
+.placement.active {
+  opacity: 1;
+  box-shadow: inset 0 0 0 2px rgba(8, 17, 18, 0.35), 0 0 18px rgba(234, 182, 92, 0.22);
+}
+
+.placement.selected.active {
+  box-shadow: inset 0 0 0 2px rgba(8, 17, 18, 0.4), 0 0 18px rgba(234, 182, 92, 0.22);
+}
+
+.placement:not(.active) {
+  opacity: 0.88;
+}
+
+.placement-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.resize-handle {
+  width: 8px;
+  align-self: stretch;
+  border-left: 2px solid rgba(8, 17, 18, 0.4);
+  margin-left: 0.5rem;
+  flex-shrink: 0;
+}
+
+.track-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--editor-playhead);
+  pointer-events: none;
+  z-index: 2;
+  box-shadow: 0 0 12px rgba(234, 182, 92, 0.35);
+}
+
+.lfo-shape-inspector {
+  min-width: 0;
+  display: flex;
+  min-height: 0;
+  height: 100%;
+}
+
+.lfo-shape-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.lfo-shape-toolbar .tool-toggle {
+  width: 100%;
+}
+
+.lfo-shape-toolbar .tool-toggle button {
+  flex: 1 1 0;
+}
+
+.shape-editor-frame {
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  height: 100%;
+}
+
+.shape-editor {
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  display: block;
+  background: linear-gradient(180deg, #0b1012, #0d1316);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: visible;
+  touch-action: none;
+}
+
+.shape-editor-add {
+  cursor: crosshair;
+}
+
+.shape-editor-move {
+  cursor: grab;
+}
+
+.shape-editor-delete {
+  cursor: not-allowed;
+}
+
+.shape-editor rect {
+  fill: transparent;
+}
+
+.shape-grid {
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1;
+}
+
+.shape-grid-bound {
+  stroke: rgba(234, 182, 92, 0.18);
+  stroke-dasharray: 4 4;
+}
+
+.shape-curve {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px rgba(110, 220, 212, 0.18));
+}
+
+.shape-curve-guide {
+  stroke: rgba(255, 214, 102, 0.45);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.shape-curve-handle {
+  fill: rgba(255, 214, 102, 0.92);
+  stroke: #0b1012;
+  stroke-width: 1.5;
+  cursor: ns-resize;
+}
+
+.shape-curve-handle.selected {
+  fill: var(--amber);
+  filter: drop-shadow(0 0 5px rgba(234, 182, 92, 0.3));
+}
+
+.shape-point {
+  fill: var(--text);
+  stroke: #0b1012;
+  stroke-width: 1.5;
+}
+
+.shape-point.selected {
+  fill: var(--amber);
+}

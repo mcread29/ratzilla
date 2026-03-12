@@ -1,0 +1,112 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b0d0f;
+  --panel: #11161a;
+  --panel-2: #161d22;
+  --border: #2d3941;
+  --text: #d9e2dd;
+  --muted: #9ba7a1;
+  --cyan: #6edcd4;
+  --amber: #eab65c;
+  --danger: #f06860;
+  --focus: #b3efe9;
+  --timeline-label-width: 160px;
+  --range-thumb-size: 16px;
+  --font-sans: "IBM Plex Sans", "Avenir Next", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", monospace;
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: #10161a;
+  --card-foreground: var(--text);
+  --popover: #10161a;
+  --popover-foreground: var(--text);
+  --primary: var(--cyan);
+  --primary-foreground: #081112;
+  --secondary: var(--panel-2);
+  --secondary-foreground: var(--text);
+  --muted-surface: var(--panel-2);
+  --muted-foreground: var(--muted);
+  --accent: #173036;
+  --accent-foreground: var(--focus);
+  --destructive: var(--danger);
+  --border-color: var(--border);
+  --input: #0d1114;
+  --ring: var(--focus);
+  --radius: 0.75rem;
+  --editor-cyan: var(--cyan);
+  --editor-amber: var(--amber);
+  --editor-surface: #0d1114;
+  --editor-surface-elevated: #10161a;
+  --editor-grid-line: rgba(255, 255, 255, 0.08);
+  --editor-playhead: var(--amber);
+  --editor-selection: rgba(110, 220, 212, 0.5);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted-surface);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border-color);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-editor-cyan: var(--editor-cyan);
+  --color-editor-amber: var(--editor-amber);
+  --color-editor-surface: var(--editor-surface);
+  --color-editor-surface-elevated: var(--editor-surface-elevated);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(110, 220, 212, 0.08), transparent 26%),
+    radial-gradient(circle at bottom right, rgba(234, 182, 92, 0.08), transparent 24%),
+    linear-gradient(180deg, #0b0d0f, #090b0c);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+}
+
+::selection {
+  background: rgba(110, 220, 212, 0.24);
+  color: var(--text);
+}

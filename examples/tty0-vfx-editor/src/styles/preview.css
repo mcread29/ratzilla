@@ -1,0 +1,31 @@
+.preview-column {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  container-type: size;
+  width: min(calc(100vh - 4px), 48vw);
+}
+
+.preview-panel {
+  inline-size: 100%;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+
+.preview-canvas {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  border-radius: 0;
+  border: 0;
+  display: block;
+  flex: 1 1 auto;
+}
