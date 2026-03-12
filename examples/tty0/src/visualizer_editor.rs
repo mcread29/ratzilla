@@ -2,9 +2,10 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     archive::{
-        legacy_automation_to_timeline, ChromaticBulgeGridAutomationLanes,
-        ChromaticBulgeGridClip, ChromaticBulgeGridClipAuthoring, ChromaticBulgeGridClipTimeline,
-        ChromaticBulgeGridLaneId, ChromaticBulgeGridShaderState,
+        default_lfo_library, legacy_automation_to_timeline, ChromaticBulgeGridAutomationLanes,
+        ChromaticBulgeGridClip, ChromaticBulgeGridClipSource,
+        ChromaticBulgeGridClipTimeline, ChromaticBulgeGridLaneId, ChromaticBulgeGridLfoClip,
+        ChromaticBulgeGridShaderState,
         ChromaticBulgeGridShaderStates, ClipParamTrack, ClipPlacement, ClipTweenEase,
         ClipTweenStep, ClipTweenValue, PlaybackClock, RecordDocument, TrackVisualizerConfig,
         TrackVisualizerMode,
@@ -772,6 +773,31 @@ impl VisualizerEditorOverlay {
             ),
             Line::from(""),
         ];
+
+        if let Some(ChromaticBulgeGridClipSource::Lfo(lfo)) = &clip.source {
+            lines.push(Line::from(format!("shape       {}", lfo.shape_id)));
+            lines.push(Line::from(format!(
+                "range       {:.3} -> {:.3}",
+                lfo.min, lfo.max
+            )));
+            lines.push(Line::from(format!(
+                "period      {:.3} beats  offset {:.3}",
+                lfo.period_beats, lfo.phase_offset_beats
+            )));
+            lines.push(Line::from(format!("start mode  {:?}", lfo.start_mode)));
+            lines.push(Line::from(""));
+            lines.push(Line::from(
+                "This overlay can place and inspect LFO clips. Use the standalone tty0-vfx-editor for full shape editing.",
+            ));
+            frame.render_widget(
+                Paragraph::new(lines)
+                    .wrap(Wrap { trim: false })
+                    .style(Style::default().bg(Color::Rgb(12, 18, 20)).fg(TEXT))
+                    .block(Block::bordered().title(" lfo clip ")),
+                split[1],
+            );
+            return;
+        }
 
         let Some(track) = draft.track_for_selected_clip() else {
             lines.push(Line::from("no authoring track on selected clip"));
@@ -1733,6 +1759,7 @@ impl EditorDraftStore {
         let working = TrackVisualizerConfig {
             mode: original.mode,
             params: original.params.clone(),
+            lfo_library: Some(original.lfo_library.clone().unwrap_or_else(default_lfo_library)),
             automation: None,
             timeline: Some(working_timeline),
         }
@@ -1939,17 +1966,29 @@ impl ChromaticBulgeGridEditorDraft {
         length_beats: f32,
     ) {
         let id = self.next_clip_id(name);
+        let library = self.working.lfo_library.clone().unwrap_or_else(default_lfo_library);
+        let shape_id = library
+            .shapes
+            .first()
+            .map(|shape| shape.id.clone())
+            .unwrap_or_else(|| "sine".to_string());
+        let base = self.base_state();
+        let base_value = base_value_for_lane(base, lane);
         self.timeline_mut().clips.push(ChromaticBulgeGridClip {
             id: id.clone(),
             name: name.to_string(),
             length_beats: length_beats.max(0.25),
             color: default_clip_color(id.len()),
-            authoring: Some(ChromaticBulgeGridClipAuthoring {
-                tracks: vec![ClipParamTrack {
-                    lane,
-                    steps: Vec::new(),
-                }],
-            }),
+            source: Some(ChromaticBulgeGridClipSource::Lfo(ChromaticBulgeGridLfoClip {
+                lane,
+                shape_id,
+                min: base_value,
+                max: base_value + lfo_default_span(lane),
+                period_beats: 4.0,
+                phase_offset_beats: 0.0,
+                start_mode: crate::archive::LfoStartMode::Retrigger,
+            })),
+            authoring: None,
             lanes: ChromaticBulgeGridAutomationLanes::default(),
         });
         self.clip_editor.selected_clip_id.0 = Some(id);
@@ -1964,6 +2003,7 @@ impl ChromaticBulgeGridEditorDraft {
             name: name.clone(),
             length_beats: clip.length_beats,
             color: clip.color,
+            source: clip.source,
             authoring: clip.authoring,
             lanes: clip.lanes,
         });
@@ -2629,6 +2669,7 @@ fn default_visualizer_config() -> TrackVisualizerConfig {
             shader_states: Some(ChromaticBulgeGridShaderStates::default()),
             ..Default::default()
         },
+        lfo_library: Some(default_lfo_library()),
         automation: None,
         timeline: Some(default_timeline()),
     }
@@ -2644,15 +2685,52 @@ fn default_timeline() -> ChromaticBulgeGridClipTimeline {
             name: "Clip 1".to_string(),
             length_beats: 4.0,
             color: default_clip_color(1),
-            authoring: Some(ChromaticBulgeGridClipAuthoring {
-                tracks: vec![ClipParamTrack {
-                    lane: ChromaticBulgeGridLaneId::MotionRate,
-                    steps: Vec::new(),
-                }],
-            }),
+            source: Some(ChromaticBulgeGridClipSource::Lfo(ChromaticBulgeGridLfoClip {
+                lane: ChromaticBulgeGridLaneId::MotionRate,
+                shape_id: "sine".to_string(),
+                min: 1.0,
+                max: 1.25,
+                period_beats: 4.0,
+                phase_offset_beats: 0.0,
+                start_mode: crate::archive::LfoStartMode::Retrigger,
+            })),
+            authoring: None,
             lanes: ChromaticBulgeGridAutomationLanes::default(),
         }],
         arrangement: Vec::new(),
+    }
+}
+
+fn base_value_for_lane(base: ChromaticBulgeGridShaderState, lane: ChromaticBulgeGridLaneId) -> f32 {
+    match lane {
+        ChromaticBulgeGridLaneId::MotionRate => base.motion_rate,
+        ChromaticBulgeGridLaneId::MotionRateY => base.motion_rate_y,
+        ChromaticBulgeGridLaneId::LatticeDensity => base.lattice_density,
+        ChromaticBulgeGridLaneId::CircleRadius => base.circle_radius,
+        ChromaticBulgeGridLaneId::CircleFalloffStart => base.circle_falloff_start,
+        ChromaticBulgeGridLaneId::CircleFalloffEnd => base.circle_falloff_end,
+        ChromaticBulgeGridLaneId::BulgeAmount => base.bulge_amount,
+        ChromaticBulgeGridLaneId::RimGuard => base.rim_guard,
+        ChromaticBulgeGridLaneId::RimExponent => base.rim_exponent,
+        ChromaticBulgeGridLaneId::RimWarp => base.rim_warp,
+        ChromaticBulgeGridLaneId::DotSize => base.dot_size,
+        ChromaticBulgeGridLaneId::OuterDotScale => base.outer_dot_scale,
+        ChromaticBulgeGridLaneId::EdgeSoftness => base.edge_softness,
+        ChromaticBulgeGridLaneId::ChromaticAberration => base.chromatic_aberration,
+        ChromaticBulgeGridLaneId::ColorCycleRate => base.color_cycle_rate,
+        ChromaticBulgeGridLaneId::InnerAlpha => base.inner_alpha,
+        ChromaticBulgeGridLaneId::ColdColor | ChromaticBulgeGridLaneId::HotColor => 0.0,
+    }
+}
+
+fn lfo_default_span(lane: ChromaticBulgeGridLaneId) -> f32 {
+    match lane {
+        ChromaticBulgeGridLaneId::LatticeDensity => 2.0,
+        ChromaticBulgeGridLaneId::RimExponent => 0.5,
+        ChromaticBulgeGridLaneId::MotionRate
+        | ChromaticBulgeGridLaneId::MotionRateY
+        | ChromaticBulgeGridLaneId::ColorCycleRate => 0.25,
+        _ => 0.15,
     }
 }
 

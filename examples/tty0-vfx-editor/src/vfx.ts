@@ -2,18 +2,22 @@ import {
   ChromaticBulgeGridAutomation,
   ChromaticBulgeGridAutomationLanes,
   ChromaticBulgeGridClip,
-  ChromaticBulgeGridClipAuthoring,
+  ChromaticBulgeGridClipSource,
   ChromaticBulgeGridClipTimeline,
+  ChromaticBulgeGridLfoClip,
+  ChromaticBulgeGridLfoShape,
   ChromaticBulgeGridShaderState,
   ClipPlacement,
-  ClipTweenEase,
   ClipTweenStep,
-  ClipTweenValue,
   ColorKeyframe,
   FloatKeyframe,
   LaneId,
+  LfoPoint,
   TrackVisualizerConfig,
 } from "./types";
+
+const SHARED_LFO_IMPORT_ERROR =
+  "Import failed: shared LFO shape libraries are no longer supported. Each LFO clip must embed its own shape.";
 
 export const LANE_ORDER: LaneId[] = [
   "motion_rate",
@@ -36,10 +40,15 @@ export const LANE_ORDER: LaneId[] = [
   "inner_alpha",
 ];
 
-const colorLaneSet = new Set<LaneId>(["cold_color", "hot_color"]);
+const COLOR_LANES = new Set<LaneId>(["cold_color", "hot_color"]);
+const LFO_LANES = LANE_ORDER.filter((lane) => !COLOR_LANES.has(lane));
 
 export function isColorLane(lane: LaneId): boolean {
-  return colorLaneSet.has(lane);
+  return COLOR_LANES.has(lane);
+}
+
+export function supportsLfo(lane: LaneId): boolean {
+  return !isColorLane(lane);
 }
 
 export function defaultShaderState(): ChromaticBulgeGridShaderState {
@@ -62,6 +71,31 @@ export function defaultShaderState(): ChromaticBulgeGridShaderState {
     hot_color: [1, 1, 1],
     color_cycle_rate: 0.16,
     inner_alpha: 0.9,
+  };
+}
+
+export function defaultClipLfoShape(): ChromaticBulgeGridLfoShape {
+  return {
+    interpolation: "linear",
+    points: [point(0, 0), point(1, 0)],
+  };
+}
+
+export function defaultLfoClip(
+  lane: LaneId,
+  base: ChromaticBulgeGridShaderState,
+): ChromaticBulgeGridClipSource {
+  const baseValue = Number(base[lane as keyof ChromaticBulgeGridShaderState] ?? 0);
+  const span = laneDefaultSpan(lane);
+  return {
+    kind: "lfo",
+    lane,
+    shape: defaultClipLfoShape(),
+    min: baseValue,
+    max: baseValue + span,
+    period_beats: 4,
+    phase_offset_beats: 0,
+    start_mode: "retrigger",
   };
 }
 
@@ -93,15 +127,41 @@ export function defaultVisualizer(): TrackVisualizerConfig {
           name: "Clip 1",
           length_beats: 4,
           color: [0.43, 0.86, 0.83],
-          authoring: {
-            tracks: [{ lane: "motion_rate", steps: [] }],
-          },
+          source: defaultLfoClip("motion_rate", base),
           lanes: {},
         },
       ],
       arrangement: [],
     },
   };
+}
+
+export function assertSupportedClipLocalShapeSchema(config: unknown): void {
+  if (!config || typeof config !== "object") {
+    return;
+  }
+  const visualizer = config as {
+    lfo_library?: unknown;
+    timeline?: {
+      clips?: Array<{ source?: { kind?: string; shape_id?: unknown; shape?: unknown } | null }> | null;
+    } | null;
+  };
+  if ("lfo_library" in visualizer) {
+    throw new Error(SHARED_LFO_IMPORT_ERROR);
+  }
+  const clips = visualizer.timeline?.clips;
+  if (!Array.isArray(clips)) {
+    return;
+  }
+  for (const clip of clips) {
+    const source = clip?.source;
+    if (!source || source.kind !== "lfo") {
+      continue;
+    }
+    if ("shape_id" in source || !source.shape || typeof source.shape !== "object") {
+      throw new Error(SHARED_LFO_IMPORT_ERROR);
+    }
+  }
 }
 
 export function normalizedConfig(config: TrackVisualizerConfig): TrackVisualizerConfig {
@@ -114,291 +174,89 @@ export function normalizedConfig(config: TrackVisualizerConfig): TrackVisualizer
   next.params.shader_states.idle = structuredClone(next.params.shader_states.playing);
   if (next.timeline) {
     next.automation = null;
-    next.timeline = normalizeTimeline(next.timeline);
+    next.timeline = normalizeTimeline(next.timeline, next.params.shader_states.playing);
+  } else if (next.automation) {
+    next.timeline = legacyAutomationToTimeline(next.automation);
+    next.automation = null;
+  } else {
+    next.timeline = defaultVisualizer().timeline!;
   }
   return next;
 }
 
-function normalizeShaderState(
-  state: Partial<ChromaticBulgeGridShaderState> | undefined,
-): ChromaticBulgeGridShaderState {
-  const defaults = defaultShaderState();
-  const next = structuredClone(state ?? {});
-  return {
-    motion_rate: next.motion_rate ?? defaults.motion_rate,
-    motion_rate_y: next.motion_rate_y ?? defaults.motion_rate_y,
-    lattice_density: next.lattice_density ?? defaults.lattice_density,
-    circle_radius: next.circle_radius ?? defaults.circle_radius,
-    circle_falloff_start: next.circle_falloff_start ?? defaults.circle_falloff_start,
-    circle_falloff_end: next.circle_falloff_end ?? defaults.circle_falloff_end,
-    bulge_amount: next.bulge_amount ?? defaults.bulge_amount,
-    rim_guard: next.rim_guard ?? defaults.rim_guard,
-    rim_exponent: next.rim_exponent ?? defaults.rim_exponent,
-    rim_warp: next.rim_warp ?? defaults.rim_warp,
-    dot_size: next.dot_size ?? defaults.dot_size,
-    outer_dot_scale: next.outer_dot_scale ?? defaults.outer_dot_scale,
-    edge_softness: next.edge_softness ?? defaults.edge_softness,
-    chromatic_aberration: next.chromatic_aberration ?? defaults.chromatic_aberration,
-    cold_color: next.cold_color ?? defaults.cold_color,
-    hot_color: next.hot_color ?? defaults.hot_color,
-    color_cycle_rate: next.color_cycle_rate ?? defaults.color_cycle_rate,
-    inner_alpha: next.inner_alpha ?? defaults.inner_alpha,
-  };
-}
-
 export function normalizeTimeline(
   timeline: ChromaticBulgeGridClipTimeline,
+  base: ChromaticBulgeGridShaderState,
 ): ChromaticBulgeGridClipTimeline {
   const next = structuredClone(timeline);
   next.bpm = Math.max(1, Number.isFinite(next.bpm) ? next.bpm : 120);
   next.measures = Math.max(1, Math.round(next.measures || 1));
   next.beats_per_measure = Math.max(1, Math.round(next.beats_per_measure || 4));
-  next.clips = next.clips.map((clip) => ({
-    ...clip,
-    length_beats: Math.max(0.0001, clip.length_beats || 1),
-    authoring: normalizeAuthoring(clip.authoring),
-    lanes: sortLanes(clip.lanes ?? {}),
-  }));
-  const clipTrackById = new Map(
-    next.clips.map((clip) => [clip.id, primaryLane(clip)?.index ?? 0] as const),
-  );
-  next.arrangement = next.arrangement.map((placement) => ({
-    ...placement,
+  next.clips = (next.clips ?? []).map((clip, index) => normalizeClip(clip, index, base));
+  next.arrangement = (next.arrangement ?? []).map((placement) => ({
+    clip_id: placement.clip_id,
     start_beat: Math.max(0, placement.start_beat || 0),
-    track: clipTrackById.get(placement.clip_id) ?? placement.track ?? 0,
-    repeats: Math.max(1, placement.repeats || 1),
+    track: Math.max(0, Math.round(placement.track || 0)),
+    repeats: Math.max(1, Math.round(placement.repeats || 1)),
   }));
   return next;
 }
 
-function sortLanes(lanes: ChromaticBulgeGridAutomationLanes): ChromaticBulgeGridAutomationLanes {
-  const next = {} as ChromaticBulgeGridAutomationLanes;
-  for (const lane of LANE_ORDER) {
-    const keyframes = structuredClone(lanes[lane] ?? []);
-    if (keyframes) {
-      keyframes.sort((a, b) => a.beat - b.beat);
-      if (keyframes.length > 0) {
-        (next as Record<string, unknown>)[lane] = keyframes;
-      }
-    }
-  }
-  return next;
-}
-
-function normalizeAuthoring(
-  authoring: ChromaticBulgeGridClipAuthoring | undefined,
-): ChromaticBulgeGridClipAuthoring | undefined {
-  if (!authoring) {
-    return undefined;
-  }
-  const lane = authoring.tracks[0]?.lane;
+function normalizeClip(
+  clip: ChromaticBulgeGridClip,
+  index: number,
+  base: ChromaticBulgeGridShaderState,
+): ChromaticBulgeGridClip {
+  const lane = primaryLane(clip)?.lane ?? LFO_LANES[0];
+  const source = normalizeClipSource(clip.source, lane, base);
   return {
-    tracks: lane && LANE_ORDER.includes(lane) ? [structuredClone(authoring.tracks[0])] : [],
+    ...clip,
+    id: clip.id?.trim() || `clip_${index + 1}`,
+    name: clip.name?.trim() || `Clip ${index + 1}`,
+    length_beats: Math.max(0.25, clip.length_beats || 4),
+    color: clampColor(clip.color ?? palette(index)),
+    source,
+    lanes: clip.lanes ?? {},
   };
 }
 
-export function compileAuthoringLanes(
+function normalizeClipSource(
+  source: ChromaticBulgeGridClipSource | undefined,
+  lane: LaneId,
   base: ChromaticBulgeGridShaderState,
-  clipLengthBeats: number,
-  authoring?: ChromaticBulgeGridClipAuthoring,
-): ChromaticBulgeGridAutomationLanes {
-  const lanes: ChromaticBulgeGridAutomationLanes = {};
-  if (!authoring) {
-    return lanes;
+): ChromaticBulgeGridClipSource | undefined {
+  if (!source || source.kind !== "lfo") {
+    return defaultLfoClip(lane, base);
   }
-  for (const track of authoring.tracks) {
-    if (isColorLane(track.lane)) {
-      let cursor = 0;
-      let current = getColorState(base, track.lane as "cold_color" | "hot_color");
-      const laneKeyframes: ColorKeyframe[] = [];
-      for (const step of track.steps) {
-        if (step.to.kind !== "color") continue;
-        const { keyframes, endValue, endBeat } = compileColorStep(
-          current,
-          step.to.value,
-          cursor,
-          step,
-          clipLengthBeats,
-        );
-        laneKeyframes.push(...keyframes);
-        current = endValue;
-        cursor = endBeat;
-      }
-      (lanes as Record<string, unknown>)[track.lane] = laneKeyframes;
-    } else {
-      let cursor = 0;
-      let current = Number(base[track.lane]);
-      const laneKeyframes: FloatKeyframe[] = [];
-      for (const step of track.steps) {
-        if (step.to.kind !== "float") continue;
-        const { keyframes, endValue, endBeat } = compileFloatStep(
-          current,
-          step.to.value,
-          cursor,
-          step,
-          clipLengthBeats,
-        );
-        laneKeyframes.push(...keyframes);
-        current = endValue;
-        cursor = endBeat;
-      }
-      (lanes as Record<string, unknown>)[track.lane] = laneKeyframes;
-    }
+  if (!source.shape) {
+    throw new Error(SHARED_LFO_IMPORT_ERROR);
   }
-  return sortLanes(lanes);
-}
-
-function compileFloatStep(
-  startValue: number,
-  endValue: number,
-  startBeat: number,
-  step: ClipTweenStep,
-  clipLengthBeats: number,
-): { keyframes: FloatKeyframe[]; endValue: number; endBeat: number } {
-  const duration = Math.max(0, step.duration_beats);
-  const endBeat = Math.min(startBeat + duration, Math.max(0, clipLengthBeats));
-  const keyframes: FloatKeyframe[] = [
-    {
-      beat: startBeat,
-      value: startValue,
-      interpolation: step.ease === "hold" ? "hold" : "linear",
-    },
-  ];
-  if (duration <= 0.0001 || endBeat <= startBeat || step.ease === "hold") {
-    keyframes.push({ beat: endBeat, value: endValue, interpolation: "hold" });
-    return { keyframes, endValue, endBeat };
-  }
-  const segments = easeSegments(step.ease);
-  for (let index = 1; index <= segments; index += 1) {
-    const t = index / segments;
-    keyframes.push({
-      beat: startBeat + (endBeat - startBeat) * t,
-      value: lerp(startValue, endValue, easeProgress(step.ease, t)),
-      interpolation: index === segments ? "hold" : "linear",
-    });
-  }
-  return { keyframes, endValue, endBeat };
-}
-
-function compileColorStep(
-  startValue: [number, number, number],
-  endValue: [number, number, number],
-  startBeat: number,
-  step: ClipTweenStep,
-  clipLengthBeats: number,
-): { keyframes: ColorKeyframe[]; endValue: [number, number, number]; endBeat: number } {
-  const duration = Math.max(0, step.duration_beats);
-  const endBeat = Math.min(startBeat + duration, Math.max(0, clipLengthBeats));
-  const keyframes: ColorKeyframe[] = [
-    {
-      beat: startBeat,
-      value: startValue,
-      interpolation: step.ease === "hold" ? "hold" : "linear",
-    },
-  ];
-  if (duration <= 0.0001 || endBeat <= startBeat || step.ease === "hold") {
-    keyframes.push({ beat: endBeat, value: endValue, interpolation: "hold" });
-    return { keyframes, endValue, endBeat };
-  }
-  const segments = easeSegments(step.ease);
-  for (let index = 1; index <= segments; index += 1) {
-    const t = index / segments;
-    const p = easeProgress(step.ease, t);
-    keyframes.push({
-      beat: startBeat + (endBeat - startBeat) * t,
-      value: [
-        lerp(startValue[0], endValue[0], p),
-        lerp(startValue[1], endValue[1], p),
-        lerp(startValue[2], endValue[2], p),
-      ],
-      interpolation: index === segments ? "hold" : "linear",
-    });
-  }
-  return { keyframes, endValue, endBeat };
-}
-
-function easeSegments(ease: ClipTweenEase): number {
-  switch (ease) {
-    case "sine_in":
-    case "sine_out":
-      return 4;
-    case "sine_in_out":
-      return 6;
-    default:
-      return 1;
-  }
-}
-
-function easeProgress(ease: ClipTweenEase, t: number): number {
-  const x = Math.max(0, Math.min(1, t));
-  switch (ease) {
-    case "hold":
-      return x >= 1 ? 1 : 0;
-    case "sine_in":
-      return 1 - Math.cos((x * Math.PI) / 2);
-    case "sine_out":
-      return Math.sin((x * Math.PI) / 2);
-    case "sine_in_out":
-      return -(Math.cos(Math.PI * x) * 0.5) + 0.5;
-    default:
-      return x;
-  }
-}
-
-export function syncClipAuthoring(
-  config: TrackVisualizerConfig,
-  clipId: string,
-): TrackVisualizerConfig {
-  const next = normalizedConfig(config);
-  const base = next.params.shader_states?.playing ?? defaultShaderState();
-  if (!next.timeline) {
-    return next;
-  }
-  next.timeline.clips = next.timeline.clips.map((clip) =>
-    clip.id === clipId
-      ? {
-          ...clip,
-          lanes: compileAuthoringLanes(base, clip.length_beats, clip.authoring),
-        }
-      : clip,
-  );
-  return next;
-}
-
-export function legacyAutomationToTimeline(
-  automation: ChromaticBulgeGridAutomation,
-): ChromaticBulgeGridClipTimeline {
-  const totalBeats = automation.measures * automation.beats_per_measure;
-  const lanes = LANE_ORDER.filter((lane) => (automation.lanes[lane] ?? []).length > 0);
-  const clips =
-    lanes.length > 0
-      ? lanes.map((lane, index) => ({
-          id: `imported_${lane}`,
-          name: `Imported ${lane}`,
-          length_beats: totalBeats,
-          color: palette(index),
-          lanes: { [lane]: automation.lanes[lane] } as ChromaticBulgeGridAutomationLanes,
-        }))
-      : [
-          {
-            id: "imported_timeline",
-            name: "Imported Timeline",
-            length_beats: totalBeats,
-            color: palette(0),
-            lanes: automation.lanes,
-          },
-        ];
+  const fallback = defaultLfoClip(source.lane, base);
   return {
-    bpm: automation.bpm,
-    measures: automation.measures,
-    beats_per_measure: automation.beats_per_measure,
-    clips,
-    arrangement: clips.map((clip) => ({
-      clip_id: clip.id,
-      start_beat: 0,
-      track: primaryLane(clip)?.index ?? 0,
-      repeats: 1,
-    })),
+    kind: "lfo",
+    lane: supportsLfo(source.lane) ? source.lane : fallback.lane,
+    shape: normalizeClipLfoShape(source.shape),
+    min: finiteOr(source.min, fallback.min),
+    max: finiteOr(source.max, fallback.max),
+    period_beats: Math.max(0.0001, finiteOr(source.period_beats, fallback.period_beats)),
+    phase_offset_beats: finiteOr(source.phase_offset_beats, 0),
+    start_mode: source.start_mode === "continue" ? "continue" : "retrigger",
+  };
+}
+
+export function normalizeClipLfoShape(
+  shape: ChromaticBulgeGridLfoShape | null | undefined,
+): ChromaticBulgeGridLfoShape {
+  if (!shape) {
+    throw new Error(SHARED_LFO_IMPORT_ERROR);
+  }
+  const points = normalizeShapePoints(shape.points ?? []);
+  if (!points.length) {
+    throw new Error("Import failed: each LFO clip must include at least one embedded shape point.");
+  }
+  return {
+    interpolation: "linear",
+    points,
   };
 }
 
@@ -411,27 +269,29 @@ export function resolveChromaticBulgeGrid(
     timelinePreview: boolean;
   },
 ): { uniforms: ChromaticBulgeGridShaderState; currentBeat: number } {
-  const shaderStates = config.params.shader_states ?? {
-    playing: defaultShaderState(),
-    idle: defaultShaderState(),
-  };
-  const bpm = config.timeline?.bpm ?? config.automation?.bpm ?? 120;
-  const currentBeat = Math.max(0, playback.currentTimeSecs) * Math.max(1, bpm) / 60;
-  const base = playback.isPlaying ? shaderStates.playing : shaderStates.idle;
-  if (config.timeline) {
-    if (playback.isPlaying || playback.timelinePreview) {
-      const resolved = resolveTimelineState(config.timeline, base, currentBeat);
-      return { uniforms: resolved ?? base, currentBeat };
-    }
-    return { uniforms: base, currentBeat };
+  return resolveNormalizedChromaticBulgeGrid(normalizedConfig(config), playback);
+}
+
+export function resolveNormalizedChromaticBulgeGrid(
+  config: TrackVisualizerConfig,
+  playback: {
+    currentTimeSecs: number;
+    visualTimeSecs: number;
+    isPlaying: boolean;
+    timelinePreview: boolean;
+  },
+): { uniforms: ChromaticBulgeGridShaderState; currentBeat: number } {
+  const next = config;
+  const states = next.params.shader_states!;
+  const timeline = next.timeline!;
+  const bpm = timeline.bpm || 120;
+  const currentBeat = Math.max(0, playback.currentTimeSecs) * bpm / 60;
+  const base = playback.isPlaying ? states.playing : states.idle;
+  if (!(playback.isPlaying || playback.timelinePreview)) {
+    return { uniforms: clampState(base), currentBeat };
   }
-  if (config.automation && playback.isPlaying) {
-    return {
-      uniforms: applyLanesToState(base, config.automation.lanes, currentBeat),
-      currentBeat,
-    };
-  }
-  return { uniforms: base, currentBeat };
+  const resolved = resolveTimelineState(timeline, base, currentBeat);
+  return { uniforms: clampState(resolved ?? base), currentBeat };
 }
 
 function resolveTimelineState(
@@ -439,145 +299,171 @@ function resolveTimelineState(
   base: ChromaticBulgeGridShaderState,
   beat: number,
 ): ChromaticBulgeGridShaderState | null {
-  const held = new Map<number, {
-    clip: ChromaticBulgeGridClip;
-    localBeat: number;
-    track: number;
-    startBeat: number;
-  }>();
-  for (const placement of timeline.arrangement) {
-    const clip = timeline.clips.find((candidate) => candidate.id === placement.clip_id);
-    if (!clip || beat < placement.start_beat) {
-      continue;
-    }
-    const endBeat = placement.start_beat + clip.length_beats * Math.max(1, placement.repeats);
-    const localBeat =
-      clip.length_beats <= 0
-        ? 0
-        : beat < endBeat
-          ? Math.max(0, Math.min(clip.length_beats, (beat - placement.start_beat) % clip.length_beats))
-          : clip.length_beats;
-    const current = held.get(placement.track);
-    if (!current || placement.start_beat >= current.startBeat) {
-      held.set(placement.track, {
-        clip,
-        localBeat,
-        track: placement.track,
-        startBeat: placement.start_beat,
-      });
-    }
-  }
-  const resolved = Array.from(held.values()).sort((left, right) => left.track - right.track);
-  if (resolved.length === 0) return null;
+  const active = heldClipsAtBeat(timeline, beat);
+  if (!active.length) return null;
   let state = structuredClone(base);
-  for (const item of resolved) {
-    state = applyLanesToState(state, item.clip.lanes, item.localBeat);
+  for (const entry of active) {
+    state = applyClipToState(state, entry.clip, entry.localBeat, beat);
   }
   return state;
 }
 
-function applyLanesToState(
+function heldClipsAtBeat(timeline: ChromaticBulgeGridClipTimeline, beat: number) {
+  const held = new Map<number, { clip: ChromaticBulgeGridClip; localBeat: number; startBeat: number }>();
+  for (const placement of timeline.arrangement) {
+    const clip = timeline.clips.find((candidate) => candidate.id === placement.clip_id);
+    if (!clip || beat < placement.start_beat) continue;
+    const end = placement.start_beat + clip.length_beats * placement.repeats;
+    const localBeat =
+      beat < end ? ((beat - placement.start_beat) % clip.length_beats + clip.length_beats) % clip.length_beats : clip.length_beats;
+    const existing = held.get(placement.track);
+    if (!existing || placement.start_beat >= existing.startBeat) {
+      held.set(placement.track, { clip, localBeat, startBeat: placement.start_beat });
+    }
+  }
+  return Array.from(held.values());
+}
+
+function applyClipToState(
+  state: ChromaticBulgeGridShaderState,
+  clip: ChromaticBulgeGridClip,
+  localBeat: number,
+  globalBeat: number,
+): ChromaticBulgeGridShaderState {
+  if (clip.source?.kind === "lfo") {
+    return applyLfoToState(state, clip.source, localBeat, globalBeat);
+  }
+  return applyLegacyLanes(state, clip.lanes, localBeat);
+}
+
+function applyLfoToState(
+  state: ChromaticBulgeGridShaderState,
+  source: ChromaticBulgeGridLfoClip,
+  localBeat: number,
+  globalBeat: number,
+): ChromaticBulgeGridShaderState {
+  const phaseBeats =
+    (source.start_mode === "continue" ? globalBeat : localBeat) + source.phase_offset_beats;
+  const phase = (phaseBeats / Math.max(0.0001, source.period_beats)) % 1;
+  const sample = sampleLfoShape(source.shape, phase);
+  const value = source.min + (source.max - source.min) * sample;
+  return applyLfoValueToState(state, source.lane, value);
+}
+
+function applyLegacyLanes(
   base: ChromaticBulgeGridShaderState,
   lanes: ChromaticBulgeGridAutomationLanes,
   beat: number,
 ): ChromaticBulgeGridShaderState {
-  const state = structuredClone(base);
-  for (const lane of LANE_ORDER) {
-    const keyframes = lanes[lane];
-    if (!keyframes || keyframes.length === 0) continue;
-    if (isColorLane(lane)) {
-      (state as unknown as Record<string, unknown>)[lane] = sampleColorLane(
-        keyframes as ColorKeyframe[],
-        beat,
-        getColorState(state, lane as "cold_color" | "hot_color"),
-      );
-    } else {
-      (state as unknown as Record<string, unknown>)[lane] = sampleFloatLane(
-        keyframes as FloatKeyframe[],
-        beat,
-        Number((state as unknown as Record<string, unknown>)[lane]),
-      );
-    }
-  }
-  return state;
+  return {
+    ...base,
+    motion_rate: sampleFloatLane(lanes.motion_rate ?? [], beat, base.motion_rate),
+    motion_rate_y: sampleFloatLane(lanes.motion_rate_y ?? [], beat, base.motion_rate_y),
+    lattice_density: sampleFloatLane(lanes.lattice_density ?? [], beat, base.lattice_density),
+    circle_radius: sampleFloatLane(lanes.circle_radius ?? [], beat, base.circle_radius),
+    circle_falloff_start: sampleFloatLane(lanes.circle_falloff_start ?? [], beat, base.circle_falloff_start),
+    circle_falloff_end: sampleFloatLane(lanes.circle_falloff_end ?? [], beat, base.circle_falloff_end),
+    bulge_amount: sampleFloatLane(lanes.bulge_amount ?? [], beat, base.bulge_amount),
+    rim_guard: sampleFloatLane(lanes.rim_guard ?? [], beat, base.rim_guard),
+    rim_exponent: sampleFloatLane(lanes.rim_exponent ?? [], beat, base.rim_exponent),
+    rim_warp: sampleFloatLane(lanes.rim_warp ?? [], beat, base.rim_warp),
+    dot_size: sampleFloatLane(lanes.dot_size ?? [], beat, base.dot_size),
+    outer_dot_scale: sampleFloatLane(lanes.outer_dot_scale ?? [], beat, base.outer_dot_scale),
+    edge_softness: sampleFloatLane(lanes.edge_softness ?? [], beat, base.edge_softness),
+    chromatic_aberration: sampleFloatLane(lanes.chromatic_aberration ?? [], beat, base.chromatic_aberration),
+    cold_color: sampleColorLane(lanes.cold_color ?? [], beat, base.cold_color),
+    hot_color: sampleColorLane(lanes.hot_color ?? [], beat, base.hot_color),
+    color_cycle_rate: sampleFloatLane(lanes.color_cycle_rate ?? [], beat, base.color_cycle_rate),
+    inner_alpha: sampleFloatLane(lanes.inner_alpha ?? [], beat, base.inner_alpha),
+  };
 }
 
-function getColorState(
+function applyLfoValueToState(
   state: ChromaticBulgeGridShaderState,
-  lane: Extract<LaneId, "cold_color" | "hot_color">,
-): [number, number, number] {
-  return [...state[lane]] as [number, number, number];
+  lane: LaneId,
+  value: number,
+): ChromaticBulgeGridShaderState {
+  switch (lane) {
+    case "motion_rate":
+      return { ...state, motion_rate: value };
+    case "motion_rate_y":
+      return { ...state, motion_rate_y: value };
+    case "lattice_density":
+      return { ...state, lattice_density: value };
+    case "circle_radius":
+      return { ...state, circle_radius: value };
+    case "circle_falloff_start":
+      return { ...state, circle_falloff_start: value };
+    case "circle_falloff_end":
+      return { ...state, circle_falloff_end: value };
+    case "bulge_amount":
+      return { ...state, bulge_amount: value };
+    case "rim_guard":
+      return { ...state, rim_guard: value };
+    case "rim_exponent":
+      return { ...state, rim_exponent: value };
+    case "rim_warp":
+      return { ...state, rim_warp: value };
+    case "dot_size":
+      return { ...state, dot_size: value };
+    case "outer_dot_scale":
+      return { ...state, outer_dot_scale: value };
+    case "edge_softness":
+      return { ...state, edge_softness: value };
+    case "chromatic_aberration":
+      return { ...state, chromatic_aberration: value };
+    case "color_cycle_rate":
+      return { ...state, color_cycle_rate: value };
+    case "inner_alpha":
+      return { ...state, inner_alpha: value };
+    case "cold_color":
+    case "hot_color":
+      return state;
+  }
 }
 
-function sampleFloatLane(keyframes: FloatKeyframe[], beat: number, base: number): number {
-  if (keyframes.length === 0) return base;
-  const clampedBeat = Math.max(0, beat);
-  if (clampedBeat < keyframes[0].beat) return base;
-  for (let index = 0; index < keyframes.length - 1; index += 1) {
-    const left = keyframes[index];
-    const right = keyframes[index + 1];
-    if (clampedBeat < right.beat) {
-      if (left.interpolation === "hold") return left.value;
-      const span = Math.max(0.0001, right.beat - left.beat);
-      const t = Math.max(0, Math.min(1, (clampedBeat - left.beat) / span));
+export function sampleLfoShape(shape: ChromaticBulgeGridLfoShape, phase: number): number {
+  const points = normalizeShapePoints(shape.points);
+  if (!points.length) return 0;
+  if (points.length === 1) return points[0].value;
+  const normalizedPhase = ((phase % 1) + 1) % 1;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const left = points[index];
+    const right = points[index + 1];
+    if (normalizedPhase <= right.phase) {
+      const span = Math.max(0.0001, right.phase - left.phase);
+      const t = clamp01((normalizedPhase - left.phase) / span);
       return lerp(left.value, right.value, t);
     }
   }
-  return keyframes[keyframes.length - 1].value;
-}
-
-function sampleColorLane(
-  keyframes: ColorKeyframe[],
-  beat: number,
-  base: [number, number, number],
-): [number, number, number] {
-  if (keyframes.length === 0) return base;
-  const clampedBeat = Math.max(0, beat);
-  if (clampedBeat < keyframes[0].beat) return base;
-  for (let index = 0; index < keyframes.length - 1; index += 1) {
-    const left = keyframes[index];
-    const right = keyframes[index + 1];
-    if (clampedBeat < right.beat) {
-      if (left.interpolation === "hold") return left.value;
-      const span = Math.max(0.0001, right.beat - left.beat);
-      const t = Math.max(0, Math.min(1, (clampedBeat - left.beat) / span));
-      return [
-        lerp(left.value[0], right.value[0], t),
-        lerp(left.value[1], right.value[1], t),
-        lerp(left.value[2], right.value[2], t),
-      ];
-    }
-  }
-  return keyframes[keyframes.length - 1].value;
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-function palette(index: number): [number, number, number] {
-  const colors: Array<[number, number, number]> = [
-    [0.43, 0.86, 0.83],
-    [0.9, 0.57, 0.34],
-    [0.55, 0.73, 0.96],
-    [0.86, 0.69, 0.35],
-    [0.69, 0.85, 0.49],
-    [0.91, 0.5, 0.59],
-  ];
-  return colors[index % colors.length];
+  const first = points[0];
+  const last = points[points.length - 1];
+  const span = Math.max(0.0001, first.phase + 1 - last.phase);
+  const t = clamp01((normalizedPhase + 1 - last.phase) / span);
+  return lerp(last.value, first.value, t);
 }
 
 export function primaryLane(
   clip: ChromaticBulgeGridClip,
 ): { lane: LaneId; index: number } | null {
   const lane =
+    clip.source?.lane ??
     clip.authoring?.tracks[0]?.lane ??
-    LANE_ORDER.find((candidate) => (clip.lanes[candidate] ?? []).length > 0);
+    LANE_ORDER.find((candidate) => ((clip.lanes as Record<string, unknown>)[candidate] as unknown[] | undefined)?.length);
   return lane ? { lane, index: LANE_ORDER.indexOf(lane) } : null;
 }
 
 export function totalBeats(timeline: ChromaticBulgeGridClipTimeline): number {
   return timeline.measures * timeline.beats_per_measure;
+}
+
+export function createPlacement(clip: ChromaticBulgeGridClip, startBeat: number): ClipPlacement {
+  return {
+    clip_id: clip.id,
+    start_beat: startBeat,
+    track: primaryLane(clip)?.index ?? 0,
+    repeats: 1,
+  };
 }
 
 export function defaultStep(lane: LaneId): ClipTweenStep {
@@ -594,20 +480,243 @@ export function defaultStep(lane: LaneId): ClipTweenStep {
       };
 }
 
-export function timelineFromConfig(config: TrackVisualizerConfig): ChromaticBulgeGridClipTimeline {
-  if (config.timeline) return normalizeTimeline(config.timeline);
-  if (config.automation) return legacyAutomationToTimeline(config.automation);
-  return defaultVisualizer().timeline!;
+export function syncClipAuthoring(config: TrackVisualizerConfig, _clipId: string): TrackVisualizerConfig {
+  return normalizedConfig(config);
 }
 
-export function createPlacement(
-  clip: ChromaticBulgeGridClip,
-  startBeat: number,
-): ClipPlacement {
+export function timelineFromConfig(config: TrackVisualizerConfig): ChromaticBulgeGridClipTimeline {
+  return normalizedConfig(config).timeline!;
+}
+
+export function legacyAutomationToTimeline(
+  automation: ChromaticBulgeGridAutomation,
+): ChromaticBulgeGridClipTimeline {
+  const totalClipBeats = automation.measures * automation.beats_per_measure;
+  const clips = LANE_ORDER.flatMap((lane, index) => {
+    const clip = {
+      id: `legacy_${lane}`,
+      name: `Legacy ${lane}`,
+      length_beats: totalClipBeats,
+      color: palette(index),
+      source: undefined,
+      authoring: undefined,
+      lanes: onlyLane(automation.lanes, lane),
+    };
+    const value = (clip.lanes as Record<string, unknown>)[lane];
+    return Array.isArray(value) && value.length > 0 ? [clip] : [];
+  });
+  const resolvedClips = clips.length
+    ? clips
+    : [
+        {
+          id: "legacy_timeline",
+          name: "Legacy Timeline",
+          length_beats: totalClipBeats,
+          color: palette(0),
+          source: undefined,
+          authoring: undefined,
+          lanes: structuredClone(automation.lanes),
+        },
+      ];
   return {
-    clip_id: clip.id,
-    start_beat: startBeat,
-    track: primaryLane(clip)?.index ?? 0,
-    repeats: 1,
+    bpm: automation.bpm,
+    measures: automation.measures,
+    beats_per_measure: automation.beats_per_measure,
+    clips: resolvedClips,
+    arrangement: resolvedClips.map((clip) => createPlacement(clip, 0)),
   };
+}
+
+export function isLegacyClip(clip: ChromaticBulgeGridClip): boolean {
+  return !clip.source?.kind;
+}
+
+export function clipSummary(clip: ChromaticBulgeGridClip): string {
+  if (!clip.source?.kind) return "Legacy step clip";
+  return `${clip.source.min.toFixed(2)}-${clip.source.max.toFixed(2)} · ${clip.source.period_beats.toFixed(2)}b`;
+}
+
+function laneDefaultSpan(lane: LaneId): number {
+  switch (lane) {
+    case "lattice_density":
+      return 2;
+    case "rim_exponent":
+      return 0.5;
+    case "motion_rate":
+    case "motion_rate_y":
+    case "color_cycle_rate":
+      return 0.25;
+    default:
+      return 0.15;
+  }
+}
+
+function normalizeShaderState(
+  state: Partial<ChromaticBulgeGridShaderState> | undefined,
+): ChromaticBulgeGridShaderState {
+  const defaults = defaultShaderState();
+  return {
+    motion_rate: finiteOr(state?.motion_rate, defaults.motion_rate),
+    motion_rate_y: finiteOr(state?.motion_rate_y, defaults.motion_rate_y),
+    lattice_density: finiteOr(state?.lattice_density, defaults.lattice_density),
+    circle_radius: finiteOr(state?.circle_radius, defaults.circle_radius),
+    circle_falloff_start: finiteOr(state?.circle_falloff_start, defaults.circle_falloff_start),
+    circle_falloff_end: finiteOr(state?.circle_falloff_end, defaults.circle_falloff_end),
+    bulge_amount: finiteOr(state?.bulge_amount, defaults.bulge_amount),
+    rim_guard: finiteOr(state?.rim_guard, defaults.rim_guard),
+    rim_exponent: finiteOr(state?.rim_exponent, defaults.rim_exponent),
+    rim_warp: finiteOr(state?.rim_warp, defaults.rim_warp),
+    dot_size: finiteOr(state?.dot_size, defaults.dot_size),
+    outer_dot_scale: finiteOr(state?.outer_dot_scale, defaults.outer_dot_scale),
+    edge_softness: finiteOr(state?.edge_softness, defaults.edge_softness),
+    chromatic_aberration: finiteOr(state?.chromatic_aberration, defaults.chromatic_aberration),
+    cold_color: clampColor(state?.cold_color ?? defaults.cold_color),
+    hot_color: clampColor(state?.hot_color ?? defaults.hot_color),
+    color_cycle_rate: finiteOr(state?.color_cycle_rate, defaults.color_cycle_rate),
+    inner_alpha: finiteOr(state?.inner_alpha, defaults.inner_alpha),
+  };
+}
+
+function normalizeShapePoints(points: LfoPoint[]): LfoPoint[] {
+  const next = (points ?? [])
+    .map((point) => ({
+      phase: clamp01(point.phase),
+      value: clamp01(point.value),
+    }))
+    .sort((left, right) => left.phase - right.phase);
+  return dedupePoints(next).slice(0, 64);
+}
+
+function dedupePoints(points: LfoPoint[]): LfoPoint[] {
+  const deduped: LfoPoint[] = [];
+  for (const point of points) {
+    const existing = deduped.findIndex((candidate) => Math.abs(candidate.phase - point.phase) < 0.0001);
+    if (existing >= 0) deduped[existing] = point;
+    else deduped.push(point);
+  }
+  return deduped;
+}
+
+function sampleFloatLane(keyframes: FloatKeyframe[], beat: number, base: number): number {
+  if (!keyframes.length) return base;
+  const clampedBeat = Math.max(0, beat);
+  if (clampedBeat < keyframes[0].beat) return base;
+  for (let index = 0; index < keyframes.length - 1; index += 1) {
+    const left = keyframes[index];
+    const right = keyframes[index + 1];
+    if (clampedBeat < right.beat) {
+      if (left.interpolation === "hold") return left.value;
+      const span = Math.max(0.0001, right.beat - left.beat);
+      return lerp(left.value, right.value, clamp01((clampedBeat - left.beat) / span));
+    }
+  }
+  return keyframes[keyframes.length - 1].value;
+}
+
+function sampleColorLane(
+  keyframes: ColorKeyframe[],
+  beat: number,
+  base: [number, number, number],
+): [number, number, number] {
+  if (!keyframes.length) return base;
+  const clampedBeat = Math.max(0, beat);
+  if (clampedBeat < keyframes[0].beat) return base;
+  for (let index = 0; index < keyframes.length - 1; index += 1) {
+    const left = keyframes[index];
+    const right = keyframes[index + 1];
+    if (clampedBeat < right.beat) {
+      if (left.interpolation === "hold") return left.value;
+      const span = Math.max(0.0001, right.beat - left.beat);
+      const t = clamp01((clampedBeat - left.beat) / span);
+      return [
+        lerp(left.value[0], right.value[0], t),
+        lerp(left.value[1], right.value[1], t),
+        lerp(left.value[2], right.value[2], t),
+      ];
+    }
+  }
+  return keyframes[keyframes.length - 1].value;
+}
+
+function onlyLane(lanes: ChromaticBulgeGridAutomationLanes, lane: LaneId): ChromaticBulgeGridAutomationLanes {
+  return { [lane]: structuredClone((lanes as Record<string, unknown>)[lane] ?? []) } as ChromaticBulgeGridAutomationLanes;
+}
+
+function clampState(state: ChromaticBulgeGridShaderState): ChromaticBulgeGridShaderState {
+  return {
+    ...state,
+    motion_rate: clamp(state.motion_rate, -4, 4),
+    motion_rate_y: clamp(state.motion_rate_y, -4, 4),
+    lattice_density: clamp(state.lattice_density, 2, 12),
+    circle_radius: clamp(state.circle_radius, 0.02, 0.95),
+    circle_falloff_start: clamp(state.circle_falloff_start, 0, 1),
+    circle_falloff_end: clamp(state.circle_falloff_end, 0, 1.2),
+    bulge_amount: clamp(state.bulge_amount, 0, 1.5),
+    rim_guard: clamp(state.rim_guard, 0.01, 2),
+    rim_exponent: clamp(state.rim_exponent, 0.1, 6),
+    rim_warp: clamp(state.rim_warp, 0, 64),
+    dot_size: clamp(state.dot_size, 0.02, 1),
+    outer_dot_scale: clamp(state.outer_dot_scale, 0.02, 2),
+    edge_softness: clamp(state.edge_softness, 0.1, 8),
+    chromatic_aberration: clamp(state.chromatic_aberration, 0, 24),
+    cold_color: clampColor(state.cold_color),
+    hot_color: clampColor(state.hot_color),
+    color_cycle_rate: clamp(state.color_cycle_rate, 0, 6),
+    inner_alpha: clamp(state.inner_alpha, 0, 1),
+  };
+}
+
+function clampColor(value: [number, number, number]): [number, number, number] {
+  return [clamp01(value[0]), clamp01(value[1]), clamp01(value[2])];
+}
+
+function palette(index: number): [number, number, number] {
+  const colors: Array<[number, number, number]> = [
+    [0.43, 0.86, 0.83],
+    [0.9, 0.57, 0.34],
+    [0.55, 0.73, 0.96],
+    [0.86, 0.69, 0.35],
+    [0.69, 0.85, 0.49],
+    [0.91, 0.5, 0.59],
+  ];
+  return colors[index % colors.length];
+}
+
+export function shapePath(shape: ChromaticBulgeGridLfoShape, width: number, height: number, paddingY = 0): string {
+  if (!shape.points.length) return "";
+  const safePadding = Math.max(0, Math.min(height / 2 - 1, paddingY));
+  const usableHeight = Math.max(1, height - safePadding * 2);
+  return [...shape.points]
+    .sort((left, right) => left.phase - right.phase)
+    .map((current, index) => {
+      const x = current.phase * width;
+      const y = safePadding + (1 - current.value) * usableHeight;
+      return `${index === 0 ? "M" : "L"} ${x} ${y}`;
+    })
+    .join(" ");
+}
+
+export function pointLabel(point: LfoPoint): string {
+  return `${point.phase.toFixed(3)} / ${point.value.toFixed(3)}`;
+}
+
+function point(phase: number, value: number): LfoPoint {
+  return { phase, value };
+}
+
+function finiteOr(value: number | undefined, fallback: number): number {
+  return Number.isFinite(value) ? Number(value) : fallback;
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function clamp01(value: number): number {
+  return clamp(value, 0, 1);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
 }

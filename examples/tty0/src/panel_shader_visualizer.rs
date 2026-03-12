@@ -808,7 +808,7 @@ mod tests {
 
         assert_eq!(uniforms.resolution, (320.0, 180.0));
         assert_eq!(uniforms.time, 1.25);
-        assert_eq!(uniforms.motion_rate, 3.0);
+        assert_eq!(uniforms.motion_rate, (3.0, 0.0));
         assert_eq!(uniforms.lattice_density, 12.0);
         assert_eq!(uniforms.circle_radius, 0.31);
         assert_eq!(uniforms.chromatic_aberration, 0.63);
@@ -828,7 +828,7 @@ mod tests {
         let uniforms = UniformSet::from_request(&request, 320, 180, (9, 18));
 
         assert_eq!(uniforms.time, 4.5);
-        assert_eq!(uniforms.motion_rate, 0.2);
+        assert_eq!(uniforms.motion_rate, (0.2, 0.0));
         assert_eq!(uniforms.lattice_density, 2.0);
         assert_eq!(uniforms.circle_radius, 0.12);
         assert_eq!(uniforms.chromatic_aberration, 0.05);

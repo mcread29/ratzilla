@@ -107,11 +107,40 @@ export interface ClipTweenStep {
   ease: ClipTweenEase;
 }
 
+export type LfoInterpolation = "linear";
+
+export interface LfoPoint {
+  phase: number;
+  value: number;
+}
+
+export interface ChromaticBulgeGridLfoShape {
+  interpolation: LfoInterpolation;
+  points: LfoPoint[];
+}
+
+export type LfoStartMode = "retrigger" | "continue";
+
+export interface ChromaticBulgeGridLfoClip {
+  lane: LaneId;
+  shape: ChromaticBulgeGridLfoShape;
+  min: number;
+  max: number;
+  period_beats: number;
+  phase_offset_beats: number;
+  start_mode: LfoStartMode;
+}
+
+export type ChromaticBulgeGridClipSource = {
+  kind: "lfo";
+} & ChromaticBulgeGridLfoClip;
+
 export interface ChromaticBulgeGridClip {
   id: string;
   name: string;
   length_beats: number;
   color: [number, number, number];
+  source?: ChromaticBulgeGridClipSource;
   authoring?: ChromaticBulgeGridClipAuthoring;
   lanes: ChromaticBulgeGridAutomationLanes;
 }

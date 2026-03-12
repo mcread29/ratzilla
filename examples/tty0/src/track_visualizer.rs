@@ -619,6 +619,7 @@ mod tests {
         TrackVisualizerConfig {
             mode,
             params,
+            lfo_library: None,
             automation: None,
             timeline: None,
         }

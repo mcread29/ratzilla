@@ -239,6 +239,8 @@ pub struct ChromaticBulgeGridClip {
     #[serde(default = "default_clip_color")]
     pub color: [f32; 3],
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<ChromaticBulgeGridClipSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authoring: Option<ChromaticBulgeGridClipAuthoring>,
     #[serde(default)]
     pub lanes: ChromaticBulgeGridAutomationLanes,
@@ -258,6 +260,54 @@ pub struct ClipPlacement {
 pub struct ChromaticBulgeGridClipAuthoring {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tracks: Vec<ClipParamTrack>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ChromaticBulgeGridLfoShape {
+    #[serde(default)]
+    pub interpolation: LfoInterpolation,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub points: Vec<LfoPoint>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+pub struct LfoPoint {
+    pub phase: f32,
+    pub value: f32,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LfoInterpolation {
+    #[default]
+    Linear,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ChromaticBulgeGridClipSource {
+    Lfo(ChromaticBulgeGridLfoClip),
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ChromaticBulgeGridLfoClip {
+    pub lane: ChromaticBulgeGridLaneId,
+    pub shape: ChromaticBulgeGridLfoShape,
+    pub min: f32,
+    pub max: f32,
+    pub period_beats: f32,
+    #[serde(default)]
+    pub phase_offset_beats: f32,
+    #[serde(default)]
+    pub start_mode: LfoStartMode,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LfoStartMode {
+    #[default]
+    Retrigger,
+    Continue,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -549,6 +599,10 @@ impl ChromaticBulgeGridLaneId {
         matches!(self, Self::ColdColor | Self::HotColor)
     }
 
+    pub fn supports_lfo(self) -> bool {
+        !self.is_color()
+    }
+
     pub fn from_track_index(track: u8) -> Option<Self> {
         Self::ALL.get(track as usize).copied()
     }
@@ -563,6 +617,9 @@ impl ChromaticBulgeGridLaneId {
 
 impl ChromaticBulgeGridClip {
     pub fn primary_lane(&self) -> Option<ChromaticBulgeGridLaneId> {
+        if let Some(ChromaticBulgeGridClipSource::Lfo(lfo)) = &self.source {
+            return Some(lfo.lane);
+        }
         if let Some(authoring) = &self.authoring {
             if let Some(track) = authoring.tracks.first() {
                 return Some(track.lane);
@@ -580,7 +637,16 @@ impl ChromaticBulgeGridClip {
         &self,
         base: ChromaticBulgeGridShaderState,
         local_beat: f32,
+        global_beat: f32,
     ) -> ChromaticBulgeGridShaderState {
+        if let Some(ChromaticBulgeGridClipSource::Lfo(lfo)) = &self.source {
+            return apply_lfo_clip_to_state(
+                base,
+                lfo,
+                local_beat.clamp(0.0, self.length_beats.max(0.0)),
+                global_beat,
+            );
+        }
         apply_lanes_to_state(
             base,
             &self.lanes,
@@ -589,6 +655,9 @@ impl ChromaticBulgeGridClip {
     }
 
     pub fn authored_lanes(&self) -> HashSet<ChromaticBulgeGridLaneId> {
+        if let Some(ChromaticBulgeGridClipSource::Lfo(lfo)) = &self.source {
+            return HashSet::from([lfo.lane]);
+        }
         if let Some(authoring) = &self.authoring {
             return authoring
                 .tracks
@@ -663,6 +732,24 @@ impl ChromaticBulgeGridShaderState {
             color_cycle_rate: self.color_cycle_rate,
             inner_alpha: self.inner_alpha,
         }
+    }
+}
+
+impl ChromaticBulgeGridLfoShape {
+    pub fn normalized(&self) -> Self {
+        let mut normalized = self.clone();
+        for point in &mut normalized.points {
+            point.phase = point.phase.clamp(0.0, 1.0);
+            point.value = point.value.clamp(0.0, 1.0);
+        }
+        normalized
+            .points
+            .sort_by(|left, right| left.phase.total_cmp(&right.phase));
+        normalized
+            .points
+            .dedup_by(|left, right| (left.phase - right.phase).abs() < 0.0001);
+        normalized.points.truncate(64);
+        normalized
     }
 }
 
@@ -792,6 +879,10 @@ impl ChromaticBulgeGridClipTimeline {
             clip.length_beats = clip.length_beats.max(0.0001);
             clip.color = clamp_color(clip.color);
             clip.lanes.sort_all();
+            if let Some(ChromaticBulgeGridClipSource::Lfo(lfo)) = &mut clip.source {
+                lfo.period_beats = lfo.period_beats.max(0.0001);
+                lfo.shape = lfo.shape.normalized();
+            }
         }
         for placement in &mut normalized.arrangement {
             placement.start_beat = placement.start_beat.max(0.0);
@@ -822,7 +913,7 @@ impl ChromaticBulgeGridClipTimeline {
         }
         let mut state = base;
         for (clip, local_beat) in held {
-            state = clip.apply_to_state(state, local_beat);
+            state = clip.apply_to_state(state, local_beat, beat);
         }
         Some(state)
     }
@@ -1223,6 +1314,7 @@ pub fn legacy_automation_to_timeline(
             name: format!("Imported {}", lane.label()),
             length_beats: total_beats,
             color: default_clip_color_for_index(index),
+            source: None,
             authoring: None,
             lanes: automation.lanes.only_lane(lane),
         })
@@ -1233,6 +1325,7 @@ pub fn legacy_automation_to_timeline(
             name: "Imported Timeline".to_string(),
             length_beats: total_beats,
             color: default_clip_color(),
+            source: None,
             authoring: None,
             lanes: automation.lanes.clone(),
         }]
@@ -1295,7 +1388,9 @@ pub fn validate_visualizer_config(
 }
 
 pub fn parse_visualizer_json(json: &str) -> Result<TrackVisualizerConfig, VfxConfigError> {
-    let config = serde_json::from_str::<TrackVisualizerConfig>(json)?;
+    let raw = serde_json::from_str::<serde_json::Value>(json)?;
+    reject_legacy_lfo_shape_schema(&raw)?;
+    let config = serde_json::from_value::<TrackVisualizerConfig>(raw)?;
     validate_visualizer_config("visualizer", &config)?;
     Ok(config)
 }
@@ -1352,6 +1447,43 @@ mod wasm_api {
     }
 }
 
+fn reject_legacy_lfo_shape_schema(value: &serde_json::Value) -> Result<(), VfxConfigError> {
+    let Some(visualizer) = value.as_object() else {
+        return Ok(());
+    };
+    if visualizer.contains_key("lfo_library") {
+        return Err(VfxConfigError::Validation(
+            "visualizer uses removed lfo_library schema; each LFO clip must embed its own shape"
+                .to_string(),
+        ));
+    }
+    let Some(timeline) = visualizer.get("timeline").and_then(serde_json::Value::as_object) else {
+        return Ok(());
+    };
+    let Some(clips) = timeline.get("clips").and_then(serde_json::Value::as_array) else {
+        return Ok(());
+    };
+    for clip in clips {
+        let Some(source) = clip
+            .as_object()
+            .and_then(|object| object.get("source"))
+            .and_then(serde_json::Value::as_object)
+        else {
+            continue;
+        };
+        if source.get("kind").and_then(serde_json::Value::as_str) != Some("lfo") {
+            continue;
+        }
+        if source.contains_key("shape_id") || !source.contains_key("shape") {
+            return Err(VfxConfigError::Validation(
+                "visualizer uses removed shared LFO shape references; each LFO clip must embed its own shape"
+                    .to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn validate_automation(
     record_id: &str,
     automation: &ChromaticBulgeGridAutomation,
@@ -1404,6 +1536,9 @@ fn validate_clip_timeline(
                 clip.id
             )));
         }
+        if let Some(ChromaticBulgeGridClipSource::Lfo(lfo)) = &clip.source {
+            validate_lfo_clip(record_id, clip, lfo)?;
+        }
         validate_automation_lanes(
             record_id,
             &format!("clip {}", clip.id),
@@ -1452,6 +1587,60 @@ fn validate_clip_timeline(
                     left.3, right.3
                 )));
             }
+        }
+    }
+    Ok(())
+}
+
+fn validate_lfo_clip(
+    record_id: &str,
+    clip: &ChromaticBulgeGridClip,
+    lfo: &ChromaticBulgeGridLfoClip,
+) -> Result<(), VfxConfigError> {
+    if !lfo.lane.supports_lfo() {
+        return Err(VfxConfigError::Validation(format!(
+            "record {record_id} has unsupported lfo lane {} in clip {}",
+            lfo.lane.label(),
+            clip.id
+        )));
+    }
+    if lfo.shape.points.is_empty() || lfo.shape.points.len() > 64 {
+        return Err(VfxConfigError::Validation(format!(
+            "record {record_id} has invalid point count in clip-local lfo shape for clip {}",
+            clip.id
+        )));
+    }
+    if !lfo.min.is_finite()
+        || !lfo.max.is_finite()
+        || !lfo.period_beats.is_finite()
+        || lfo.period_beats <= 0.0
+        || !lfo.phase_offset_beats.is_finite()
+    {
+        return Err(VfxConfigError::Validation(format!(
+            "record {record_id} has invalid lfo values in clip {}",
+            clip.id
+        )));
+    }
+    let mut points = lfo.shape.points.clone();
+    for point in &points {
+        if !point.phase.is_finite()
+            || !(0.0..=1.0).contains(&point.phase)
+            || !point.value.is_finite()
+            || !(0.0..=1.0).contains(&point.value)
+        {
+            return Err(VfxConfigError::Validation(format!(
+                "record {record_id} has invalid clip-local lfo point in clip {}",
+                clip.id
+            )));
+        }
+    }
+    points.sort_by(|left, right| left.phase.total_cmp(&right.phase));
+    for window in points.windows(2) {
+        if (window[0].phase - window[1].phase).abs() < 0.0001 {
+            return Err(VfxConfigError::Validation(format!(
+                "record {record_id} has duplicate phase {} in clip-local lfo shape for clip {}",
+                window[1].phase, clip.id
+            )));
         }
     }
     Ok(())
@@ -1650,6 +1839,82 @@ fn apply_lanes_to_state(
         color_cycle_rate: sample_float_lane(&lanes.color_cycle_rate, beat, base.color_cycle_rate),
         inner_alpha: sample_float_lane(&lanes.inner_alpha, beat, base.inner_alpha),
     }
+}
+
+fn apply_lfo_clip_to_state(
+    base: ChromaticBulgeGridShaderState,
+    clip: &ChromaticBulgeGridLfoClip,
+    local_beat: f32,
+    global_beat: f32,
+) -> ChromaticBulgeGridShaderState {
+    let phase_beats = match clip.start_mode {
+        LfoStartMode::Retrigger => local_beat + clip.phase_offset_beats,
+        LfoStartMode::Continue => global_beat + clip.phase_offset_beats,
+    };
+    let phase = (phase_beats / clip.period_beats.max(0.0001)).rem_euclid(1.0);
+    let value = clip.min + (clip.max - clip.min) * sample_lfo_shape(&clip.shape, phase);
+    apply_lfo_value_to_state(base, clip.lane, value)
+}
+
+fn sample_lfo_shape(shape: &ChromaticBulgeGridLfoShape, phase: f32) -> f32 {
+    if shape.points.is_empty() {
+        return 0.0;
+    }
+    if shape.points.len() == 1 {
+        return shape.points[0].value.clamp(0.0, 1.0);
+    }
+    let normalized = shape.normalized();
+    let phase = phase.rem_euclid(1.0);
+    let points = &normalized.points;
+    if phase <= points[0].phase {
+        let first = points[0];
+        let last = points[points.len() - 1];
+        let span = (first.phase + 1.0 - last.phase).max(0.0001);
+        let wrapped_phase = if phase < first.phase { phase + 1.0 } else { phase };
+        let t = ((wrapped_phase - last.phase) / span).clamp(0.0, 1.0);
+        return lerp(last.value, first.value, t);
+    }
+    for window in points.windows(2) {
+        let left = window[0];
+        let right = window[1];
+        if phase <= right.phase {
+            let span = (right.phase - left.phase).max(0.0001);
+            let t = ((phase - left.phase) / span).clamp(0.0, 1.0);
+            return lerp(left.value, right.value, t);
+        }
+    }
+    let first = points[0];
+    let last = points[points.len() - 1];
+    let span = (first.phase + 1.0 - last.phase).max(0.0001);
+    let t = ((phase + 1.0 - last.phase) / span).clamp(0.0, 1.0);
+    lerp(last.value, first.value, t)
+}
+
+fn apply_lfo_value_to_state(
+    mut state: ChromaticBulgeGridShaderState,
+    lane: ChromaticBulgeGridLaneId,
+    value: f32,
+) -> ChromaticBulgeGridShaderState {
+    match lane {
+        ChromaticBulgeGridLaneId::MotionRate => state.motion_rate = value,
+        ChromaticBulgeGridLaneId::MotionRateY => state.motion_rate_y = value,
+        ChromaticBulgeGridLaneId::LatticeDensity => state.lattice_density = value,
+        ChromaticBulgeGridLaneId::CircleRadius => state.circle_radius = value,
+        ChromaticBulgeGridLaneId::CircleFalloffStart => state.circle_falloff_start = value,
+        ChromaticBulgeGridLaneId::CircleFalloffEnd => state.circle_falloff_end = value,
+        ChromaticBulgeGridLaneId::BulgeAmount => state.bulge_amount = value,
+        ChromaticBulgeGridLaneId::RimGuard => state.rim_guard = value,
+        ChromaticBulgeGridLaneId::RimExponent => state.rim_exponent = value,
+        ChromaticBulgeGridLaneId::RimWarp => state.rim_warp = value,
+        ChromaticBulgeGridLaneId::DotSize => state.dot_size = value,
+        ChromaticBulgeGridLaneId::OuterDotScale => state.outer_dot_scale = value,
+        ChromaticBulgeGridLaneId::EdgeSoftness => state.edge_softness = value,
+        ChromaticBulgeGridLaneId::ChromaticAberration => state.chromatic_aberration = value,
+        ChromaticBulgeGridLaneId::ColorCycleRate => state.color_cycle_rate = value,
+        ChromaticBulgeGridLaneId::InnerAlpha => state.inner_alpha = value,
+        ChromaticBulgeGridLaneId::ColdColor | ChromaticBulgeGridLaneId::HotColor => {}
+    }
+    state
 }
 
 fn sample_float_lane(keyframes: &[FloatKeyframe], beat: f32, base: f32) -> f32 {
@@ -1977,6 +2242,7 @@ mod tests {
                     name: "Pulse".to_string(),
                     length_beats: 1.0,
                     color: [1.0, 1.0, 1.0],
+                    source: None,
                     authoring: None,
                     lanes: ChromaticBulgeGridAutomationLanes {
                         circle_radius: vec![FloatKeyframe {
@@ -2003,5 +2269,214 @@ mod tests {
             timeline_preview: true,
         });
         assert_eq!(resolved.uniforms.circle_radius, 0.5);
+    }
+
+    #[test]
+    fn lfo_timeline_samples_shape_and_range() {
+        let config = TrackVisualizerConfig {
+            mode: TrackVisualizerMode::ChromaticBulgeGrid,
+            params: TrackVisualizerParams {
+                shader_states: Some(ChromaticBulgeGridShaderStates {
+                    playing: ChromaticBulgeGridShaderState {
+                        bulge_amount: 0.1,
+                        ..Default::default()
+                    },
+                    idle: ChromaticBulgeGridShaderState::default(),
+                }),
+                ..Default::default()
+            },
+            automation: None,
+            timeline: Some(ChromaticBulgeGridClipTimeline {
+                bpm: 120.0,
+                measures: 8,
+                beats_per_measure: 4,
+                clips: vec![ChromaticBulgeGridClip {
+                    id: "lfo".to_string(),
+                    name: "LFO".to_string(),
+                    length_beats: 4.0,
+                    color: [1.0, 1.0, 1.0],
+                    source: Some(ChromaticBulgeGridClipSource::Lfo(ChromaticBulgeGridLfoClip {
+                        lane: ChromaticBulgeGridLaneId::BulgeAmount,
+                        shape: ChromaticBulgeGridLfoShape {
+                            interpolation: LfoInterpolation::Linear,
+                            points: vec![
+                                LfoPoint {
+                                    phase: 0.0,
+                                    value: 0.0,
+                                },
+                                LfoPoint {
+                                    phase: 0.5,
+                                    value: 1.0,
+                                },
+                                LfoPoint {
+                                    phase: 1.0,
+                                    value: 0.0,
+                                },
+                            ],
+                        },
+                        min: 0.2,
+                        max: 0.6,
+                        period_beats: 4.0,
+                        phase_offset_beats: 0.0,
+                        start_mode: LfoStartMode::Retrigger,
+                    })),
+                    authoring: None,
+                    lanes: Default::default(),
+                }],
+                arrangement: vec![ClipPlacement {
+                    clip_id: "lfo".to_string(),
+                    start_beat: 0.0,
+                    track: ChromaticBulgeGridLaneId::BulgeAmount.track_index(),
+                    repeats: 1,
+                }],
+            }),
+        };
+        let resolved = config.resolve_chromatic_bulge_grid(PlaybackClock {
+            current_time_secs: 0.5,
+            visual_time_secs: 0.5,
+            duration_secs: None,
+            is_playing: true,
+            timeline_preview: false,
+        });
+        assert!((resolved.uniforms.bulge_amount - 0.4).abs() < 0.0001);
+    }
+
+    #[test]
+    fn rejects_missing_lfo_shape_reference() {
+        let config = TrackVisualizerConfig {
+            mode: TrackVisualizerMode::ChromaticBulgeGrid,
+            params: Default::default(),
+            automation: None,
+            timeline: Some(ChromaticBulgeGridClipTimeline {
+                bpm: 120.0,
+                measures: 4,
+                beats_per_measure: 4,
+                clips: vec![ChromaticBulgeGridClip {
+                    id: "clip".to_string(),
+                    name: "Clip".to_string(),
+                    length_beats: 4.0,
+                    color: [1.0, 1.0, 1.0],
+                    source: Some(ChromaticBulgeGridClipSource::Lfo(ChromaticBulgeGridLfoClip {
+                        lane: ChromaticBulgeGridLaneId::BulgeAmount,
+                        shape: ChromaticBulgeGridLfoShape {
+                            interpolation: LfoInterpolation::Linear,
+                            points: vec![],
+                        },
+                        min: 0.0,
+                        max: 1.0,
+                        period_beats: 4.0,
+                        phase_offset_beats: 0.0,
+                        start_mode: LfoStartMode::Retrigger,
+                    })),
+                    authoring: None,
+                    lanes: Default::default(),
+                }],
+                arrangement: vec![],
+            }),
+        };
+        assert!(validate_visualizer_config("record", &config).is_err());
+    }
+
+    #[test]
+    fn rejects_duplicate_clip_local_shape_phases() {
+        let config = TrackVisualizerConfig {
+            mode: TrackVisualizerMode::ChromaticBulgeGrid,
+            params: Default::default(),
+            automation: None,
+            timeline: Some(ChromaticBulgeGridClipTimeline {
+                bpm: 120.0,
+                measures: 4,
+                beats_per_measure: 4,
+                clips: vec![ChromaticBulgeGridClip {
+                    id: "clip".to_string(),
+                    name: "Clip".to_string(),
+                    length_beats: 4.0,
+                    color: [1.0, 1.0, 1.0],
+                    source: Some(ChromaticBulgeGridClipSource::Lfo(ChromaticBulgeGridLfoClip {
+                        lane: ChromaticBulgeGridLaneId::BulgeAmount,
+                        shape: ChromaticBulgeGridLfoShape {
+                            interpolation: LfoInterpolation::Linear,
+                            points: vec![
+                                LfoPoint {
+                                    phase: 0.25,
+                                    value: 0.0,
+                                },
+                                LfoPoint {
+                                    phase: 0.25,
+                                    value: 1.0,
+                                },
+                            ],
+                        },
+                        min: 0.0,
+                        max: 1.0,
+                        period_beats: 4.0,
+                        phase_offset_beats: 0.0,
+                        start_mode: LfoStartMode::Retrigger,
+                    })),
+                    authoring: None,
+                    lanes: Default::default(),
+                }],
+                arrangement: vec![],
+            }),
+        };
+        assert!(validate_visualizer_config("record", &config).is_err());
+    }
+
+    #[test]
+    fn parse_visualizer_json_rejects_removed_shared_shape_schema() {
+        let json = r#"{
+            "mode": "chromatic_bulge_grid",
+            "params": {},
+            "lfo_library": {
+                "shapes": []
+            },
+            "timeline": {
+                "bpm": 120.0,
+                "measures": 4,
+                "beats_per_measure": 4,
+                "clips": []
+            }
+        }"#;
+        assert!(parse_visualizer_json(json).is_err());
+    }
+
+    #[test]
+    fn normalized_for_export_emits_no_lfo_library() {
+        let config = TrackVisualizerConfig {
+            mode: TrackVisualizerMode::ChromaticBulgeGrid,
+            params: Default::default(),
+            automation: None,
+            timeline: Some(ChromaticBulgeGridClipTimeline {
+                bpm: 120.0,
+                measures: 4,
+                beats_per_measure: 4,
+                clips: vec![ChromaticBulgeGridClip {
+                    id: "clip".to_string(),
+                    name: "Clip".to_string(),
+                    length_beats: 4.0,
+                    color: [1.0, 1.0, 1.0],
+                    source: Some(ChromaticBulgeGridClipSource::Lfo(ChromaticBulgeGridLfoClip {
+                        lane: ChromaticBulgeGridLaneId::BulgeAmount,
+                        shape: ChromaticBulgeGridLfoShape {
+                            interpolation: LfoInterpolation::Linear,
+                            points: vec![LfoPoint {
+                                phase: 0.0,
+                                value: 0.0,
+                            }],
+                        },
+                        min: 0.0,
+                        max: 1.0,
+                        period_beats: 4.0,
+                        phase_offset_beats: 0.0,
+                        start_mode: LfoStartMode::Retrigger,
+                    })),
+                    authoring: None,
+                    lanes: Default::default(),
+                }],
+                arrangement: vec![],
+            }),
+        };
+        let exported = serde_json::to_value(config.normalized_for_export()).unwrap();
+        assert!(exported.get("lfo_library").is_none());
     }
 }

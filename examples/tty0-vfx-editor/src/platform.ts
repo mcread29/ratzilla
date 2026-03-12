@@ -1,5 +1,5 @@
 import { TrackVisualizerConfig } from "./types";
-import { defaultVisualizer } from "./vfx";
+import { assertSupportedClipLocalShapeSchema, defaultVisualizer } from "./vfx";
 
 type ImportedJsonDocument =
   | {
@@ -28,6 +28,7 @@ export async function importRecordFromJson(file: File): Promise<ImportedJsonDocu
   };
 
   if (isTrackVisualizerConfig(parsed)) {
+    assertSupportedClipLocalShapeSchema(parsed);
     return {
       kind: "visualizer",
       visualizer: parsed,
@@ -39,6 +40,7 @@ export async function importRecordFromJson(file: File): Promise<ImportedJsonDocu
     throw new Error("Import failed: expected a tty0 record JSON or exported visualizer JSON.");
   }
 
+  assertSupportedClipLocalShapeSchema(parsed.media_page?.visualizer ?? null);
   return {
     kind: "record",
     record: {
