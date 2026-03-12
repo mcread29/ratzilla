@@ -244,10 +244,10 @@
   min-width: 0;
   display: flex;
   min-height: 0;
-  height: 100%;
+  height: auto;
   overflow: hidden;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 
 .lfo-shape-toolbar {
@@ -272,19 +272,20 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  height: 100%;
+  height: auto;
+  max-height: min(32vh, 260px);
   overflow: hidden;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: flex-start;
 }
 
 .shape-editor {
-  width: auto;
-  height: 100%;
+  width: 100%;
+  height: auto;
   aspect-ratio: 16 / 9;
   flex: 0 1 auto;
   min-height: 0;
-  max-height: 100%;
+  max-height: min(32vh, 260px);
   max-width: 100%;
   display: block;
   background: linear-gradient(180deg, #0b1012, #0d1316);
