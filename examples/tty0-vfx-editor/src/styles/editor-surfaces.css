@@ -163,6 +163,7 @@
   border-top: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   text-align: left;
+  padding-left: 0.7rem;
   background: #10161a;
   pointer-events: auto;
 }
