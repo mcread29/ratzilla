@@ -205,7 +205,7 @@ export function VfxEditorScreen() {
           <ResizablePanelGroup orientation="horizontal" className="resizable-shell">
             <ResizablePanel defaultSize="74%" minSize="55%">
               <ResizablePanelGroup orientation="vertical" className="resizable-shell">
-                <ResizablePanel defaultSize="58%" minSize="38%">
+                <ResizablePanel defaultSize="50%" minSize="30%" maxSize="50%">
                   <section className="workspace-row">
                     <ResizablePanelGroup orientation="horizontal" className="resizable-shell">
                       <ResizablePanel defaultSize="28%" minSize="18%" className="timeline-sidebar">
@@ -220,7 +220,7 @@ export function VfxEditorScreen() {
                   </section>
                 </ResizablePanel>
                 <ResizableHandle />
-                <ResizablePanel defaultSize="42%" minSize="26%">
+                <ResizablePanel defaultSize="50%" minSize="50%">
                   <section className="workspace-row">
                     <ResizablePanelGroup orientation="horizontal" className="resizable-shell">
                       <ResizablePanel defaultSize="26%" minSize="16%">
