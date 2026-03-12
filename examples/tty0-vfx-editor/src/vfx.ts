@@ -16,6 +16,19 @@ import {
   TrackVisualizerConfig,
 } from "./types";
 
+export type IndexedTimelinePlacement = {
+  clip: ChromaticBulgeGridClip;
+  endBeat: number;
+  placement: ClipPlacement;
+  placementIndex: number;
+};
+
+export type TimelineIndex = {
+  clipsById: Map<string, ChromaticBulgeGridClip>;
+  placements: IndexedTimelinePlacement[];
+  placementsByTrack: Map<number, IndexedTimelinePlacement[]>;
+};
+
 const SHARED_LFO_IMPORT_ERROR =
   "Import failed: shared LFO shape libraries are no longer supported. Each LFO clip must embed its own shape.";
 
@@ -280,6 +293,7 @@ export function resolveNormalizedChromaticBulgeGrid(
     isPlaying: boolean;
     timelinePreview: boolean;
   },
+  timelineIndex?: TimelineIndex,
 ): { uniforms: ChromaticBulgeGridShaderState; currentBeat: number } {
   const next = config;
   const states = next.params.shader_states!;
@@ -290,16 +304,16 @@ export function resolveNormalizedChromaticBulgeGrid(
   if (!(playback.isPlaying || playback.timelinePreview)) {
     return { uniforms: clampState(base), currentBeat };
   }
-  const resolved = resolveTimelineState(timeline, base, currentBeat);
+  const resolved = resolveTimelineState(timelineIndex ?? buildTimelineIndex(timeline), base, currentBeat);
   return { uniforms: clampState(resolved ?? base), currentBeat };
 }
 
 function resolveTimelineState(
-  timeline: ChromaticBulgeGridClipTimeline,
+  timelineIndex: TimelineIndex,
   base: ChromaticBulgeGridShaderState,
   beat: number,
 ): ChromaticBulgeGridShaderState | null {
-  const active = heldClipsAtBeat(timeline, beat);
+  const active = heldClipsAtBeat(timelineIndex, beat);
   if (!active.length) return null;
   let state = structuredClone(base);
   for (const entry of active) {
@@ -308,12 +322,10 @@ function resolveTimelineState(
   return state;
 }
 
-function heldClipsAtBeat(timeline: ChromaticBulgeGridClipTimeline, beat: number) {
+function heldClipsAtBeat(timelineIndex: TimelineIndex, beat: number) {
   const held = new Map<number, { clip: ChromaticBulgeGridClip; localBeat: number; startBeat: number }>();
-  for (const placement of timeline.arrangement) {
-    const clip = timeline.clips.find((candidate) => candidate.id === placement.clip_id);
-    if (!clip || beat < placement.start_beat) continue;
-    const end = placement.start_beat + clip.length_beats * placement.repeats;
+  for (const { clip, endBeat: end, placement } of timelineIndex.placements) {
+    if (beat < placement.start_beat) continue;
     const localBeat =
       beat < end ? ((beat - placement.start_beat) % clip.length_beats + clip.length_beats) % clip.length_beats : clip.length_beats;
     const existing = held.get(placement.track);
@@ -423,7 +435,7 @@ function applyLfoValueToState(
 }
 
 export function sampleLfoShape(shape: ChromaticBulgeGridLfoShape, phase: number): number {
-  const points = normalizeShapePoints(shape.points);
+  const points = shape.points;
   if (!points.length) return 0;
   if (points.length === 1) return points[0].value;
   const normalizedPhase = ((phase % 1) + 1) % 1;
@@ -481,11 +493,47 @@ export function defaultStep(lane: LaneId): ClipTweenStep {
 }
 
 export function syncClipAuthoring(config: TrackVisualizerConfig, _clipId: string): TrackVisualizerConfig {
-  return normalizedConfig(config);
+  return config;
 }
 
 export function timelineFromConfig(config: TrackVisualizerConfig): ChromaticBulgeGridClipTimeline {
-  return normalizedConfig(config).timeline!;
+  return config.timeline ?? defaultVisualizer().timeline!;
+}
+
+export function buildTimelineIndex(timeline: ChromaticBulgeGridClipTimeline): TimelineIndex {
+  const clipsById = new Map<string, ChromaticBulgeGridClip>();
+  for (const clip of timeline.clips) {
+    clipsById.set(clip.id, clip);
+  }
+
+  const placements: IndexedTimelinePlacement[] = [];
+  const placementsByTrack = new Map<number, IndexedTimelinePlacement[]>();
+
+  timeline.arrangement.forEach((placement, placementIndex) => {
+    const clip = clipsById.get(placement.clip_id);
+    if (!clip) {
+      return;
+    }
+    const indexedPlacement = {
+      clip,
+      endBeat: placement.start_beat + clip.length_beats * placement.repeats,
+      placement,
+      placementIndex,
+    };
+    placements.push(indexedPlacement);
+    const trackPlacements = placementsByTrack.get(placement.track);
+    if (trackPlacements) {
+      trackPlacements.push(indexedPlacement);
+    } else {
+      placementsByTrack.set(placement.track, [indexedPlacement]);
+    }
+  });
+
+  return {
+    clipsById,
+    placements,
+    placementsByTrack,
+  };
 }
 
 export function legacyAutomationToTimeline(
@@ -686,8 +734,7 @@ export function shapePath(shape: ChromaticBulgeGridLfoShape, width: number, heig
   if (!shape.points.length) return "";
   const safePadding = Math.max(0, Math.min(height / 2 - 1, paddingY));
   const usableHeight = Math.max(1, height - safePadding * 2);
-  return [...shape.points]
-    .sort((left, right) => left.phase - right.phase)
+  return shape.points
     .map((current, index) => {
       const x = current.phase * width;
       const y = safePadding + (1 - current.value) * usableHeight;

@@ -8,6 +8,7 @@ import {
   TrackVisualizerConfig,
 } from "./types";
 import {
+  buildTimelineIndex,
   clipSummary,
   defaultLfoClip,
   createPlacement,
@@ -15,7 +16,9 @@ import {
   defaultVisualizer,
   isColorLane,
   isLegacyClip,
+  IndexedTimelinePlacement,
   LANE_ORDER,
+  normalizeClipLfoShape,
   normalizedConfig,
   pointLabel,
   primaryLane,
@@ -57,12 +60,13 @@ const EDITOR_LANES = LANE_ORDER.filter((lane) => !HIDDEN_EDITOR_LANES.has(lane))
 type LoadedDocument = {
   audioUrl: string | null;
   name: string;
+  savedSnapshot: string;
   visualizer: TrackVisualizerConfig;
 };
 
 export default function App() {
   const [loaded, setLoaded] = useState<LoadedDocument | null>(null);
-  const [draft, setDraft] = useState<TrackVisualizerConfig>(defaultVisualizer());
+  const [draft, setDraft] = useState<TrackVisualizerConfig>(normalizedConfig(defaultVisualizer()));
   const [selectedLane, setSelectedLane] = useState<LaneId>("motion_rate");
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
@@ -71,28 +75,24 @@ export default function App() {
   const [selectedStepIndices, setSelectedStepIndices] = useState<number[]>([]);
   const [stepSelectionAnchor, setStepSelectionAnchor] = useState<number | null>(null);
   const [message, setMessage] = useState<string>("Load a visualizer JSON or start a new effect.");
-  const [playbackTime, setPlaybackTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [previewReady, setPreviewReady] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
+  const [audioDuration, setAudioDuration] = useState<number | null>(null);
   const [playPending, setPlayPending] = useState(false);
   const [clipEditorHeight, setClipEditorHeight] = useState<number | null>(null);
   const [timelineZoom, setTimelineZoom] = useState(32);
   const [timelineTool, setTimelineTool] = useState<TimelineTool>("select");
-  const [dragState, setDragState] = useState<DragState | null>(null);
-  const [shapeDragIndex, setShapeDragIndex] = useState<number | null>(null);
   const [placementClipboard, setPlacementClipboard] = useState<PlacementClipboardEntry[]>([]);
   const [importedAudioUrl, setImportedAudioUrl] = useState<string | null>(null);
   const playbackTimeRef = useRef(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const arrangementRef = useRef<HTMLDivElement | null>(null);
   const clipFieldsRef = useRef<HTMLDivElement | null>(null);
-  const shapeSvgRef = useRef<SVGSVGElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
 
-  const normalizedDraft = useMemo(() => normalizedConfig(draft), [draft]);
-  const timeline = useMemo(() => timelineFromConfig(normalizedDraft), [normalizedDraft]);
+  const timeline = useMemo(() => timelineFromConfig(draft), [draft]);
+  const timelineIndex = useMemo(() => buildTimelineIndex(timeline), [timeline]);
   const totalTimelineBeats = totalBeats(timeline);
   const timelineWidth = Math.max(960, totalTimelineBeats * timelineZoom);
   const laneClips = useMemo(
@@ -106,42 +106,19 @@ export default function App() {
     null;
   const selectedShape = selectedClip?.source?.kind === "lfo" ? selectedClip.source.shape : null;
   const selectedTrack = selectedClip ? editableTrack(selectedClip, selectedLane) : null;
-  const selectedSteps = selectedTrack?.steps ?? [];
   const selectedPlacementSet = useMemo(() => new Set(selectedPlacementIndices), [selectedPlacementIndices]);
-  const selectedStepSet = useMemo(() => new Set(selectedStepIndices), [selectedStepIndices]);
-  const selectedStep =
-    selectedStepIndices.length === 1
-      ? selectedTrack?.steps?.[selectedStepIndices[0] ?? 0] ?? null
-      : null;
-  const leadSelectedStep =
-    selectedStepIndices.length > 0
-      ? selectedTrack?.steps?.[selectedStepIndices[0] ?? 0] ?? null
-      : null;
-  const batchStepTargetKind =
-    selectedStepIndices.length > 0
-      ? selectedTrack?.steps?.[selectedStepIndices[0] ?? 0]?.to.kind ?? null
-      : null;
-  const normalizedLoaded = useMemo(
-    () => (loaded ? normalizedConfig(loaded.visualizer) : null),
-    [loaded],
-  );
+  const draftSnapshot = useMemo(() => serializeVisualizer(draft), [draft]);
   const dirty = useMemo(
-    () => (normalizedLoaded ? JSON.stringify(normalizedDraft) !== JSON.stringify(normalizedLoaded) : false),
-    [normalizedDraft, normalizedLoaded],
+    () => (loaded ? draftSnapshot !== loaded.savedSnapshot : false),
+    [draftSnapshot, loaded],
   );
   const effectiveAudioUrl = importedAudioUrl ?? loaded?.audioUrl ?? null;
   const baseState = draft.params.shader_states?.playing;
   const selectedLaneMeta = laneMeta(selectedLane);
-  const audioDuration = audioRef.current?.duration;
   const totalDurationSeconds =
     typeof audioDuration === "number" && Number.isFinite(audioDuration) && audioDuration > 0
       ? audioDuration
       : (totalTimelineBeats * 60) / timeline.bpm;
-  const documentName = loaded?.name ?? "tty0-visualizer.json";
-  const uiCurrentBeat = useMemo(
-    () => Math.max(0, playbackTime) * timeline.bpm / 60,
-    [playbackTime, timeline.bpm],
-  );
 
   useEffect(() => {
     setSelectedStepIndices(selectedTrack?.steps?.length ? [0] : []);
@@ -163,6 +140,7 @@ export default function App() {
   useEffect(() => {
     setAudioReady(!effectiveAudioUrl);
     setPlayPending(false);
+    setAudioDuration(null);
     if (audioRef.current) {
       audioRef.current.pause();
     }
@@ -181,24 +159,6 @@ export default function App() {
     observer.observe(element);
     return () => observer.disconnect();
   }, [selectedClip?.id, selectedLane, draft]);
-
-  useEffect(() => {
-    let frame = 0;
-    let lastPublishedTime = playbackTimeRef.current;
-    const tick = () => {
-      if (audioRef.current && isPlaying) {
-        const nextTime = audioRef.current.currentTime;
-        playbackTimeRef.current = nextTime;
-        if (Math.abs(nextTime - lastPublishedTime) >= 1 / 30) {
-          lastPublishedTime = nextTime;
-          setPlaybackTime(nextTime);
-        }
-      }
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [isPlaying]);
 
   useEffect(() => {
     if (!playPending || !previewReady || !audioReady || !audioRef.current) return;
@@ -259,9 +219,11 @@ export default function App() {
   ) {
     const normalized = normalizedConfig(visualizer);
     const nextTimeline = timelineFromConfig(normalized);
+    const savedSnapshot = serializeVisualizer(normalized);
     setLoaded({
       audioUrl: options.audioUrl ?? null,
       name: options.name,
+      savedSnapshot,
       visualizer: normalized,
     });
     setDraft(normalized);
@@ -271,7 +233,6 @@ export default function App() {
     setStepSelectionAnchor(null);
     setSelectedLane(visibleLane(primaryLane(nextTimeline.clips[0])?.lane));
     playbackTimeRef.current = 0;
-    setPlaybackTime(0);
     setIsPlaying(false);
     setImportedAudioUrl(null);
     setMessage(options.status);
@@ -305,10 +266,11 @@ export default function App() {
   }
 
   function handleNewVisualizer() {
-    const visualizer = defaultVisualizer();
+    const visualizer = normalizedConfig(defaultVisualizer());
     setLoaded({
       audioUrl: null,
       name: "tty0-visualizer.json",
+      savedSnapshot: serializeVisualizer(visualizer),
       visualizer,
     });
     setDraft(visualizer);
@@ -318,7 +280,6 @@ export default function App() {
     setSelectedStepIndices([]);
     setStepSelectionAnchor(null);
     playbackTimeRef.current = 0;
-    setPlaybackTime(0);
     setIsPlaying(false);
     setImportedAudioUrl(null);
     setMessage("Started a new visualizer draft.");
@@ -335,13 +296,13 @@ export default function App() {
     setMessage(`Mounted audio file ${file.name}.`);
   }
 
-  function updateSelectedClipShape(mutator: (points: LfoPoint[]) => void) {
+  function commitSelectedClipShape(points: LfoPoint[]) {
     if (!selectedClip || !selectedClip.source || selectedClip.source.kind !== "lfo") return;
     updateDraft((current) => {
       const nextTimeline = timelineFromConfig(current);
       const clip = nextTimeline.clips.find((candidate) => candidate.id === selectedClip.id);
       if (!clip?.source || clip.source.kind !== "lfo") return current;
-      mutator(clip.source.shape.points);
+      clip.source.shape.points = points;
       current.timeline = nextTimeline;
       return current;
     });
@@ -356,86 +317,32 @@ export default function App() {
     anchor.download = jsonFilename(loaded?.name);
     anchor.click();
     URL.revokeObjectURL(url);
+    setDraft(normalized);
     setLoaded((current) => ({
       audioUrl: current?.audioUrl ?? null,
       name: jsonFilename(current?.name),
+      savedSnapshot: serializeVisualizer(normalized),
       visualizer: normalized,
     }));
     setMessage(`Saved ${jsonFilename(loaded?.name)}.`);
   }
 
   function updateDraft(mutator: (current: TrackVisualizerConfig) => TrackVisualizerConfig) {
-    setDraft((current) => normalizedConfig(mutator(structuredClone(current))));
+    setDraft((current) => mutator(structuredClone(current)));
   }
 
   function currentBeat(): number {
-    return uiCurrentBeat;
+    const audio = audioRef.current;
+    return Math.max(0, audio ? audio.currentTime : playbackTimeRef.current) * timeline.bpm / 60;
   }
 
   function seekToBeat(beat: number) {
     const nextBeat = Math.max(0, Math.min(totalTimelineBeats, beat));
     const nextTime = nextBeat * 60 / timeline.bpm;
     playbackTimeRef.current = nextTime;
-    setPlaybackTime(nextTime);
     if (audioRef.current) {
       audioRef.current.currentTime = nextTime;
     }
-  }
-
-  function beatToPx(beat: number): number {
-    return Math.max(0, beat) * timelineZoom;
-  }
-
-  function pxToBeat(px: number): number {
-    return Math.max(0, px / timelineZoom);
-  }
-
-  function clampBeat(beat: number): number {
-    return Math.max(0, Math.min(totalTimelineBeats, beat));
-  }
-
-  function snapBeatToGrid(beat: number): number {
-    return Math.round(clampBeat(beat) * TIMELINE_SNAP_DIVISION) / TIMELINE_SNAP_DIVISION;
-  }
-
-  function snapPlaybackBeat(beat: number): number {
-    return Math.round(clampBeat(beat) * PLAYHEAD_SNAP_DIVISION) / PLAYHEAD_SNAP_DIVISION;
-  }
-
-  function placementLengthBeats(placement: ClipPlacement): number {
-    const clip = timeline.clips.find((candidate) => candidate.id === placement.clip_id);
-    return clip ? clip.length_beats * placement.repeats : 0;
-  }
-
-  function snapPlacementStart(beat: number, placementIndex: number): number {
-    const thresholdBeats = pxToBeat(TIMELINE_SNAP_THRESHOLD_PX);
-    const clampedBeat = clampBeat(beat);
-    let snappedBeat = snapBeatToGrid(clampedBeat);
-    let closestDistance = thresholdBeats;
-
-    for (const [index, placement] of timeline.arrangement.entries()) {
-      if (index === placementIndex) continue;
-      const startDistance = Math.abs(placement.start_beat - clampedBeat);
-      if (startDistance <= closestDistance) {
-        snappedBeat = placement.start_beat;
-        closestDistance = startDistance;
-      }
-
-      const endBeat = placement.start_beat + placementLengthBeats(placement);
-      const endDistance = Math.abs(endBeat - clampedBeat);
-      if (endDistance <= closestDistance) {
-        snappedBeat = endBeat;
-        closestDistance = endDistance;
-      }
-    }
-
-    return clampBeat(snappedBeat);
-  }
-
-  function arrangementBeatFromPointer(clientX: number): number {
-    if (!arrangementRef.current) return 0;
-    const rect = arrangementRef.current.getBoundingClientRect();
-    return pxToBeat(clientX - rect.left + arrangementRef.current.scrollLeft - 160);
   }
 
   function setPlacementSelection(indices: number[], anchor: number | null = indices[0] ?? null) {
@@ -559,7 +466,7 @@ export default function App() {
     }
     updateDraft((current) => {
       const nextTimeline = timelineFromConfig(current);
-      nextTimeline.arrangement.push(createPlacement(selectedClip, snapBeatToGrid(beat)));
+      nextTimeline.arrangement.push(createPlacement(selectedClip, snapBeatToGrid(beat, totalTimelineBeats)));
       current.timeline = nextTimeline;
       setSinglePlacementSelection(nextTimeline.arrangement.length - 1);
       setSelectedLane(primary.lane);
@@ -629,7 +536,7 @@ export default function App() {
           continue;
         }
         nextTimeline.arrangement.push({
-          ...createPlacement(clip, snapBeatToGrid(atBeat + entry.offsetBeats)),
+          ...createPlacement(clip, snapBeatToGrid(atBeat + entry.offsetBeats, totalTimelineBeats)),
           repeats: entry.repeats,
         });
         pastedIndices.push(nextTimeline.arrangement.length - 1);
@@ -761,16 +668,18 @@ export default function App() {
         preload="auto"
         onCanPlay={() => setAudioReady(true)}
         onCanPlayThrough={() => setAudioReady(true)}
+        onLoadedMetadata={() => {
+          const duration = audioRef.current?.duration;
+          setAudioDuration(typeof duration === "number" && Number.isFinite(duration) ? duration : null);
+        }}
         onPlay={() => setIsPlaying(true)}
         onPause={() => {
           setIsPlaying(false);
           playbackTimeRef.current = audioRef.current?.currentTime ?? playbackTimeRef.current;
-          setPlaybackTime(playbackTimeRef.current);
         }}
         onEnded={() => {
           setIsPlaying(false);
           playbackTimeRef.current = 0;
-          setPlaybackTime(0);
         }}
       />
       <main className="workspace">
@@ -834,7 +743,7 @@ export default function App() {
                   <button
                     onClick={() => {
                       if (!loaded) return;
-                      setDraft(normalizedConfig(loaded.visualizer));
+                      setDraft(loaded.visualizer);
                       clearPlacementSelection();
                       setSelectedStepIndices([]);
                       setStepSelectionAnchor(null);
@@ -958,215 +867,57 @@ export default function App() {
                   Delete Placement{selectedPlacementIndices.length === 1 ? "" : "s"}
                 </button>
               </div>
-              <div
-                ref={arrangementRef}
-                className="arrangement-grid"
-                style={{ ["--timeline-grid" as never]: `${timelineZoom}px` }}
-                onPointerMove={(event) => {
-                  if (!dragState || !arrangementRef.current) return;
-                  const beat = arrangementBeatFromPointer(event.clientX);
-                  if (dragState.kind === "scrub") {
-                    seekToBeat(snapPlaybackBeat(beat));
-                  } else if (dragState.kind === "move") {
-                    const placement = timeline.arrangement[dragState.placementIndex];
-                    if (!placement) return;
-                    updatePlacementAtIndex(dragState.placementIndex, {
-                      ...placement,
-                      start_beat: snapPlacementStart(beat - dragState.offsetBeats, dragState.placementIndex),
-                    });
-                  } else {
-                    const placement = timeline.arrangement[dragState.placementIndex];
-                    if (!placement) return;
-                    const clip = timeline.clips.find((candidate) => candidate.id === placement.clip_id);
-                    if (!clip) return;
-                    const widthBeats = Math.max(clip.length_beats, beat - placement.start_beat);
-                    updatePlacementAtIndex(dragState.placementIndex, {
-                      ...placement,
-                      repeats: Math.max(1, Math.round(widthBeats / clip.length_beats)),
-                    });
+              <ArrangementGrid
+                audioRef={audioRef}
+                indexedPlacements={timelineIndex.placements}
+                isPlaying={isPlaying}
+                onCommitPlacement={updatePlacementAtIndex}
+                onPlaceSelectedClipAtBeat={placeSelectedClipAtBeat}
+                onResetSelection={() => {
+                  clearPlacementSelection();
+                  setSelectedClipId(null);
+                  setSelectedStepIndices([]);
+                  setStepSelectionAnchor(null);
+                }}
+                onSeekToBeat={seekToBeat}
+                onSelectLane={(lane) => {
+                  setSelectedLane(lane);
+                  clearPlacementSelection();
+                }}
+                onSelectPlacement={selectPlacement}
+                playbackTimeRef={playbackTimeRef}
+                placementsByTrack={timelineIndex.placementsByTrack}
+                selectedLane={selectedLane}
+                selectedPlacementSet={selectedPlacementSet}
+                timeline={timeline}
+                timelineTool={timelineTool}
+                timelineWidth={timelineWidth}
+                timelineZoom={timelineZoom}
+              />
+              <PlaybackTransport
+                audioRef={audioRef}
+                beatsPerMeasure={timeline.beats_per_measure}
+                dirty={dirty}
+                effectiveAudioUrl={effectiveAudioUrl}
+                isPlaying={isPlaying}
+                onSeekToTime={(nextTime) => {
+                  playbackTimeRef.current = nextTime;
+                  if (audioRef.current) {
+                    audioRef.current.currentTime = nextTime;
                   }
                 }}
-                onPointerUp={() => setDragState(null)}
-                onPointerLeave={() => setDragState(null)}
-              >
-                <div className="ruler-row">
-                  <div className="ruler-spacer" />
-                  <div
-                    className="ruler-track"
-                    style={{ width: timelineWidth }}
-                    onPointerDown={(event) => {
-                      event.preventDefault();
-                      const beat = arrangementBeatFromPointer(event.clientX);
-                      clearPlacementSelection();
-                      setSelectedClipId(null);
-                      setSelectedStepIndices([]);
-                      setStepSelectionAnchor(null);
-                      setDragState({ kind: "scrub" });
-                      seekToBeat(snapPlaybackBeat(beat));
-                    }}
-                  >
-                    {Array.from({ length: Math.ceil(totalTimelineBeats) + 1 }, (_, beat) => {
-                      const isBar = beat % timeline.beats_per_measure === 0;
-                      return (
-                        <div
-                          key={beat}
-                          className={`ruler-mark ${isBar ? "bar" : ""}`}
-                          style={{ left: beatToPx(beat) }}
-                        >
-                          {isBar ? <span>{beat / timeline.beats_per_measure + 1}</span> : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                {EDITOR_LANES.map((lane) => {
-                  const trackIndex = LANE_ORDER.indexOf(lane);
-                  return (
-                    <div key={lane} className="track-row">
-                      <button
-                        className={`track-label ${selectedLane === lane ? "selected" : ""}`}
-                        onClick={() => {
-                          setSelectedLane(lane);
-                          clearPlacementSelection();
-                        }}
-                      >
-                        {laneMeta(lane).trackLabel}
-                      </button>
-                      <div
-                        className="track-lane"
-                        style={{ height: TRACK_HEIGHT, width: timelineWidth }}
-                        onPointerDown={(event) => {
-                          if (event.target !== event.currentTarget || !arrangementRef.current) {
-                            return;
-                          }
-                          event.preventDefault();
-                          const beat = arrangementBeatFromPointer(event.clientX);
-                          if (timelineTool === "pencil") {
-                            placeSelectedClipAtBeat(beat);
-                            return;
-                          }
-                          setSelectedLane(lane);
-                          clearPlacementSelection();
-                          setSelectedClipId(null);
-                          setSelectedStepIndices([]);
-                          setStepSelectionAnchor(null);
-                          setDragState({ kind: "scrub" });
-                          seekToBeat(snapPlaybackBeat(beat));
-                        }}
-                      >
-                        {timeline.arrangement
-                          .map((placement, placementIndex) => ({ placement, placementIndex }))
-                          .filter(({ placement }) => placement.track === trackIndex)
-                          .map(({ placement, placementIndex }) => {
-                            const clip = timeline.clips.find((candidate) => candidate.id === placement.clip_id);
-                            if (!clip) return null;
-                            const left = beatToPx(placement.start_beat);
-                            const width = beatToPx(clip.length_beats * placement.repeats);
-                            const isSelected = selectedPlacementSet.has(placementIndex);
-                            const isActive =
-                              uiCurrentBeat >= placement.start_beat &&
-                              uiCurrentBeat < placement.start_beat + clip.length_beats * placement.repeats;
-                            return (
-                              <div
-                                key={`${placement.clip_id}-${placementIndex}`}
-                                className={`placement ${isSelected ? "selected" : ""} ${isActive ? "active" : ""}`}
-                                title={clip.name}
-                                style={{
-                                  left,
-                                  width,
-                                  background: placementBackground(clip.color, isSelected),
-                                }}
-                                onPointerDown={(event) => {
-                                  event.preventDefault();
-                                  event.stopPropagation();
-                                  selectPlacement(placementIndex, lane, clip.id, event);
-                                  if (event.metaKey || event.ctrlKey || event.shiftKey) {
-                                    return;
-                                  }
-                                  const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
-                                  const hitEdge = rect.right - event.clientX < 12;
-                                  const beatAtCursor = pxToBeat(event.clientX - rect.left);
-                                  setDragState(
-                                    hitEdge
-                                      ? { kind: "resize", placementIndex }
-                                      : { kind: "move", placementIndex, offsetBeats: beatAtCursor },
-                                  );
-                                }}
-                              >
-                                <span className="placement-label">
-                                  {formatPlacementLabel(clip.name, width)}
-                                </span>
-                                <div className="resize-handle" />
-                              </div>
-                            );
-                          })}
-                        <div className="track-playhead" style={{ left: beatToPx(uiCurrentBeat) }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="timeline-footer">
-                <input
-                  className="timeline-scrubber"
-                  type="range"
-                  min={0}
-                  max={Math.max(totalDurationSeconds, 0.01)}
-                  step={0.01}
-                  value={Math.min(playbackTime, totalDurationSeconds)}
-                  onChange={(event) => {
-                    const nextTime = Number(event.target.value);
-                    playbackTimeRef.current = nextTime;
-                    setPlaybackTime(nextTime);
-                    if (audioRef.current) {
-                      audioRef.current.currentTime = nextTime;
-                    }
-                  }}
-                />
-                <div className="timeline-transport">
-                  <div className="transport-actions">
-                    <button
-                      className="icon-button"
-                      onClick={handleTogglePlayback}
-                      disabled={!effectiveAudioUrl}
-                      type="button"
-                      title={playPending ? "Preparing playback" : isPlaying ? "Pause playback" : "Play playback"}
-                      aria-label={playPending ? "Preparing playback" : isPlaying ? "Pause playback" : "Play playback"}
-                    >
-                      <TransportIcon name={playPending ? "loading" : isPlaying ? "pause" : "play"} />
-                    </button>
-                    <button
-                      className="icon-button"
-                      onClick={() => {
-                        if (!audioRef.current) return;
-                        audioRef.current.pause();
-                        audioRef.current.currentTime = 0;
-                        setPlaybackTime(0);
-                      }}
-                      disabled={!effectiveAudioUrl}
-                      type="button"
-                      title="Stop playback"
-                      aria-label="Stop playback"
-                    >
-                      <TransportIcon name="stop" />
-                    </button>
-                  </div>
-                  <div className="transport-stat">
-                    <span>Measure</span>
-                    <strong>{formatMeasurePosition(uiCurrentBeat, timeline.beats_per_measure)}</strong>
-                  </div>
-                  <div className="transport-stat">
-                    <span>Time</span>
-                    <strong>
-                      {formatDuration(playbackTime)} / {formatDuration(totalDurationSeconds)}
-                    </strong>
-                  </div>
-                  <div className="transport-stat">
-                    <span>State</span>
-                    <strong>{dirty ? "Unsaved" : "Saved"}</strong>
-                  </div>
-                </div>
-              </div>
+                onStop={() => {
+                  if (!audioRef.current) return;
+                  audioRef.current.pause();
+                  audioRef.current.currentTime = 0;
+                  playbackTimeRef.current = 0;
+                }}
+                playPending={playPending}
+                playbackTimeRef={playbackTimeRef}
+                timelineBpm={timeline.bpm}
+                totalDurationSeconds={totalDurationSeconds}
+                onTogglePlayback={handleTogglePlayback}
+              />
             </section>
           </section>
 
@@ -1351,98 +1102,13 @@ export default function App() {
                       )}
                     </div>
                   </div>
-                  <div className="shape-point-column" style={clipEditorHeight ? { height: `${clipEditorHeight}px` } : undefined}>
-                    {selectedShape ? (
-                      <div className="shape-point-list vertical">
-                        {selectedShape.points.map((point, index) => (
-                          <button
-                            key={`${index}-${point.phase}-${point.value}`}
-                            className={`list-item ${selectedPointIndex === index ? "selected" : ""}`}
-                            onClick={() => setSelectedPointIndex(index)}
-                          >
-                            <strong>Point {index + 1}</strong>
-                            <span>{pointLabel(point)}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <p>Select a shape to edit.</p>
-                    )}
-                  </div>
-                  <div className="step-inspector lfo-shape-inspector" style={clipEditorHeight ? { height: `${clipEditorHeight}px` } : undefined}>
-                    {selectedShape ? (
-                      <div className="shape-editor-frame">
-                        <svg
-                          ref={shapeSvgRef}
-                          className="shape-editor"
-                          viewBox={`0 0 ${SHAPE_EDITOR_WIDTH} ${SHAPE_EDITOR_HEIGHT}`}
-                          onPointerDown={(event) => {
-                            const svg = shapeSvgRef.current;
-                            if (!svg || !selectedShape) return;
-                            event.currentTarget.setPointerCapture(event.pointerId);
-                            if (event.target instanceof SVGCircleElement) {
-                              return;
-                            }
-                            const point = pointerToPoint(svg, event.clientX, event.clientY);
-                            const insertedIndex = selectedShape.points.length;
-                            updateSelectedClipShape((points) => {
-                              points.push(point);
-                            });
-                            setSelectedPointIndex(insertedIndex);
-                          }}
-                          onPointerMove={(event) => {
-                            const svg = shapeSvgRef.current;
-                            if (shapeDragIndex == null || !selectedShape || !svg) return;
-                            const point = pointerToPoint(svg, event.clientX, event.clientY);
-                            updateSelectedClipShape((points) => {
-                              if (points[shapeDragIndex]) {
-                                points[shapeDragIndex] = point;
-                              }
-                            });
-                          }}
-                          onPointerUp={(event) => {
-                            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                              event.currentTarget.releasePointerCapture(event.pointerId);
-                            }
-                            setShapeDragIndex(null);
-                          }}
-                          onPointerCancel={() => setShapeDragIndex(null)}
-                          onLostPointerCapture={() => setShapeDragIndex(null)}
-                        >
-                          <rect x="0" y="0" width={SHAPE_EDITOR_WIDTH} height={SHAPE_EDITOR_HEIGHT} />
-                          <path
-                            className="shape-grid shape-grid-bound"
-                            d={`M ${SHAPE_EDITOR_BOUND_INSET} ${SHAPE_EDITOR_VERTICAL_PADDING} L ${SHAPE_EDITOR_WIDTH - SHAPE_EDITOR_BOUND_INSET} ${SHAPE_EDITOR_VERTICAL_PADDING}`}
-                          />
-                          <path
-                            className="shape-grid shape-grid-bound"
-                            d={`M ${SHAPE_EDITOR_BOUND_INSET} ${SHAPE_EDITOR_HEIGHT - SHAPE_EDITOR_VERTICAL_PADDING} L ${SHAPE_EDITOR_WIDTH - SHAPE_EDITOR_BOUND_INSET} ${SHAPE_EDITOR_HEIGHT - SHAPE_EDITOR_VERTICAL_PADDING}`}
-                          />
-                          <path className="shape-grid" d={`M 0 ${SHAPE_EDITOR_HEIGHT / 2} L ${SHAPE_EDITOR_WIDTH} ${SHAPE_EDITOR_HEIGHT / 2}`} />
-                          <path className="shape-grid" d={`M ${SHAPE_EDITOR_WIDTH / 2} 0 L ${SHAPE_EDITOR_WIDTH / 2} ${SHAPE_EDITOR_HEIGHT}`} />
-                          <path
-                            className="shape-curve"
-                            d={shapePath(selectedShape, SHAPE_EDITOR_WIDTH, SHAPE_EDITOR_HEIGHT, SHAPE_EDITOR_VERTICAL_PADDING)}
-                          />
-                          {selectedShape.points.map((point, index) => (
-                            <circle
-                              key={`${index}-${point.phase}-${point.value}`}
-                              className={selectedPointIndex === index ? "shape-point selected" : "shape-point"}
-                              cx={point.phase * SHAPE_EDITOR_WIDTH}
-                              cy={shapeEditorY(point.value)}
-                              r={5}
-                              onPointerDown={(event) => {
-                                event.stopPropagation();
-                                event.currentTarget.setPointerCapture(event.pointerId);
-                                setSelectedPointIndex(index);
-                                setShapeDragIndex(index);
-                              }}
-                            />
-                          ))}
-                        </svg>
-                      </div>
-                    ) : null}
-                  </div>
+                  <ShapeEditorPanel
+                    clipEditorHeight={clipEditorHeight}
+                    onCommitShape={commitSelectedClipShape}
+                    onSelectPoint={setSelectedPointIndex}
+                    selectedPointIndex={selectedPointIndex}
+                    shape={selectedShape}
+                  />
                 </div>
               ) : (
                 <p>Select or create a clip.</p>
@@ -1454,11 +1120,12 @@ export default function App() {
         <aside className="preview-column">
           <section className="panel preview-panel">
             <PreviewCanvas
-              config={normalizedDraft}
+              config={draft}
               audioRef={audioRef}
               playbackTimeRef={playbackTimeRef}
               isPlaying={isPlaying}
               onReady={() => setPreviewReady(true)}
+              timelineIndex={timelineIndex}
             />
           </section>
         </aside>
@@ -1712,6 +1379,61 @@ function jsonFilename(name: string | null | undefined): string {
   return trimmed.toLowerCase().endsWith(".json") ? trimmed : `${trimmed}.json`;
 }
 
+function serializeVisualizer(config: TrackVisualizerConfig): string {
+  return JSON.stringify(config);
+}
+
+function beatToPx(beat: number, timelineZoom: number): number {
+  return Math.max(0, beat) * timelineZoom;
+}
+
+function pxToBeat(px: number, timelineZoom: number): number {
+  return Math.max(0, px / timelineZoom);
+}
+
+function clampBeat(beat: number, totalTimelineBeats: number): number {
+  return Math.max(0, Math.min(totalTimelineBeats, beat));
+}
+
+function snapBeatToGrid(beat: number, totalTimelineBeats: number): number {
+  return Math.round(clampBeat(beat, totalTimelineBeats) * TIMELINE_SNAP_DIVISION) / TIMELINE_SNAP_DIVISION;
+}
+
+function snapPlaybackBeat(beat: number, totalTimelineBeats: number): number {
+  return Math.round(clampBeat(beat, totalTimelineBeats) * PLAYHEAD_SNAP_DIVISION) / PLAYHEAD_SNAP_DIVISION;
+}
+
+function usePlaybackDisplayTime(
+  audioRef: { current: HTMLAudioElement | null },
+  playbackTimeRef: { current: number },
+  isPlaying: boolean,
+) {
+  const [displayTime, setDisplayTime] = useState(playbackTimeRef.current);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    setDisplayTime(audio ? audio.currentTime : playbackTimeRef.current);
+  }, [audioRef, isPlaying, playbackTimeRef]);
+
+  useEffect(() => {
+    let frame = 0;
+    let lastPublished = -1;
+    const tick = () => {
+      const audio = audioRef.current;
+      const nextTime = audio ? audio.currentTime : playbackTimeRef.current;
+      if (Math.abs(nextTime - lastPublished) >= 1 / 30) {
+        lastPublished = nextTime;
+        setDisplayTime(nextTime);
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [audioRef, isPlaying, playbackTimeRef]);
+
+  return [displayTime, setDisplayTime] as const;
+}
+
 function pointerToPoint(svg: SVGSVGElement, clientX: number, clientY: number): LfoPoint {
   const svgPoint = svg.createSVGPoint();
   svgPoint.x = clientX;
@@ -1734,6 +1456,469 @@ function pointerToPoint(svg: SVGSVGElement, clientX: number, clientY: number): L
 
 function shapeEditorY(value: number): number {
   return SHAPE_EDITOR_VERTICAL_PADDING + (1 - value) * (SHAPE_EDITOR_HEIGHT - SHAPE_EDITOR_VERTICAL_PADDING * 2);
+}
+
+function ArrangementGrid({
+  audioRef,
+  indexedPlacements,
+  isPlaying,
+  onCommitPlacement,
+  onPlaceSelectedClipAtBeat,
+  onResetSelection,
+  onSeekToBeat,
+  onSelectLane,
+  onSelectPlacement,
+  playbackTimeRef,
+  placementsByTrack,
+  selectedLane,
+  selectedPlacementSet,
+  timeline,
+  timelineTool,
+  timelineWidth,
+  timelineZoom,
+}: {
+  audioRef: { current: HTMLAudioElement | null };
+  indexedPlacements: IndexedTimelinePlacement[];
+  isPlaying: boolean;
+  onCommitPlacement: (index: number, next: ClipPlacement) => void;
+  onPlaceSelectedClipAtBeat: (beat: number) => void;
+  onResetSelection: () => void;
+  onSeekToBeat: (beat: number) => void;
+  onSelectLane: (lane: LaneId) => void;
+  onSelectPlacement: (placementIndex: number, lane: LaneId, clipId: string, event: MouseEvent<HTMLDivElement>) => void;
+  playbackTimeRef: { current: number };
+  placementsByTrack: Map<number, IndexedTimelinePlacement[]>;
+  selectedLane: LaneId;
+  selectedPlacementSet: Set<number>;
+  timeline: NonNullable<TrackVisualizerConfig["timeline"]>;
+  timelineTool: TimelineTool;
+  timelineWidth: number;
+  timelineZoom: number;
+}) {
+  const arrangementRef = useRef<HTMLDivElement | null>(null);
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const [previewPlacement, setPreviewPlacement] = useState<{ placement: ClipPlacement; placementIndex: number } | null>(null);
+  const [displayTime] = usePlaybackDisplayTime(audioRef, playbackTimeRef, isPlaying);
+  const totalTimelineBeats = totalBeats(timeline);
+  const currentBeat = Math.max(0, displayTime) * timeline.bpm / 60;
+
+  useEffect(() => {
+    if (previewPlacement && !timeline.arrangement[previewPlacement.placementIndex]) {
+      setPreviewPlacement(null);
+    }
+  }, [previewPlacement, timeline.arrangement]);
+
+  function arrangementBeatFromPointer(clientX: number): number {
+    if (!arrangementRef.current) return 0;
+    const rect = arrangementRef.current.getBoundingClientRect();
+    return pxToBeat(clientX - rect.left + arrangementRef.current.scrollLeft - 160, timelineZoom);
+  }
+
+  function snapPlacementStart(beat: number, placementIndex: number): number {
+    const thresholdBeats = pxToBeat(TIMELINE_SNAP_THRESHOLD_PX, timelineZoom);
+    const clamped = clampBeat(beat, totalTimelineBeats);
+    let snapped = snapBeatToGrid(clamped, totalTimelineBeats);
+    let closestDistance = thresholdBeats;
+
+    for (const entry of indexedPlacements) {
+      if (entry.placementIndex === placementIndex) {
+        continue;
+      }
+      const startDistance = Math.abs(entry.placement.start_beat - clamped);
+      if (startDistance <= closestDistance) {
+        snapped = entry.placement.start_beat;
+        closestDistance = startDistance;
+      }
+      const endDistance = Math.abs(entry.endBeat - clamped);
+      if (endDistance <= closestDistance) {
+        snapped = entry.endBeat;
+        closestDistance = endDistance;
+      }
+    }
+
+    return clampBeat(snapped, totalTimelineBeats);
+  }
+
+  function commitPreviewPlacement() {
+    if (!previewPlacement) {
+      setDragState(null);
+      return;
+    }
+    onCommitPlacement(previewPlacement.placementIndex, previewPlacement.placement);
+    setPreviewPlacement(null);
+    setDragState(null);
+  }
+
+  function renderedPlacement(entry: IndexedTimelinePlacement) {
+    if (previewPlacement?.placementIndex === entry.placementIndex) {
+      return previewPlacement.placement;
+    }
+    return entry.placement;
+  }
+
+  return (
+    <div
+      ref={arrangementRef}
+      className="arrangement-grid"
+      style={{ ["--timeline-grid" as never]: `${timelineZoom}px` }}
+      onPointerMove={(event) => {
+        if (!dragState) return;
+        const beat = arrangementBeatFromPointer(event.clientX);
+        if (dragState.kind === "scrub") {
+          onSeekToBeat(snapPlaybackBeat(beat, totalTimelineBeats));
+          return;
+        }
+        const sourceEntry = indexedPlacements.find((entry) => entry.placementIndex === dragState.placementIndex);
+        if (!sourceEntry) return;
+        if (dragState.kind === "move") {
+          setPreviewPlacement({
+            placement: {
+              ...sourceEntry.placement,
+              start_beat: snapPlacementStart(beat - dragState.offsetBeats, dragState.placementIndex),
+            },
+            placementIndex: dragState.placementIndex,
+          });
+          return;
+        }
+        const widthBeats = Math.max(sourceEntry.clip.length_beats, beat - sourceEntry.placement.start_beat);
+        setPreviewPlacement({
+          placement: {
+            ...sourceEntry.placement,
+            repeats: Math.max(1, Math.round(widthBeats / sourceEntry.clip.length_beats)),
+          },
+          placementIndex: dragState.placementIndex,
+        });
+      }}
+      onPointerUp={commitPreviewPlacement}
+      onPointerLeave={commitPreviewPlacement}
+    >
+      <div className="ruler-row">
+        <div className="ruler-spacer" />
+        <div
+          className="ruler-track"
+          style={{ width: timelineWidth }}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            onResetSelection();
+            setDragState({ kind: "scrub" });
+            onSeekToBeat(snapPlaybackBeat(arrangementBeatFromPointer(event.clientX), totalTimelineBeats));
+          }}
+        >
+          {Array.from({ length: Math.ceil(totalTimelineBeats) + 1 }, (_, beat) => {
+            const isBar = beat % timeline.beats_per_measure === 0;
+            return (
+              <div
+                key={beat}
+                className={`ruler-mark ${isBar ? "bar" : ""}`}
+                style={{ left: beatToPx(beat, timelineZoom) }}
+              >
+                {isBar ? <span>{beat / timeline.beats_per_measure + 1}</span> : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {EDITOR_LANES.map((lane) => {
+        const trackIndex = LANE_ORDER.indexOf(lane);
+        const lanePlacements = placementsByTrack.get(trackIndex) ?? [];
+        return (
+          <div key={lane} className="track-row">
+            <button
+              className={`track-label ${selectedLane === lane ? "selected" : ""}`}
+              onClick={() => onSelectLane(lane)}
+            >
+              {laneMeta(lane).trackLabel}
+            </button>
+            <div
+              className="track-lane"
+              style={{ height: TRACK_HEIGHT, width: timelineWidth }}
+              onPointerDown={(event) => {
+                if (event.target !== event.currentTarget) {
+                  return;
+                }
+                event.preventDefault();
+                const beat = arrangementBeatFromPointer(event.clientX);
+                if (timelineTool === "pencil") {
+                  onPlaceSelectedClipAtBeat(beat);
+                  return;
+                }
+                onSelectLane(lane);
+                onResetSelection();
+                setDragState({ kind: "scrub" });
+                onSeekToBeat(snapPlaybackBeat(beat, totalTimelineBeats));
+              }}
+            >
+              {lanePlacements.map((entry) => {
+                const placement = renderedPlacement(entry);
+                const left = beatToPx(placement.start_beat, timelineZoom);
+                const width = beatToPx(entry.clip.length_beats * placement.repeats, timelineZoom);
+                const isSelected = selectedPlacementSet.has(entry.placementIndex);
+                const isActive = currentBeat >= placement.start_beat && currentBeat < placement.start_beat + entry.clip.length_beats * placement.repeats;
+                return (
+                  <div
+                    key={`${entry.placement.clip_id}-${entry.placementIndex}`}
+                    className={`placement ${isSelected ? "selected" : ""} ${isActive ? "active" : ""}`}
+                    title={entry.clip.name}
+                    style={{
+                      left,
+                      width,
+                      background: placementBackground(entry.clip.color, isSelected),
+                    }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onSelectPlacement(entry.placementIndex, lane, entry.clip.id, event);
+                      if (event.metaKey || event.ctrlKey || event.shiftKey) {
+                        return;
+                      }
+                      const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+                      const hitEdge = rect.right - event.clientX < 12;
+                      const beatAtCursor = pxToBeat(event.clientX - rect.left, timelineZoom);
+                      setDragState(
+                        hitEdge
+                          ? { kind: "resize", placementIndex: entry.placementIndex }
+                          : { kind: "move", placementIndex: entry.placementIndex, offsetBeats: beatAtCursor },
+                      );
+                    }}
+                  >
+                    <span className="placement-label">
+                      {formatPlacementLabel(entry.clip.name, width)}
+                    </span>
+                    <div className="resize-handle" />
+                  </div>
+                );
+              })}
+              <div className="track-playhead" style={{ left: beatToPx(currentBeat, timelineZoom) }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PlaybackTransport({
+  audioRef,
+  beatsPerMeasure,
+  dirty,
+  effectiveAudioUrl,
+  isPlaying,
+  onSeekToTime,
+  onStop,
+  onTogglePlayback,
+  playPending,
+  playbackTimeRef,
+  timelineBpm,
+  totalDurationSeconds,
+}: {
+  audioRef: { current: HTMLAudioElement | null };
+  beatsPerMeasure: number;
+  dirty: boolean;
+  effectiveAudioUrl: string | null;
+  isPlaying: boolean;
+  onSeekToTime: (time: number) => void;
+  onStop: () => void;
+  onTogglePlayback: () => void;
+  playPending: boolean;
+  playbackTimeRef: { current: number };
+  timelineBpm: number;
+  totalDurationSeconds: number;
+}) {
+  const [displayTime, setDisplayTime] = usePlaybackDisplayTime(audioRef, playbackTimeRef, isPlaying);
+  const currentBeat = Math.max(0, displayTime) * timelineBpm / 60;
+
+  return (
+    <div className="timeline-footer">
+      <input
+        className="timeline-scrubber"
+        type="range"
+        min={0}
+        max={Math.max(totalDurationSeconds, 0.01)}
+        step={0.01}
+        value={Math.min(displayTime, totalDurationSeconds)}
+        onChange={(event) => {
+          const nextTime = Number(event.target.value);
+          setDisplayTime(nextTime);
+          onSeekToTime(nextTime);
+        }}
+      />
+      <div className="timeline-transport">
+        <div className="transport-actions">
+          <button
+            className="icon-button"
+            onClick={onTogglePlayback}
+            disabled={!effectiveAudioUrl}
+            type="button"
+            title={playPending ? "Preparing playback" : isPlaying ? "Pause playback" : "Play playback"}
+            aria-label={playPending ? "Preparing playback" : isPlaying ? "Pause playback" : "Play playback"}
+          >
+            <TransportIcon name={playPending ? "loading" : isPlaying ? "pause" : "play"} />
+          </button>
+          <button
+            className="icon-button"
+            onClick={() => {
+              setDisplayTime(0);
+              onStop();
+            }}
+            disabled={!effectiveAudioUrl}
+            type="button"
+            title="Stop playback"
+            aria-label="Stop playback"
+          >
+            <TransportIcon name="stop" />
+          </button>
+        </div>
+        <div className="transport-stat">
+          <span>Measure</span>
+          <strong>{formatMeasurePosition(currentBeat, beatsPerMeasure)}</strong>
+        </div>
+        <div className="transport-stat">
+          <span>Time</span>
+          <strong>
+            {formatDuration(displayTime)} / {formatDuration(totalDurationSeconds)}
+          </strong>
+        </div>
+        <div className="transport-stat">
+          <span>State</span>
+          <strong>{dirty ? "Unsaved" : "Saved"}</strong>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShapeEditorPanel({
+  clipEditorHeight,
+  onCommitShape,
+  onSelectPoint,
+  selectedPointIndex,
+  shape,
+}: {
+  clipEditorHeight: number | null;
+  onCommitShape: (points: LfoPoint[]) => void;
+  onSelectPoint: (index: number | null) => void;
+  selectedPointIndex: number | null;
+  shape: { interpolation: "linear"; points: LfoPoint[] } | null;
+}) {
+  const shapeSvgRef = useRef<SVGSVGElement | null>(null);
+  const draftPointsRef = useRef<LfoPoint[]>(shape?.points ?? []);
+  const [draftPoints, setDraftPoints] = useState<LfoPoint[]>(shape?.points ?? []);
+  const [shapeDragIndex, setShapeDragIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    setDraftPoints(shape?.points ?? []);
+  }, [shape]);
+
+  useEffect(() => {
+    draftPointsRef.current = draftPoints;
+  }, [draftPoints]);
+
+  const normalizedShape = useMemo(
+    () => (shape ? normalizeClipLfoShape({ interpolation: shape.interpolation, points: draftPoints }) : null),
+    [draftPoints, shape],
+  );
+
+  function commit(points: LfoPoint[]) {
+    const normalized = normalizeClipLfoShape({ interpolation: "linear", points });
+    setDraftPoints(normalized.points);
+    onCommitShape(normalized.points);
+  }
+
+  return (
+    <>
+      <div className="shape-point-column" style={clipEditorHeight ? { height: `${clipEditorHeight}px` } : undefined}>
+        {normalizedShape ? (
+          <div className="shape-point-list vertical">
+            {normalizedShape.points.map((point, index) => (
+              <button
+                key={`${index}-${point.phase}-${point.value}`}
+                className={`list-item ${selectedPointIndex === index ? "selected" : ""}`}
+                onClick={() => onSelectPoint(index)}
+              >
+                <strong>Point {index + 1}</strong>
+                <span>{pointLabel(point)}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p>Select a shape to edit.</p>
+        )}
+      </div>
+      <div className="step-inspector lfo-shape-inspector" style={clipEditorHeight ? { height: `${clipEditorHeight}px` } : undefined}>
+        {normalizedShape ? (
+          <div className="shape-editor-frame">
+            <svg
+              ref={shapeSvgRef}
+              className="shape-editor"
+              viewBox={`0 0 ${SHAPE_EDITOR_WIDTH} ${SHAPE_EDITOR_HEIGHT}`}
+              onPointerDown={(event) => {
+                const svg = shapeSvgRef.current;
+                if (!svg) return;
+                event.currentTarget.setPointerCapture(event.pointerId);
+                if (event.target instanceof SVGCircleElement) {
+                  return;
+                }
+                const point = pointerToPoint(svg, event.clientX, event.clientY);
+                const nextPoints = [...normalizedShape.points, point];
+                setDraftPoints(nextPoints);
+                const nextIndex = nextPoints.length - 1;
+                onSelectPoint(nextIndex);
+                commit(nextPoints);
+              }}
+              onPointerMove={(event) => {
+                const svg = shapeSvgRef.current;
+                if (shapeDragIndex == null || !svg) return;
+                const point = pointerToPoint(svg, event.clientX, event.clientY);
+                setDraftPoints((current) => current.map((entry, index) => (index === shapeDragIndex ? point : entry)));
+              }}
+              onPointerUp={(event) => {
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  event.currentTarget.releasePointerCapture(event.pointerId);
+                }
+                if (shapeDragIndex != null) {
+                  commit(draftPointsRef.current);
+                }
+                setShapeDragIndex(null);
+              }}
+              onPointerCancel={() => setShapeDragIndex(null)}
+              onLostPointerCapture={() => setShapeDragIndex(null)}
+            >
+              <rect x="0" y="0" width={SHAPE_EDITOR_WIDTH} height={SHAPE_EDITOR_HEIGHT} />
+              <path
+                className="shape-grid shape-grid-bound"
+                d={`M ${SHAPE_EDITOR_BOUND_INSET} ${SHAPE_EDITOR_VERTICAL_PADDING} L ${SHAPE_EDITOR_WIDTH - SHAPE_EDITOR_BOUND_INSET} ${SHAPE_EDITOR_VERTICAL_PADDING}`}
+              />
+              <path
+                className="shape-grid shape-grid-bound"
+                d={`M ${SHAPE_EDITOR_BOUND_INSET} ${SHAPE_EDITOR_HEIGHT - SHAPE_EDITOR_VERTICAL_PADDING} L ${SHAPE_EDITOR_WIDTH - SHAPE_EDITOR_BOUND_INSET} ${SHAPE_EDITOR_HEIGHT - SHAPE_EDITOR_VERTICAL_PADDING}`}
+              />
+              <path className="shape-grid" d={`M 0 ${SHAPE_EDITOR_HEIGHT / 2} L ${SHAPE_EDITOR_WIDTH} ${SHAPE_EDITOR_HEIGHT / 2}`} />
+              <path className="shape-grid" d={`M ${SHAPE_EDITOR_WIDTH / 2} 0 L ${SHAPE_EDITOR_WIDTH / 2} ${SHAPE_EDITOR_HEIGHT}`} />
+              <path
+                className="shape-curve"
+                d={shapePath(normalizedShape, SHAPE_EDITOR_WIDTH, SHAPE_EDITOR_HEIGHT, SHAPE_EDITOR_VERTICAL_PADDING)}
+              />
+              {normalizedShape.points.map((point, index) => (
+                <circle
+                  key={`${index}-${point.phase}-${point.value}`}
+                  className={selectedPointIndex === index ? "shape-point selected" : "shape-point"}
+                  cx={point.phase * SHAPE_EDITOR_WIDTH}
+                  cy={shapeEditorY(point.value)}
+                  r={5}
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    onSelectPoint(index);
+                    setShapeDragIndex(index);
+                  }}
+                />
+              ))}
+            </svg>
+          </div>
+        ) : null}
+      </div>
+    </>
+  );
 }
 
 function formatMeasurePosition(currentBeat: number, beatsPerMeasure: number): string {
@@ -1852,16 +2037,19 @@ function PreviewCanvas({
   playbackTimeRef,
   isPlaying,
   onReady,
+  timelineIndex,
 }: {
   config: TrackVisualizerConfig;
   audioRef: { current: HTMLAudioElement | null };
   playbackTimeRef: { current: number };
   isPlaying: boolean;
   onReady: () => void;
+  timelineIndex: ReturnType<typeof buildTimelineIndex>;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const configRef = useRef(config);
   const isPlayingRef = useRef(isPlaying);
+  const timelineIndexRef = useRef(timelineIndex);
 
   useEffect(() => {
     configRef.current = config;
@@ -1870,6 +2058,10 @@ function PreviewCanvas({
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  useEffect(() => {
+    timelineIndexRef.current = timelineIndex;
+  }, [timelineIndex]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1881,6 +2073,26 @@ function PreviewCanvas({
     const vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
     gl.useProgram(program);
+    const uniforms = {
+      u_bulge_amount: gl.getUniformLocation(program, "u_bulge_amount"),
+      u_chromatic_aberration: gl.getUniformLocation(program, "u_chromatic_aberration"),
+      u_circle_falloff_end: gl.getUniformLocation(program, "u_circle_falloff_end"),
+      u_circle_falloff_start: gl.getUniformLocation(program, "u_circle_falloff_start"),
+      u_circle_radius: gl.getUniformLocation(program, "u_circle_radius"),
+      u_cold_color: gl.getUniformLocation(program, "u_cold_color"),
+      u_dot_size: gl.getUniformLocation(program, "u_dot_size"),
+      u_edge_softness: gl.getUniformLocation(program, "u_edge_softness"),
+      u_hot_color: gl.getUniformLocation(program, "u_hot_color"),
+      u_inner_alpha: gl.getUniformLocation(program, "u_inner_alpha"),
+      u_lattice_density: gl.getUniformLocation(program, "u_lattice_density"),
+      u_motion_rate: gl.getUniformLocation(program, "u_motion_rate"),
+      u_outer_dot_scale: gl.getUniformLocation(program, "u_outer_dot_scale"),
+      u_resolution: gl.getUniformLocation(program, "u_resolution"),
+      u_rim_exponent: gl.getUniformLocation(program, "u_rim_exponent"),
+      u_rim_guard: gl.getUniformLocation(program, "u_rim_guard"),
+      u_rim_warp: gl.getUniformLocation(program, "u_rim_warp"),
+      u_time: gl.getUniformLocation(program, "u_time"),
+    };
 
     let frame = 0;
     let announcedReady = false;
@@ -1893,7 +2105,7 @@ function PreviewCanvas({
         visualTimeSecs: currentTime,
         isPlaying: currentIsPlaying,
         timelinePreview: true,
-      }).uniforms;
+      }, timelineIndexRef.current).uniforms;
       const dpr = window.devicePixelRatio || 1;
       const width = Math.max(1, Math.floor(canvas.clientWidth * dpr));
       const height = Math.max(1, Math.floor(canvas.clientHeight * dpr));
@@ -1904,24 +2116,24 @@ function PreviewCanvas({
       gl.viewport(0, 0, width, height);
       gl.clearColor(0, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      setUniform2f(gl, program, "u_resolution", width, height);
-      setUniform1f(gl, program, "u_time", currentTime);
-      setUniform2f(gl, program, "u_motion_rate", currentUniforms.motion_rate, currentUniforms.motion_rate_y);
-      setUniform1f(gl, program, "u_lattice_density", currentUniforms.lattice_density);
-      setUniform1f(gl, program, "u_circle_radius", currentUniforms.circle_radius);
-      setUniform1f(gl, program, "u_circle_falloff_start", currentUniforms.circle_falloff_start);
-      setUniform1f(gl, program, "u_circle_falloff_end", currentUniforms.circle_falloff_end);
-      setUniform1f(gl, program, "u_bulge_amount", currentUniforms.bulge_amount);
-      setUniform1f(gl, program, "u_rim_guard", currentUniforms.rim_guard);
-      setUniform1f(gl, program, "u_rim_exponent", currentUniforms.rim_exponent);
-      setUniform1f(gl, program, "u_rim_warp", currentUniforms.rim_warp);
-      setUniform1f(gl, program, "u_dot_size", currentUniforms.dot_size);
-      setUniform1f(gl, program, "u_outer_dot_scale", currentUniforms.outer_dot_scale);
-      setUniform1f(gl, program, "u_edge_softness", currentUniforms.edge_softness);
-      setUniform1f(gl, program, "u_chromatic_aberration", currentUniforms.chromatic_aberration);
-      setUniform3f(gl, program, "u_cold_color", currentUniforms.cold_color);
-      setUniform3f(gl, program, "u_hot_color", currentUniforms.hot_color);
-      setUniform1f(gl, program, "u_inner_alpha", currentUniforms.inner_alpha);
+      setUniform2f(gl, uniforms.u_resolution, width, height);
+      setUniform1f(gl, uniforms.u_time, currentTime);
+      setUniform2f(gl, uniforms.u_motion_rate, currentUniforms.motion_rate, currentUniforms.motion_rate_y);
+      setUniform1f(gl, uniforms.u_lattice_density, currentUniforms.lattice_density);
+      setUniform1f(gl, uniforms.u_circle_radius, currentUniforms.circle_radius);
+      setUniform1f(gl, uniforms.u_circle_falloff_start, currentUniforms.circle_falloff_start);
+      setUniform1f(gl, uniforms.u_circle_falloff_end, currentUniforms.circle_falloff_end);
+      setUniform1f(gl, uniforms.u_bulge_amount, currentUniforms.bulge_amount);
+      setUniform1f(gl, uniforms.u_rim_guard, currentUniforms.rim_guard);
+      setUniform1f(gl, uniforms.u_rim_exponent, currentUniforms.rim_exponent);
+      setUniform1f(gl, uniforms.u_rim_warp, currentUniforms.rim_warp);
+      setUniform1f(gl, uniforms.u_dot_size, currentUniforms.dot_size);
+      setUniform1f(gl, uniforms.u_outer_dot_scale, currentUniforms.outer_dot_scale);
+      setUniform1f(gl, uniforms.u_edge_softness, currentUniforms.edge_softness);
+      setUniform1f(gl, uniforms.u_chromatic_aberration, currentUniforms.chromatic_aberration);
+      setUniform3f(gl, uniforms.u_cold_color, currentUniforms.cold_color);
+      setUniform3f(gl, uniforms.u_hot_color, currentUniforms.hot_color);
+      setUniform1f(gl, uniforms.u_inner_alpha, currentUniforms.inner_alpha);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       if (!announcedReady) {
         announcedReady = true;
@@ -1977,22 +2189,18 @@ function compileShader(
   return shader;
 }
 
-function setUniform1f(gl: WebGL2RenderingContext, program: WebGLProgram, name: string, value: number) {
-  const location = gl.getUniformLocation(program, name);
-  if (location) gl.uniform1f(location, value);
+function setUniform1f(gl: WebGL2RenderingContext, location: WebGLUniformLocation | null, value: number) {
+  if (location != null) gl.uniform1f(location, value);
 }
 
-function setUniform2f(gl: WebGL2RenderingContext, program: WebGLProgram, name: string, x: number, y: number) {
-  const location = gl.getUniformLocation(program, name);
-  if (location) gl.uniform2f(location, x, y);
+function setUniform2f(gl: WebGL2RenderingContext, location: WebGLUniformLocation | null, x: number, y: number) {
+  if (location != null) gl.uniform2f(location, x, y);
 }
 
 function setUniform3f(
   gl: WebGL2RenderingContext,
-  program: WebGLProgram,
-  name: string,
+  location: WebGLUniformLocation | null,
   value: [number, number, number],
 ) {
-  const location = gl.getUniformLocation(program, name);
-  if (location) gl.uniform3f(location, value[0], value[1], value[2]);
+  if (location != null) gl.uniform3f(location, value[0], value[1], value[2]);
 }
