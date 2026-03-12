@@ -73,12 +73,14 @@ export function ShapeEditorPanel({
   shape: { interpolation: "linear"; points: LfoPoint[] } | null;
 }) {
   const shapeSvgRef = useRef<SVGSVGElement | null>(null);
+  const shapeInspectorRef = useRef<HTMLDivElement | null>(null);
   const draftPointsRef = useRef<LfoPoint[]>(shape?.points ?? []);
   const [draftPoints, setDraftPoints] = useState<LfoPoint[]>(shape?.points ?? []);
   const [interactionMode, setInteractionMode] = useState<ShapeInteractionMode>("add");
   const [shapeDragIndex, setShapeDragIndex] = useState<number | null>(null);
   const [curveDragIndex, setCurveDragIndex] = useState<number | null>(null);
   const [selectedSegmentIndex, setSelectedSegmentIndex] = useState<number | null>(null);
+  const [shapeViewport, setShapeViewport] = useState({ width: SHAPE_EDITOR_WIDTH, height: SHAPE_EDITOR_HEIGHT });
 
   useEffect(() => {
     const nextPoints = shape?.points ?? [];
@@ -88,6 +90,30 @@ export function ShapeEditorPanel({
     setCurveDragIndex(null);
     setSelectedSegmentIndex(null);
   }, [shape]);
+
+  useEffect(() => {
+    const element = shapeInspectorRef.current;
+    if (!element) return;
+
+    const aspectRatio = SHAPE_EDITOR_WIDTH / SHAPE_EDITOR_HEIGHT;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+
+      const availableWidth = Math.max(1, entry.contentRect.width);
+      const availableHeight = Math.max(1, entry.contentRect.height);
+      const fittedHeight = Math.min(availableHeight, availableWidth / aspectRatio);
+      const fittedWidth = Math.min(availableWidth, fittedHeight * aspectRatio);
+
+      setShapeViewport({
+        width: Math.max(1, Math.floor(fittedWidth)),
+        height: Math.max(1, Math.floor(fittedHeight)),
+      });
+    });
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   const normalizedShape = useMemo(
     () => (shape ? normalizeClipLfoShape({ interpolation: shape.interpolation, points: draftPoints }) : null),
@@ -178,13 +204,20 @@ export function ShapeEditorPanel({
           )}
         </div>
       </div>
-      <div className="step-inspector lfo-shape-inspector">
+      <div ref={shapeInspectorRef} className="step-inspector lfo-shape-inspector">
         {normalizedShape ? (
-          <div className="shape-editor-frame">
+          <div
+            className="shape-editor-frame"
+            style={{
+              width: `${shapeViewport.width}px`,
+              height: `${shapeViewport.height}px`,
+            }}
+          >
             <svg
               ref={shapeSvgRef}
               className={`shape-editor shape-editor-${interactionMode}`}
               viewBox={`0 0 ${SHAPE_EDITOR_WIDTH} ${SHAPE_EDITOR_HEIGHT}`}
+              preserveAspectRatio="xMidYMid meet"
               onPointerDown={(event) => {
                 const svg = shapeSvgRef.current;
                 if (!svg) return;
