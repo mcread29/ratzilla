@@ -49,8 +49,8 @@ type PlacementClipboardEntry = {
 };
 
 const TRACK_HEIGHT = 28;
-const RULER_HEIGHT = 32;
-const TIMELINE_TOP_SCROLLBAR_HEIGHT = 18;
+const TIMELINE_TOP_SCROLLBAR_HEIGHT = 14;
+const RULER_HEIGHT = TIMELINE_TOP_SCROLLBAR_HEIGHT * 1.5;
 const TIMELINE_SNAP_DIVISION = 4;
 const TIMELINE_SNAP_THRESHOLD_PX = 12;
 const PLAYHEAD_SNAP_DIVISION = 1;
@@ -1540,19 +1540,36 @@ function ArrangementGrid({
   timelineZoom: number;
 }) {
   const arrangementRef = useRef<HTMLDivElement | null>(null);
+  const scrollbarDragRef = useRef<{ pointerId: number; startClientX: number; startScrollLeft: number } | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [previewPlacement, setPreviewPlacement] = useState<{ placement: ClipPlacement; placementIndex: number } | null>(null);
   const [scrollLeft, setScrollLeft] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
+  const [scrollRegionWidth, setScrollRegionWidth] = useState(0);
   const [displayTime] = usePlaybackDisplayTime(audioRef, playbackTimeRef, isPlaying);
   const totalTimelineBeats = totalBeats(timeline);
   const currentBeat = Math.max(0, displayTime) * timeline.bpm / 60;
+  const visibleTimelineWidth = Math.max(1, scrollRegionWidth - TIMELINE_LABEL_WIDTH);
+  const maxScrollLeft = Math.max(0, timelineWidth - visibleTimelineWidth);
+  const scrollbarThumbWidth =
+    maxScrollLeft === 0
+      ? visibleTimelineWidth
+      : Math.min(
+          visibleTimelineWidth,
+          Math.max(36, (visibleTimelineWidth / Math.max(timelineWidth, 1)) * visibleTimelineWidth),
+        );
+  const scrollbarTravel = Math.max(0, visibleTimelineWidth - scrollbarThumbWidth);
+  const scrollbarThumbLeft =
+    maxScrollLeft === 0 || scrollbarTravel === 0 ? 0 : (scrollLeft / maxScrollLeft) * scrollbarTravel;
 
   useLayoutEffect(() => {
     const element = arrangementRef.current;
     if (!element) return;
 
-    const updateWidth = () => onViewportWidthChange(element.clientWidth);
+    const updateWidth = () => {
+      onViewportWidthChange(element.clientWidth);
+      setScrollRegionWidth(element.clientWidth);
+    };
     updateWidth();
 
     const observer = new ResizeObserver(updateWidth);
@@ -1567,12 +1584,8 @@ function ArrangementGrid({
   }, [previewPlacement, timeline.arrangement]);
 
   useEffect(() => {
-    const maxScrollLeft = Math.max(
-      0,
-      timelineWidth - Math.max(1, (arrangementRef.current?.clientWidth ?? 1) - TIMELINE_LABEL_WIDTH),
-    );
     setScrollLeft((current) => Math.min(current, maxScrollLeft));
-  }, [timelineWidth]);
+  }, [maxScrollLeft]);
 
   function arrangementBeatFromPointer(clientX: number): number {
     if (!arrangementRef.current) return 0;
@@ -1581,9 +1594,14 @@ function ArrangementGrid({
   }
 
   function clampScrollLeft(next: number): number {
-    const visibleTimelineWidth = Math.max(1, (arrangementRef.current?.clientWidth ?? 1) - TIMELINE_LABEL_WIDTH);
-    const maxScrollLeft = Math.max(0, timelineWidth - visibleTimelineWidth);
     return Math.max(0, Math.min(maxScrollLeft, next));
+  }
+
+  function scrollLeftFromThumbOffset(offset: number): number {
+    if (scrollbarTravel === 0) {
+      return 0;
+    }
+    return (Math.max(0, Math.min(scrollbarTravel, offset)) / scrollbarTravel) * maxScrollLeft;
   }
 
   function snapPlacementStart(beat: number, placementIndex: number): number {
@@ -1632,18 +1650,70 @@ function ArrangementGrid({
     <div className="arrangement-grid">
       <div className="arrangement-body">
         <div className="arrangement-label-overlay">
-          <div className="ruler-spacer" style={{ height: RULER_HEIGHT }} />
+          <div className="ruler-spacer" style={{ height: TIMELINE_TOP_SCROLLBAR_HEIGHT + RULER_HEIGHT }} />
           {EDITOR_LANES.map((lane, index) => (
             <button
               key={lane}
               className={`track-label ${selectedLane === lane ? "selected" : ""}`}
-              style={{ top: RULER_HEIGHT + index * TRACK_HEIGHT - scrollTop, height: TRACK_HEIGHT }}
+              style={{
+                top: TIMELINE_TOP_SCROLLBAR_HEIGHT + RULER_HEIGHT + index * TRACK_HEIGHT - scrollTop,
+                height: TRACK_HEIGHT,
+              }}
               onClick={() => onSelectLane(lane)}
               type="button"
             >
               {laneMeta(lane).trackLabel}
             </button>
           ))}
+        </div>
+        <div className="arrangement-top-scrollbar">
+          <div
+            className="arrangement-top-scrollbar-track"
+            onPointerDown={(event) => {
+              if (event.target !== event.currentTarget) {
+                return;
+              }
+              const rect = event.currentTarget.getBoundingClientRect();
+              const nextThumbLeft = event.clientX - rect.left - scrollbarThumbWidth / 2;
+              setScrollLeft(clampScrollLeft(scrollLeftFromThumbOffset(nextThumbLeft)));
+            }}
+          >
+            <div
+              className="arrangement-top-scrollbar-thumb"
+              style={{ width: scrollbarThumbWidth, transform: `translateX(${scrollbarThumbLeft}px)` }}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                scrollbarDragRef.current = {
+                  pointerId: event.pointerId,
+                  startClientX: event.clientX,
+                  startScrollLeft: scrollLeft,
+                };
+                event.currentTarget.setPointerCapture(event.pointerId);
+              }}
+              onPointerMove={(event) => {
+                const drag = scrollbarDragRef.current;
+                if (!drag || drag.pointerId !== event.pointerId || scrollbarTravel === 0) {
+                  return;
+                }
+                const delta = event.clientX - drag.startClientX;
+                const nextScrollLeft = drag.startScrollLeft + (delta / scrollbarTravel) * maxScrollLeft;
+                setScrollLeft(clampScrollLeft(nextScrollLeft));
+              }}
+              onPointerUp={(event) => {
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  event.currentTarget.releasePointerCapture(event.pointerId);
+                }
+                scrollbarDragRef.current = null;
+              }}
+              onPointerCancel={() => {
+                scrollbarDragRef.current = null;
+              }}
+              onLostPointerCapture={() => {
+                scrollbarDragRef.current = null;
+              }}
+            />
+          </div>
         </div>
         <div
           ref={arrangementRef}
