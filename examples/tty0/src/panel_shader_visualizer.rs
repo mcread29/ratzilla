@@ -493,10 +493,10 @@ impl PanelShaderRuntime {
             }
             Some(previous_time) => {
                 let delta = safe_time - previous_time;
-                if delta > 0.0001 && delta <= 0.25 {
+                if delta > 0.0001 {
                     accumulator.offset.0 += (accumulator.last_rate.0 + motion_rate.0) * 0.5 * delta;
                     accumulator.offset.1 += (accumulator.last_rate.1 + motion_rate.1) * 0.5 * delta;
-                } else if delta < -0.0001 || delta > 0.25 {
+                } else if delta < -0.0001 {
                     accumulator.offset = (0.0, 0.0);
                 }
                 accumulator.last_time_secs = Some(safe_time);

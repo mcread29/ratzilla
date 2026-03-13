@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { FRAGMENT_SHADER, VERTEX_SHADER } from "../../shaders";
 import { TrackVisualizerConfig } from "../../types";
-import { buildTimelineIndex, resolveNormalizedChromaticBulgeGrid, timelineFromConfig } from "../../vfx";
+import { buildTimelineIndex, resolveNormalizedChromaticBulgeGrid } from "../../vfx";
 import { createProgram, setUniform1f, setUniform2f, setUniform3f } from "../preview/gl";
 
 type MotionState = {
@@ -82,7 +82,6 @@ export function PreviewCanvas({
     let frame = 0;
     let announcedReady = false;
     const render = () => {
-      const timeline = timelineFromConfig(configRef.current);
       const currentTime = playbackTimeRef.current;
       const currentIsPlaying = isPlayingRef.current;
       const currentUniforms = resolveNormalizedChromaticBulgeGrid(
@@ -95,23 +94,7 @@ export function PreviewCanvas({
         },
         timelineIndexRef.current,
       ).uniforms;
-      const motionState = resolveMotionState(
-        currentTime,
-        currentUniforms.motion_rate,
-        currentUniforms.motion_rate_y,
-        (time) =>
-          resolveNormalizedChromaticBulgeGrid(
-            configRef.current,
-            {
-              currentTimeSecs: time,
-              visualTimeSecs: time,
-              isPlaying: isPlayingRef.current,
-              timelinePreview: true,
-            },
-            timelineIndexRef.current,
-          ).uniforms,
-        motionStateRef,
-      );
+      const motionState = resolveMotionState(currentTime, currentUniforms.motion_rate, currentUniforms.motion_rate_y, motionStateRef);
       const dpr = window.devicePixelRatio || 1;
       const width = Math.max(1, Math.floor(canvas.clientWidth * dpr));
       const height = Math.max(1, Math.floor(canvas.clientHeight * dpr));
@@ -163,22 +146,41 @@ function resolveMotionState(
   currentTime: number,
   currentRateX: number,
   currentRateY: number,
-  sampleUniformsAtTime: (time: number) => { motion_rate: number; motion_rate_y: number },
   motionStateRef: { current: MotionState | null },
 ): MotionState {
   const safeTime = Math.max(0, currentTime);
   const previous = motionStateRef.current;
-  if (!previous || safeTime < previous.time - 0.0001 || safeTime - previous.time > 0.25) {
-    const recomputed = recomputeMotionState(safeTime, currentRateX, currentRateY, sampleUniformsAtTime);
-    motionStateRef.current = recomputed;
-    return recomputed;
+  if (!previous) {
+    const initial = {
+      offsetX: 0,
+      offsetY: 0,
+      rateX: currentRateX,
+      rateY: currentRateY,
+      time: safeTime,
+    };
+    motionStateRef.current = initial;
+    return initial;
   }
+
   const delta = safeTime - previous.time;
+  if (delta < -0.0001) {
+    const reset = {
+      offsetX: 0,
+      offsetY: 0,
+      rateX: currentRateX,
+      rateY: currentRateY,
+      time: safeTime,
+    };
+    motionStateRef.current = reset;
+    return reset;
+  }
+
   if (delta <= 0.0001) {
     const stationary = { ...previous, rateX: currentRateX, rateY: currentRateY, time: safeTime };
     motionStateRef.current = stationary;
     return stationary;
   }
+
   const next = {
     offsetX: previous.offsetX + ((previous.rateX + currentRateX) * 0.5 * delta),
     offsetY: previous.offsetY + ((previous.rateY + currentRateY) * 0.5 * delta),
@@ -188,47 +190,4 @@ function resolveMotionState(
   };
   motionStateRef.current = next;
   return next;
-}
-
-function recomputeMotionState(
-  currentTime: number,
-  currentRateX: number,
-  currentRateY: number,
-  sampleUniformsAtTime: (time: number) => { motion_rate: number; motion_rate_y: number },
-): MotionState {
-  const safeTime = Math.max(0, currentTime);
-  if (safeTime <= 0.0001) {
-    return {
-      offsetX: 0,
-      offsetY: 0,
-      rateX: currentRateX,
-      rateY: currentRateY,
-      time: safeTime,
-    };
-  }
-
-  const steps = Math.min(2048, Math.max(1, Math.ceil(safeTime * 120)));
-  let offsetX = 0;
-  let offsetY = 0;
-  let previousTime = 0;
-  let previousUniforms = sampleUniformsAtTime(0);
-
-  for (let index = 1; index <= steps; index += 1) {
-    const sampleTime = (safeTime * index) / steps;
-    const uniforms =
-      index === steps ? { motion_rate: currentRateX, motion_rate_y: currentRateY } : sampleUniformsAtTime(sampleTime);
-    const delta = sampleTime - previousTime;
-    offsetX += ((previousUniforms.motion_rate + uniforms.motion_rate) * 0.5 * delta);
-    offsetY += ((previousUniforms.motion_rate_y + uniforms.motion_rate_y) * 0.5 * delta);
-    previousTime = sampleTime;
-    previousUniforms = uniforms;
-  }
-
-  return {
-    offsetX,
-    offsetY,
-    rateX: currentRateX,
-    rateY: currentRateY,
-    time: safeTime,
-  };
 }

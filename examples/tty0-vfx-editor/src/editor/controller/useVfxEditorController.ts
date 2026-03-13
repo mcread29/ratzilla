@@ -65,6 +65,7 @@ export function useVfxEditorController() {
   const transportStartedAtRef = useRef(0);
   const audioStartedRef = useRef(false);
   const audioStartPendingRef = useRef(false);
+  const audioTransportAnchorRef = useRef(0);
 
   const timeline = useMemo(() => timelineFromConfig(draft), [draft]);
   const timelineIndex = useMemo(() => buildTimelineIndex(timeline), [timeline]);
@@ -152,12 +153,13 @@ export function useVfxEditorController() {
     stopTransportFrame();
     const audio = audioRef.current;
     const nextTime =
-      audio && audioStartedRef.current ? transportTimeFromAudioTime(audio.currentTime, timeline) : playbackTimeRef.current;
+      audio && audioStartedRef.current ? audio.currentTime + audioTransportAnchorRef.current : playbackTimeRef.current;
     if (audio && !audio.paused) {
       audio.pause();
     }
     audioStartedRef.current = false;
     audioStartPendingRef.current = false;
+    audioTransportAnchorRef.current = 0;
     playbackTimeRef.current = clampTransportTime(nextTime);
     syncAudioToTransport(playbackTimeRef.current, true);
     setIsPlaying(false);
@@ -172,6 +174,7 @@ export function useVfxEditorController() {
     }
     audioStartedRef.current = false;
     audioStartPendingRef.current = false;
+    audioTransportAnchorRef.current = 0;
     playbackTimeRef.current = clampTransportTime(nextTime);
     syncAudioToTransport(playbackTimeRef.current, true);
     setIsPlaying(false);
@@ -180,7 +183,13 @@ export function useVfxEditorController() {
 
   async function startAudioAtTransportTime(nextTime: number): Promise<boolean> {
     const audio = audioRef.current;
-    if (!audio || audioStartedRef.current || audioStartPendingRef.current) {
+    if (!audio) {
+      return false;
+    }
+    if (audioStartedRef.current) {
+      return false;
+    }
+    if (audioStartPendingRef.current) {
       return false;
     }
     audioStartPendingRef.current = true;
@@ -188,6 +197,7 @@ export function useVfxEditorController() {
     if (Math.abs(audio.currentTime - targetAudioTime) > 0.05) {
       audio.currentTime = targetAudioTime;
     }
+    audioTransportAnchorRef.current = nextTime - audio.currentTime;
     try {
       await audio.play();
       audioStartPendingRef.current = false;
@@ -209,7 +219,8 @@ export function useVfxEditorController() {
     let nextTime = transportOriginTimeRef.current + (now - transportStartedAtRef.current) / 1000;
     const audio = audioRef.current;
     if (audio && audioStartedRef.current && !audio.paused && !audio.ended) {
-      nextTime = transportTimeFromAudioTime(audio.currentTime, timeline);
+      const audioTime = audio.currentTime + audioTransportAnchorRef.current;
+      nextTime = Math.max(nextTime, audioTime);
     }
     nextTime = clampTransportTime(nextTime);
     playbackTimeRef.current = nextTime;
@@ -240,7 +251,7 @@ export function useVfxEditorController() {
       }
       const audio = audioRef.current;
       if (audio) {
-        playbackTimeRef.current = clampTransportTime(transportTimeFromAudioTime(audio.currentTime, timeline));
+        playbackTimeRef.current = clampTransportTime(audio.currentTime + audioTransportAnchorRef.current);
         transportOriginTimeRef.current = playbackTimeRef.current;
         transportStartedAtRef.current = performance.now();
       }
@@ -252,6 +263,7 @@ export function useVfxEditorController() {
     stopPlayback(0);
     setAudioReady(!effectiveAudioUrl);
     setAudioDuration(null);
+    audioTransportAnchorRef.current = 0;
   }, [effectiveAudioUrl]);
 
   useEffect(() => {
@@ -511,16 +523,19 @@ export function useVfxEditorController() {
     if (!isPlaying) {
       audioStartedRef.current = false;
       audioStartPendingRef.current = false;
+      audioTransportAnchorRef.current = clampedTime - (audioRef.current?.currentTime ?? 0);
       return;
     }
     if (clampedTime < leadInDuration) {
       audioStartedRef.current = false;
       audioStartPendingRef.current = false;
+      audioTransportAnchorRef.current = 0;
       return;
     }
     const audio = audioRef.current;
     if (audio && !audio.paused) {
       audioStartedRef.current = true;
+      audioTransportAnchorRef.current = clampedTime - audio.currentTime;
       return;
     }
     void startAudioAtTransportTime(clampedTime);
