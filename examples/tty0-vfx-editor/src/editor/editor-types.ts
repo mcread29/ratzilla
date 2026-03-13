@@ -20,11 +20,20 @@ export type ClipDropIndicator = {
 };
 
 export type LoadedDocument = {
-  audioUrl: string | null;
   name: string;
-  savedSnapshot: string;
+  savedSnapshot: string | null;
+  audioPath: string | null;
+  source:
+    | { kind: "local-project"; projectId: string }
+    | { kind: "imported-json"; sourceName: string | null }
+    | { kind: "new-draft" };
   visualizer: TrackVisualizerConfig;
 };
+
+export type MountedAudioState =
+  | { kind: "none" }
+  | { kind: "path"; path: string }
+  | { kind: "imported-file"; fileName: string; objectUrl: string; blobKey: string | null; blob: Blob };
 
 export type LaneMeta = {
   label: string;

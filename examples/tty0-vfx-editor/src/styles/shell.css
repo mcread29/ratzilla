@@ -263,14 +263,52 @@
   font-size: 0.78rem;
 }
 
+.session-project-shelf,
+.session-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.session-project-shelf label,
+.session-field label {
+  color: var(--muted-foreground);
+  font-size: 0.78rem;
+}
+
+.session-audio-summary {
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted-foreground);
+  font-size: 0.83rem;
+}
+
 .action-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.35rem;
 }
 
+.action-grid-wide {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .action-grid > :last-child {
   grid-column: 1 / -1;
+}
+
+.session-dialog-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.session-dialog-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.84rem;
 }
 
 .library-panel .list {
@@ -654,5 +692,11 @@
 
   .preview-panel {
     width: min(100%, 88vw);
+  }
+}
+
+@media (min-width: 961px) {
+  .action-grid-wide {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

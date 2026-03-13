@@ -37,19 +37,30 @@ export function VfxEditorScreen() {
   const sessionPanel = (
     <SessionPanel
       loadedName={documentState.loaded?.name ?? null}
+      sourceKind={documentState.loaded?.source.kind ?? null}
       dirty={documentState.dirty}
+      recoveredWorkspace={documentState.recoveredWorkspace}
       hasLoadedDocument={Boolean(documentState.loaded)}
       message={documentState.message}
       messageTone={documentState.messageTone}
       fileInputRef={documentState.fileInputRef}
       audioInputRef={documentState.audioInputRef}
+      projects={documentState.projects}
+      activeProjectId={documentState.activeProjectId}
+      mountedAudio={documentState.mountedAudio}
+      audioPath={documentState.loaded?.audioPath ?? null}
+      saveDialog={documentState.saveDialog}
       onNewVisualizer={documentActions.handleNewVisualizer}
       onImportRecord={documentActions.handleImportRecord}
       onImportAudio={documentActions.handleImportAudio}
-      onSave={() => {
-        void documentActions.handleSave();
-      }}
-      onRevert={documentActions.revertToLoaded}
+      onSave={() => void documentActions.handleSave()}
+      onSaveAs={documentActions.handleSaveAs}
+      onExportJson={documentActions.handleExportJson}
+      onSelectProject={(projectId) => void documentActions.selectProjectById(projectId)}
+      onSaveDialogClose={documentActions.closeSaveDialog}
+      onSaveDialogNameChange={documentActions.updateSaveDialogName}
+      onSubmitSaveDialog={() => void documentActions.submitSaveDialog()}
+      onRevert={() => void documentActions.revertToLoaded()}
     />
   );
 
