@@ -1,8 +1,11 @@
 import {
+  ColorValue,
   ChromaticBulgeGridAutomation,
   ChromaticBulgeGridAutomationLanes,
   ChromaticBulgeGridClip,
   ChromaticBulgeGridClipSource,
+  ChromaticBulgeGridColorLfoClip,
+  ChromaticBulgeGridFloatLfoClip,
   ChromaticBulgeGridClipTimeline,
   ChromaticBulgeGridLfoClip,
   ChromaticBulgeGridLfoShape,
@@ -10,6 +13,7 @@ import {
   ClipPlacement,
   ClipTweenStep,
   ColorKeyframe,
+  ColorLaneId,
   FloatKeyframe,
   LaneId,
   LfoPoint,
@@ -64,14 +68,14 @@ export const LANE_ORDER: LaneId[] = [
 ];
 
 const COLOR_LANES = new Set<LaneId>(["cold_color", "hot_color"]);
-const LFO_LANES = LANE_ORDER.filter((lane) => !COLOR_LANES.has(lane));
 
-export function isColorLane(lane: LaneId): boolean {
+export function isColorLane(lane: LaneId): lane is ColorLaneId {
   return COLOR_LANES.has(lane);
 }
 
 export function supportsLfo(lane: LaneId): boolean {
-  return !isColorLane(lane);
+  void lane;
+  return true;
 }
 
 export function defaultShaderState(): ChromaticBulgeGridShaderState {
@@ -108,14 +112,27 @@ export function defaultLfoClip(
   lane: LaneId,
   base: ChromaticBulgeGridShaderState,
 ): ChromaticBulgeGridClipSource {
-  const baseValue = Number(base[lane as keyof ChromaticBulgeGridShaderState] ?? 0);
-  const span = laneDefaultSpan(lane);
+  if (isColorLane(lane)) {
+    const start = clampColor(base[lane]);
+    return {
+      kind: "lfo",
+      lane,
+      shape: defaultClipLfoShape(),
+      start,
+      end: defaultColorRangeEnd(lane, start),
+      period_beats: 4,
+      phase_offset_beats: 0,
+      start_mode: "retrigger",
+    };
+  }
+
+  const start = base[lane];
   return {
     kind: "lfo",
     lane,
     shape: defaultClipLfoShape(),
-    min: baseValue,
-    max: baseValue + span,
+    start,
+    end: start + laneDefaultSpan(lane),
     period_beats: 4,
     phase_offset_beats: 0,
     start_mode: "retrigger",
@@ -234,7 +251,7 @@ function normalizeClip(
   index: number,
   base: ChromaticBulgeGridShaderState,
 ): ChromaticBulgeGridClip {
-  const lane = primaryLane(clip)?.lane ?? LFO_LANES[0];
+  const lane = primaryLane(clip)?.lane ?? LANE_ORDER[0];
   const source = normalizeClipSource(clip.source, lane, base);
   return {
     ...clip,
@@ -260,15 +277,39 @@ function normalizeClipSource(
     throw new Error(SHARED_LFO_IMPORT_ERROR);
   }
   const fallback = defaultLfoClip(source.lane, base);
-  return {
-    kind: "lfo",
-    lane: supportsLfo(source.lane) ? source.lane : fallback.lane,
+  const rawSource = source as {
+    start?: unknown;
+    end?: unknown;
+    min?: unknown;
+    max?: unknown;
+  };
+  const nextLane = supportsLfo(source.lane) ? source.lane : fallback.lane;
+  const startMode = source.start_mode === "continue" ? ("continue" as const) : ("retrigger" as const);
+  const shared = {
+    kind: "lfo" as const,
+    lane: nextLane,
     shape: normalizeClipLfoShape(source.shape),
-    min: finiteOr(source.min, fallback.min),
-    max: finiteOr(source.max, fallback.max),
     period_beats: Math.max(0.0001, finiteOr(source.period_beats, fallback.period_beats)),
     phase_offset_beats: finiteOr(source.phase_offset_beats, 0),
-    start_mode: source.start_mode === "continue" ? "continue" : "retrigger",
+    start_mode: startMode,
+  };
+
+  if (isColorLane(nextLane)) {
+    const colorFallback = fallback as ChromaticBulgeGridColorLfoClip;
+    return {
+      ...shared,
+      lane: nextLane,
+      start: normalizeColorRangeValue(rawSource.start, rawSource.min, colorFallback.start),
+      end: normalizeColorRangeValue(rawSource.end, rawSource.max, colorFallback.end),
+    };
+  }
+
+  const floatFallback = fallback as ChromaticBulgeGridFloatLfoClip;
+  return {
+    ...shared,
+    lane: nextLane,
+    start: finiteOr(rawSource.start as number | undefined, finiteOr(rawSource.min as number | undefined, floatFallback.start)),
+    end: finiteOr(rawSource.end as number | undefined, finiteOr(rawSource.max as number | undefined, floatFallback.end)),
   };
 }
 
@@ -377,7 +418,12 @@ function applyLfoToState(
     (source.start_mode === "continue" ? globalBeat : localBeat) + source.phase_offset_beats;
   const phase = (phaseBeats / Math.max(0.0001, source.period_beats)) % 1;
   const sample = sampleLfoShape(source.shape, phase);
-  const value = source.min + (source.max - source.min) * sample;
+  if (isColorLane(source.lane)) {
+    const colorSource = source as ChromaticBulgeGridColorLfoClip;
+    return applyLfoColorToState(state, source.lane, mixColor(colorSource.start, colorSource.end, sample));
+  }
+  const floatSource = source as ChromaticBulgeGridFloatLfoClip;
+  const value = floatSource.start + (floatSource.end - floatSource.start) * sample;
   return applyLfoValueToState(state, source.lane, value);
 }
 
@@ -450,6 +496,19 @@ function applyLfoValueToState(
     case "cold_color":
     case "hot_color":
       return state;
+  }
+}
+
+function applyLfoColorToState(
+  state: ChromaticBulgeGridShaderState,
+  lane: Extract<LaneId, "cold_color" | "hot_color">,
+  value: ColorValue,
+): ChromaticBulgeGridShaderState {
+  switch (lane) {
+    case "cold_color":
+      return { ...state, cold_color: value };
+    case "hot_color":
+      return { ...state, hot_color: value };
   }
 }
 
@@ -672,8 +731,14 @@ export function isLegacyClip(clip: ChromaticBulgeGridClip): boolean {
 }
 
 export function clipSummary(clip: ChromaticBulgeGridClip): string {
-  if (!clip.source?.kind) return "Legacy step clip";
-  return `${clip.source.min.toFixed(2)}-${clip.source.max.toFixed(2)} · ${clip.length_beats.toFixed(2)}b`;
+  const source = clip.source?.kind === "lfo" ? clip.source : null;
+  if (!source) return "Legacy step clip";
+  if (isColorLane(source.lane)) {
+    const colorSource = source as ChromaticBulgeGridColorLfoClip;
+    return `${formatColorHex(colorSource.start)}->${formatColorHex(colorSource.end)} · ${clip.length_beats.toFixed(2)}b`;
+  }
+  const floatSource = source as ChromaticBulgeGridFloatLfoClip;
+  return `${floatSource.start.toFixed(2)}-${floatSource.end.toFixed(2)} · ${clip.length_beats.toFixed(2)}b`;
 }
 
 function laneDefaultSpan(lane: LaneId): number {
@@ -689,6 +754,27 @@ function laneDefaultSpan(lane: LaneId): number {
     default:
       return 0.15;
   }
+}
+
+function defaultColorRangeEnd(lane: Extract<LaneId, "cold_color" | "hot_color">, start: ColorValue): ColorValue {
+  const accent = lane === "cold_color" ? ([0.43, 0.86, 0.83] as ColorValue) : ([0.92, 0.45, 0.28] as ColorValue);
+  return mixColor(start, accent, 0.7);
+}
+
+function normalizeColorRangeValue(current: unknown, legacy: unknown, fallback: ColorValue): ColorValue {
+  if (Array.isArray(current) && current.length === 3) {
+    return clampColor(current as ColorValue);
+  }
+  if (Array.isArray(legacy) && legacy.length === 3) {
+    return clampColor(legacy as ColorValue);
+  }
+  return fallback;
+}
+
+function formatColorHex(value: ColorValue): string {
+  return `#${value
+    .map((channel) => Math.round(clampColorChannel(channel) * 255).toString(16).padStart(2, "0"))
+    .join("")}`;
 }
 
 function normalizeShaderState(
@@ -818,6 +904,19 @@ function clampState(state: ChromaticBulgeGridShaderState): ChromaticBulgeGridSha
 
 function clampColor(value: [number, number, number]): [number, number, number] {
   return [clamp01(value[0]), clamp01(value[1]), clamp01(value[2])];
+}
+
+function clampColorChannel(value: number): number {
+  return clamp01(value);
+}
+
+function mixColor(left: ColorValue, right: ColorValue, amount: number): ColorValue {
+  const t = clamp01(amount);
+  return [
+    left[0] + (right[0] - left[0]) * t,
+    left[1] + (right[1] - left[1]) * t,
+    left[2] + (right[2] - left[2]) * t,
+  ];
 }
 
 function palette(index: number): [number, number, number] {

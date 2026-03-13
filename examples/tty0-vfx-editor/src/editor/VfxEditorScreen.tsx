@@ -153,8 +153,8 @@ export function VfxEditorScreen() {
       onCommitShape={shapeActions.commitSelectedClipShape}
       onChangeClipName={clipActions.changeClipName}
       onChangeClipBeatValue={clipActions.updateSelectedClipBeatValue}
-      onChangeClipMin={clipActions.changeClipMin}
-      onChangeClipMax={clipActions.changeClipMax}
+      onChangeClipStartValue={clipActions.changeClipStartValue}
+      onChangeClipEndValue={clipActions.changeClipEndValue}
       onChangeClipHoldAfter={clipActions.changeClipHoldAfter}
     />
   );
@@ -180,9 +180,81 @@ export function VfxEditorScreen() {
         preload="auto"
         onCanPlay={() => arrangementActions.setAudioReady(true)}
         onCanPlayThrough={() => arrangementActions.setAudioReady(true)}
+        onPlay={() => {
+          const audio = previewState.audioRef.current;
+          console.debug("[tty0-audio]", "event:play", {
+            performanceNowMs: Number(performance.now().toFixed(1)),
+            currentTime: audio ? Number(audio.currentTime.toFixed(3)) : null,
+            readyState: audio?.readyState ?? null,
+            networkState: audio?.networkState ?? null,
+          });
+        }}
+        onPlaying={() => {
+          const audio = previewState.audioRef.current;
+          console.debug("[tty0-audio]", "event:playing", {
+            performanceNowMs: Number(performance.now().toFixed(1)),
+            currentTime: audio ? Number(audio.currentTime.toFixed(3)) : null,
+            readyState: audio?.readyState ?? null,
+            networkState: audio?.networkState ?? null,
+          });
+        }}
+        onWaiting={() => {
+          const audio = previewState.audioRef.current;
+          console.debug("[tty0-audio]", "event:waiting", {
+            performanceNowMs: Number(performance.now().toFixed(1)),
+            currentTime: audio ? Number(audio.currentTime.toFixed(3)) : null,
+            readyState: audio?.readyState ?? null,
+            networkState: audio?.networkState ?? null,
+          });
+        }}
+        onStalled={() => {
+          const audio = previewState.audioRef.current;
+          console.debug("[tty0-audio]", "event:stalled", {
+            performanceNowMs: Number(performance.now().toFixed(1)),
+            currentTime: audio ? Number(audio.currentTime.toFixed(3)) : null,
+            readyState: audio?.readyState ?? null,
+            networkState: audio?.networkState ?? null,
+          });
+        }}
+        onSeeking={() => {
+          const audio = previewState.audioRef.current;
+          console.debug("[tty0-audio]", "event:seeking", {
+            performanceNowMs: Number(performance.now().toFixed(1)),
+            currentTime: audio ? Number(audio.currentTime.toFixed(3)) : null,
+            readyState: audio?.readyState ?? null,
+            networkState: audio?.networkState ?? null,
+          });
+        }}
+        onSeeked={() => {
+          const audio = previewState.audioRef.current;
+          console.debug("[tty0-audio]", "event:seeked", {
+            performanceNowMs: Number(performance.now().toFixed(1)),
+            currentTime: audio ? Number(audio.currentTime.toFixed(3)) : null,
+            readyState: audio?.readyState ?? null,
+            networkState: audio?.networkState ?? null,
+          });
+        }}
+        onError={() => {
+          const audio = previewState.audioRef.current;
+          console.debug("[tty0-audio]", "event:error", {
+            performanceNowMs: Number(performance.now().toFixed(1)),
+            currentTime: audio ? Number(audio.currentTime.toFixed(3)) : null,
+            readyState: audio?.readyState ?? null,
+            networkState: audio?.networkState ?? null,
+            mediaError: audio?.error?.message ?? audio?.error?.code ?? null,
+          });
+        }}
         onLoadedMetadata={() => {
           const duration = previewState.audioRef.current?.duration;
           arrangementActions.setAudioDuration(typeof duration === "number" && Number.isFinite(duration) ? duration : null);
+          const audio = previewState.audioRef.current;
+          console.debug("[tty0-audio]", "event:loadedmetadata", {
+            performanceNowMs: Number(performance.now().toFixed(1)),
+            currentTime: audio ? Number(audio.currentTime.toFixed(3)) : null,
+            duration: typeof duration === "number" && Number.isFinite(duration) ? Number(duration.toFixed(3)) : null,
+            readyState: audio?.readyState ?? null,
+            networkState: audio?.networkState ?? null,
+          });
         }}
       />
       <main className={desktopLayout ? "workspace-resizable" : "workspace"}>

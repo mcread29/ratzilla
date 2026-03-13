@@ -1,7 +1,7 @@
 import { ChangeEvent, DragEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { importRecordFromJson } from "../../platform";
-import { ClipPlacement, LaneId, LfoPoint, TrackVisualizerConfig } from "../../types";
+import { ClipPlacement, ColorValue, LaneId, LfoPoint, TrackVisualizerConfig } from "../../types";
 import {
   audioTimeFromTransportTime,
   buildTimelineIndex,
@@ -31,6 +31,8 @@ import { jsonFilename, serializeVisualizer } from "../utils/formatting";
 import { EDITOR_LANES, laneMeta, visibleLane } from "../utils/lanes";
 import { snapBeatToGrid } from "../utils/timelineMath";
 
+const AUDIO_HANDOFF_DEBUG = false;
+
 export function useVfxEditorController() {
   type MessageTone = "info" | "success" | "warning" | "error";
 
@@ -58,6 +60,8 @@ export function useVfxEditorController() {
 
   const playbackTimeRef = useRef(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const outputPrimeContextRef = useRef<AudioContext | null>(null);
+  const outputPrimeDoneRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const transportFrameRef = useRef<number | null>(null);
@@ -66,6 +70,8 @@ export function useVfxEditorController() {
   const audioStartedRef = useRef(false);
   const audioStartPendingRef = useRef(false);
   const audioTransportAnchorRef = useRef(0);
+  const audioHandoffLoggedRef = useRef(false);
+  const audioFirstProgressLoggedRef = useRef(false);
 
   const timeline = useMemo(() => timelineFromConfig(draft), [draft]);
   const timelineIndex = useMemo(() => buildTimelineIndex(timeline), [timeline]);
@@ -128,6 +134,60 @@ export function useVfxEditorController() {
     return Math.max(0, Math.min(totalDurationSeconds, nextTime));
   }
 
+  async function primeAudioOutputPath(): Promise<void> {
+    try {
+      const AudioContextCtor = window.AudioContext;
+      if (!AudioContextCtor) {
+        return;
+      }
+      const context = outputPrimeContextRef.current ?? new AudioContextCtor();
+      outputPrimeContextRef.current = context;
+      if (outputPrimeDoneRef.current && context.state === "running") {
+        return;
+      }
+      if (context.state === "suspended") {
+        await context.resume();
+      }
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = 440;
+      gain.gain.value = 0.00001;
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.onended = () => {
+        oscillator.disconnect();
+        gain.disconnect();
+      };
+      const startAt = context.currentTime;
+      const stopAt = startAt + 0.05;
+      oscillator.start(startAt);
+      oscillator.stop(stopAt);
+      outputPrimeDoneRef.current = true;
+    } catch (error) {
+      if (AUDIO_HANDOFF_DEBUG) {
+        console.debug("[tty0-audio]", "output-prime-failed", {
+          performanceNowMs: Number(performance.now().toFixed(1)),
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  function logAudioDebug(message: string, extra?: Record<string, unknown>) {
+    if (!AUDIO_HANDOFF_DEBUG) return;
+    const audio = audioRef.current;
+    console.debug("[tty0-audio]", message, {
+      performanceNowMs: Number(performance.now().toFixed(1)),
+      playbackTime: Number(playbackTimeRef.current.toFixed(3)),
+      audioCurrentTime: audio ? Number(audio.currentTime.toFixed(3)) : null,
+      readyState: audio?.readyState ?? null,
+      paused: audio?.paused ?? null,
+      waiting: audio ? audio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA : null,
+      ...extra,
+    });
+  }
+
   function stopTransportFrame() {
     if (transportFrameRef.current != null) {
       cancelAnimationFrame(transportFrameRef.current);
@@ -160,8 +220,9 @@ export function useVfxEditorController() {
     audioStartedRef.current = false;
     audioStartPendingRef.current = false;
     audioTransportAnchorRef.current = 0;
+    audioHandoffLoggedRef.current = false;
+    audioFirstProgressLoggedRef.current = false;
     playbackTimeRef.current = clampTransportTime(nextTime);
-    syncAudioToTransport(playbackTimeRef.current, true);
     setIsPlaying(false);
     setPlayPending(false);
   }
@@ -175,8 +236,9 @@ export function useVfxEditorController() {
     audioStartedRef.current = false;
     audioStartPendingRef.current = false;
     audioTransportAnchorRef.current = 0;
+    audioHandoffLoggedRef.current = false;
+    audioFirstProgressLoggedRef.current = false;
     playbackTimeRef.current = clampTransportTime(nextTime);
-    syncAudioToTransport(playbackTimeRef.current, true);
     setIsPlaying(false);
     setPlayPending(false);
   }
@@ -195,13 +257,25 @@ export function useVfxEditorController() {
     audioStartPendingRef.current = true;
     const targetAudioTime = audioTimeFromTransportTime(nextTime, timeline);
     if (Math.abs(audio.currentTime - targetAudioTime) > 0.05) {
+      logAudioDebug("seek-before-play", {
+        nextTime: Number(nextTime.toFixed(3)),
+        targetAudioTime: Number(targetAudioTime.toFixed(3)),
+      });
       audio.currentTime = targetAudioTime;
     }
     audioTransportAnchorRef.current = nextTime - audio.currentTime;
+    logAudioDebug("audio-play-request", {
+      nextTime: Number(nextTime.toFixed(3)),
+      targetAudioTime: Number(targetAudioTime.toFixed(3)),
+      anchor: Number(audioTransportAnchorRef.current.toFixed(3)),
+    });
     try {
       await audio.play();
       audioStartPendingRef.current = false;
       audioStartedRef.current = true;
+      logAudioDebug("audio-play-resolved", {
+        anchor: Number(audioTransportAnchorRef.current.toFixed(3)),
+      });
       return true;
     } catch (error) {
       audioStartPendingRef.current = false;
@@ -221,6 +295,12 @@ export function useVfxEditorController() {
     if (audio && audioStartedRef.current && !audio.paused && !audio.ended) {
       const audioTime = audio.currentTime + audioTransportAnchorRef.current;
       nextTime = Math.max(nextTime, audioTime);
+      if (!audioFirstProgressLoggedRef.current && audio.currentTime > 0.02) {
+        audioFirstProgressLoggedRef.current = true;
+        logAudioDebug("audio-current-time-advanced", {
+          anchoredTransportTime: Number(audioTime.toFixed(3)),
+        });
+      }
     }
     nextTime = clampTransportTime(nextTime);
     playbackTimeRef.current = nextTime;
@@ -229,6 +309,13 @@ export function useVfxEditorController() {
       return;
     }
     if (nextTime >= leadInDuration && !audioStartedRef.current && !audioStartPendingRef.current) {
+      if (!audioHandoffLoggedRef.current) {
+        audioHandoffLoggedRef.current = true;
+        logAudioDebug("lead-in-boundary-crossed", {
+          leadInDuration: Number(leadInDuration.toFixed(3)),
+          totalDurationSeconds: Number(totalDurationSeconds.toFixed(3)),
+        });
+      }
       void startAudioAtTransportTime(nextTime);
     }
     transportFrameRef.current = requestAnimationFrame(runTransportFrame);
@@ -264,6 +351,8 @@ export function useVfxEditorController() {
     setAudioReady(!effectiveAudioUrl);
     setAudioDuration(null);
     audioTransportAnchorRef.current = 0;
+    audioHandoffLoggedRef.current = false;
+    audioFirstProgressLoggedRef.current = false;
   }, [effectiveAudioUrl]);
 
   useEffect(() => {
@@ -281,7 +370,6 @@ export function useVfxEditorController() {
       return;
     }
     playbackTimeRef.current = clampTransportTime(playbackTimeRef.current);
-    syncAudioToTransport(playbackTimeRef.current, true);
   }, [isPlaying, leadInDuration, totalDurationSeconds]);
 
   useEffect(() => () => stopTransportFrame(), []);
@@ -519,13 +607,21 @@ export function useVfxEditorController() {
     playbackTimeRef.current = clampedTime;
     transportOriginTimeRef.current = clampedTime;
     transportStartedAtRef.current = performance.now();
-    syncAudioToTransport(clampedTime, true);
     if (!isPlaying) {
       audioStartedRef.current = false;
       audioStartPendingRef.current = false;
       audioTransportAnchorRef.current = clampedTime - (audioRef.current?.currentTime ?? 0);
+      const audio = audioRef.current;
+      if (audio) {
+        const targetAudioTime = audioTimeFromTransportTime(clampedTime, timeline);
+        if (Math.abs(audio.currentTime - targetAudioTime) > 0.05) {
+          audio.currentTime = targetAudioTime;
+        }
+        audioTransportAnchorRef.current = clampedTime - audio.currentTime;
+      }
       return;
     }
+    syncAudioToTransport(clampedTime, true);
     if (clampedTime < leadInDuration) {
       audioStartedRef.current = false;
       audioStartPendingRef.current = false;
@@ -576,6 +672,9 @@ export function useVfxEditorController() {
     if (isPlaying) {
       pausePlayback();
       return;
+    }
+    if (playbackTimeRef.current < leadInDuration) {
+      void primeAudioOutputPath();
     }
     if (!previewReady || !audioReady) {
       setPlayPending(true);
@@ -807,25 +906,25 @@ export function useVfxEditorController() {
     });
   }
 
-  function changeClipMin(value: number) {
+  function changeClipStartValue(value: number | ColorValue) {
     if (!selectedClip) return;
     updateDraft((current) => {
       const nextTimeline = timelineFromConfig(current);
       const clip = nextTimeline.clips.find((candidate) => candidate.id === selectedClip.id);
       if (!clip?.source || clip.source.kind !== "lfo") return current;
-      clip.source.min = value;
+      clip.source.start = value as never;
       current.timeline = nextTimeline;
       return current;
     });
   }
 
-  function changeClipMax(value: number) {
+  function changeClipEndValue(value: number | ColorValue) {
     if (!selectedClip) return;
     updateDraft((current) => {
       const nextTimeline = timelineFromConfig(current);
       const clip = nextTimeline.clips.find((candidate) => candidate.id === selectedClip.id);
       if (!clip?.source || clip.source.kind !== "lfo") return current;
-      clip.source.max = value;
+      clip.source.end = value as never;
       current.timeline = nextTimeline;
       return current;
     });
@@ -988,8 +1087,8 @@ export function useVfxEditorController() {
       changeBaseValue,
       changeClipName,
       updateSelectedClipBeatValue,
-      changeClipMin,
-      changeClipMax,
+      changeClipStartValue,
+      changeClipEndValue,
       changeClipHoldAfter,
       changeTimelineBpm,
       changeTimelineMeasures,

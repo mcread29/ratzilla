@@ -4,6 +4,8 @@ export type TrackVisualizerMode =
   | "containment_lattice"
   | "chromatic_bulge_grid";
 
+export type ColorValue = [number, number, number];
+
 export type InterpolationMode = "hold" | "linear";
 export type ClipTweenEase =
   | "hold"
@@ -14,7 +16,7 @@ export type ClipTweenEase =
 
 export type ClipTweenValue =
   | { kind: "float"; value: number }
-  | { kind: "color"; value: [number, number, number] };
+  | { kind: "color"; value: ColorValue };
 
 export interface FloatKeyframe {
   beat: number;
@@ -24,7 +26,7 @@ export interface FloatKeyframe {
 
 export interface ColorKeyframe {
   beat: number;
-  value: [number, number, number];
+  value: ColorValue;
   interpolation: InterpolationMode;
 }
 
@@ -64,8 +66,8 @@ export interface ChromaticBulgeGridShaderState {
   outer_dot_scale: number;
   edge_softness: number;
   chromatic_aberration: number;
-  cold_color: [number, number, number];
-  hot_color: [number, number, number];
+  cold_color: ColorValue;
+  hot_color: ColorValue;
   color_cycle_rate: number;
   inner_alpha: number;
 }
@@ -122,26 +124,41 @@ export interface ChromaticBulgeGridLfoShape {
 
 export type LfoStartMode = "retrigger" | "continue";
 
-export interface ChromaticBulgeGridLfoClip {
-  lane: LaneId;
+export type ColorLaneId = Extract<LaneId, "cold_color" | "hot_color">;
+export type FloatLaneId = Exclude<LaneId, ColorLaneId>;
+
+interface ChromaticBulgeGridBaseLfoClip {
+  kind: "lfo";
   shape: ChromaticBulgeGridLfoShape;
-  min: number;
-  max: number;
   period_beats: number;
   phase_offset_beats: number;
   start_mode: LfoStartMode;
 }
 
-export type ChromaticBulgeGridClipSource = {
-  kind: "lfo";
-} & ChromaticBulgeGridLfoClip;
+export interface ChromaticBulgeGridFloatLfoClip extends ChromaticBulgeGridBaseLfoClip {
+  lane: FloatLaneId;
+  start: number;
+  end: number;
+}
+
+export interface ChromaticBulgeGridColorLfoClip extends ChromaticBulgeGridBaseLfoClip {
+  lane: ColorLaneId;
+  start: ColorValue;
+  end: ColorValue;
+}
+
+export type ChromaticBulgeGridLfoClip =
+  | ChromaticBulgeGridFloatLfoClip
+  | ChromaticBulgeGridColorLfoClip;
+
+export type ChromaticBulgeGridClipSource = ChromaticBulgeGridLfoClip;
 
 export interface ChromaticBulgeGridClip {
   id: string;
   name: string;
   length_beats: number;
   hold_after?: boolean;
-  color: [number, number, number];
+  color: ColorValue;
   source?: ChromaticBulgeGridClipSource;
   authoring?: ChromaticBulgeGridClipAuthoring;
   lanes: ChromaticBulgeGridAutomationLanes;

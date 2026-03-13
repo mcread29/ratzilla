@@ -1,4 +1,4 @@
-import { ChromaticBulgeGridClip, LfoPoint } from "../../types";
+import { ColorValue, ChromaticBulgeGridClip, LfoPoint } from "../../types";
 import { ClipMetadataForm } from "./ClipMetadataForm";
 import { ShapeEditorPanel } from "./ShapeEditorPanel";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,8 +14,8 @@ export function ClipEditorPanel({
   onCommitShape,
   onChangeClipName,
   onChangeClipBeatValue,
-  onChangeClipMin,
-  onChangeClipMax,
+  onChangeClipStartValue,
+  onChangeClipEndValue,
   onChangeClipHoldAfter,
 }: {
   selectedClip: ChromaticBulgeGridClip | null;
@@ -28,8 +28,8 @@ export function ClipEditorPanel({
   onCommitShape: (points: LfoPoint[]) => void;
   onChangeClipName: (value: string) => void;
   onChangeClipBeatValue: (value: number) => void;
-  onChangeClipMin: (value: number) => void;
-  onChangeClipMax: (value: number) => void;
+  onChangeClipStartValue: (value: number | ColorValue) => void;
+  onChangeClipEndValue: (value: number | ColorValue) => void;
   onChangeClipHoldAfter: (value: boolean) => void;
 }) {
   return (
@@ -48,8 +48,8 @@ export function ClipEditorPanel({
               clipLengthOptions={clipLengthOptions}
               onChangeName={onChangeClipName}
               onChangeBeatValue={onChangeClipBeatValue}
-              onChangeMin={onChangeClipMin}
-              onChangeMax={onChangeClipMax}
+              onChangeStartValue={onChangeClipStartValue}
+              onChangeEndValue={onChangeClipEndValue}
               onChangeHoldAfter={onChangeClipHoldAfter}
             />
           }

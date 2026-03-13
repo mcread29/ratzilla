@@ -1,4 +1,6 @@
-import { TrackVisualizerConfig } from "../../types";
+import { ChromaticBulgeGridClip, TrackVisualizerConfig } from "../../types";
+import { isColorLane } from "../../vfx";
+import { colorToHex } from "./color";
 
 export function formatPlacementLabel(name: string, widthPx: number): string {
   if (widthPx < 30) {
@@ -29,11 +31,17 @@ export function serializeVisualizer(config: TrackVisualizerConfig): string {
   return JSON.stringify(config);
 }
 
-export function clipListRangeLabel(clip: { source?: { kind: "lfo"; min: number; max: number } }): string {
-  if (!clip.source?.kind) {
+export function clipListRangeLabel(clip: ChromaticBulgeGridClip): string {
+  const source = clip.source?.kind === "lfo" ? clip.source : null;
+  if (!source) {
     return "Legacy step clip";
   }
-  return `${clip.source.min.toFixed(2)}-${clip.source.max.toFixed(2)}`;
+  if (isColorLane(source.lane)) {
+    const colorSource = source as Extract<typeof source, { lane: "cold_color" | "hot_color" }>;
+    return `${colorToHex(colorSource.start)}->${colorToHex(colorSource.end)}`;
+  }
+  const floatSource = source as Extract<typeof source, { start: number; end: number }>;
+  return `${floatSource.start.toFixed(2)}-${floatSource.end.toFixed(2)}`;
 }
 
 export function formatClipBarLength(lengthBeats: number, beatsPerMeasure: number): string {
