@@ -140,6 +140,7 @@ export interface ChromaticBulgeGridClip {
   id: string;
   name: string;
   length_beats: number;
+  hold_after?: boolean;
   color: [number, number, number];
   source?: ChromaticBulgeGridClipSource;
   authoring?: ChromaticBulgeGridClipAuthoring;
@@ -157,6 +158,7 @@ export interface ChromaticBulgeGridClipTimeline {
   bpm: number;
   measures: number;
   beats_per_measure: number;
+  lead_in_bars?: number;
   clips: ChromaticBulgeGridClip[];
   arrangement: ClipPlacement[];
 }

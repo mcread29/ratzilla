@@ -9,12 +9,14 @@ export function ArrangementToolbar({
   bpm,
   measures,
   beatsPerMeasure,
+  leadInBars,
   timelineTool,
   hasSelectedClip,
   selectedPlacementCount,
   onChangeBpm,
   onChangeMeasures,
   onChangeBeatsPerMeasure,
+  onChangeLeadInBars,
   onChangeTimelineTool,
   onAddPlacement,
   onCopyPlacements,
@@ -23,12 +25,14 @@ export function ArrangementToolbar({
   bpm: number;
   measures: number;
   beatsPerMeasure: number;
+  leadInBars: number;
   timelineTool: TimelineTool;
   hasSelectedClip: boolean;
   selectedPlacementCount: number;
   onChangeBpm: (value: number) => void;
   onChangeMeasures: (value: number) => void;
   onChangeBeatsPerMeasure: (value: number) => void;
+  onChangeLeadInBars: (value: number) => void;
   onChangeTimelineTool: (tool: TimelineTool) => void;
   onAddPlacement: () => void;
   onCopyPlacements: () => void;
@@ -45,7 +49,7 @@ export function ArrangementToolbar({
             type="number"
             step={0.1}
             aria-label="BPM"
-            className="h-8 w-[54px] px-1.5 text-center"
+            className="no-spinner-input h-8 w-[54px] px-1.5 text-center"
             value={bpm}
             onChange={(event) => onChangeBpm(Number(event.target.value))}
           />
@@ -59,7 +63,7 @@ export function ArrangementToolbar({
             step={1}
             min={1}
             aria-label="Measures"
-            className="h-8 w-[54px] px-1.5 text-center"
+            className="integer-input h-8 w-[54px] px-1.5 text-center"
             value={measures}
             onChange={(event) => onChangeMeasures(Number(event.target.value))}
           />
@@ -73,9 +77,23 @@ export function ArrangementToolbar({
             step={1}
             min={1}
             aria-label="Time"
-            className="h-8 w-[54px] px-1.5 text-center"
+            className="integer-input h-8 w-[54px] px-1.5 text-center"
             value={beatsPerMeasure}
             onChange={(event) => onChangeBeatsPerMeasure(Number(event.target.value))}
+          />
+        </div>
+        <div className="compact-field">
+          <span className="compact-field-icon" aria-hidden="true">
+            <TimelineFieldIcon name="measures" />
+          </span>
+          <Input
+            type="number"
+            step={1}
+            min={0}
+            aria-label="Lead-in bars"
+            className="integer-input h-8 w-[54px] px-1.5 text-center"
+            value={leadInBars}
+            onChange={(event) => onChangeLeadInBars(Number(event.target.value))}
           />
         </div>
       </div>

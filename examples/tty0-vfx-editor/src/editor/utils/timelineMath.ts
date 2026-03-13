@@ -8,12 +8,12 @@ export function pxToBeat(px: number, timelineZoom: number): number {
   return Math.max(0, px / timelineZoom);
 }
 
-export function clampBeat(beat: number, totalTimelineBeats: number): number {
-  return Math.max(0, Math.min(totalTimelineBeats, beat));
+export function clampBeat(beat: number, totalTimelineBeats: number, minBeat = 0): number {
+  return Math.max(minBeat, Math.min(totalTimelineBeats, beat));
 }
 
-export function snapBeatToGrid(beat: number, totalTimelineBeats: number): number {
-  return Math.round(clampBeat(beat, totalTimelineBeats) * TIMELINE_SNAP_DIVISION) / TIMELINE_SNAP_DIVISION;
+export function snapBeatToGrid(beat: number, totalTimelineBeats: number, minBeat = 0): number {
+  return Math.round(clampBeat(beat, totalTimelineBeats, minBeat) * TIMELINE_SNAP_DIVISION) / TIMELINE_SNAP_DIVISION;
 }
 
 export function snapPlaybackBeat(beat: number, totalTimelineBeats: number): number {

@@ -101,6 +101,20 @@ textarea {
   font: inherit;
 }
 
+input.integer-input[type="number"],
+input.no-spinner-input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+input.integer-input[type="number"]::-webkit-inner-spin-button,
+input.integer-input[type="number"]::-webkit-outer-spin-button,
+input.no-spinner-input[type="number"]::-webkit-inner-spin-button,
+input.no-spinner-input[type="number"]::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
 code,
 pre {
   font-family: var(--font-mono);

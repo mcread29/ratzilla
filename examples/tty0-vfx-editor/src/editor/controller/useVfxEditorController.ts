@@ -3,15 +3,22 @@ import { toast } from "sonner";
 import { importRecordFromJson } from "../../platform";
 import { ClipPlacement, LaneId, LfoPoint, TrackVisualizerConfig } from "../../types";
 import {
+  audioTimeFromTransportTime,
   buildTimelineIndex,
   createPlacement,
   defaultLfoClip,
   defaultVisualizer,
+  leadInBeats,
+  leadInSeconds,
   normalizeClipLfoShape,
   normalizedConfig,
   primaryLane,
+  songBeatFromTransportTime,
   timelineFromConfig,
   totalBeats,
+  totalDisplayBeats,
+  transportTimeFromAudioTime,
+  transportTimeFromDisplayBeat,
 } from "../../vfx";
 import {
   CLIP_LENGTH_BAR_OPTIONS,
@@ -53,17 +60,24 @@ export function useVfxEditorController() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
+  const transportFrameRef = useRef<number | null>(null);
+  const transportOriginTimeRef = useRef(0);
+  const transportStartedAtRef = useRef(0);
+  const audioStartedRef = useRef(false);
+  const audioStartPendingRef = useRef(false);
 
   const timeline = useMemo(() => timelineFromConfig(draft), [draft]);
   const timelineIndex = useMemo(() => buildTimelineIndex(timeline), [timeline]);
   const totalTimelineBeats = totalBeats(timeline);
+  const totalVisibleBeats = totalDisplayBeats(timeline);
+  const minPlacementBeat = -leadInBeats(timeline);
   const timelineViewportWidth = Math.max(1, arrangementViewportWidth - TIMELINE_LABEL_WIDTH);
-  const minTimelineZoom = Math.max(0.25, timelineViewportWidth / Math.max(totalTimelineBeats, 1));
+  const minTimelineZoom = Math.max(0.25, timelineViewportWidth / Math.max(totalVisibleBeats, 1));
   const maxTimelineZoom = Math.max(
     minTimelineZoom,
     timelineViewportWidth / Math.max(MAX_VISIBLE_MEASURES_AT_MAX_ZOOM * timeline.beats_per_measure, 1),
   );
-  const timelineWidth = Math.ceil(Math.max(timelineViewportWidth, totalTimelineBeats * timelineZoom));
+  const timelineWidth = Math.ceil(Math.max(timelineViewportWidth, totalVisibleBeats * timelineZoom));
   const laneClips = useMemo(
     () => timeline.clips.filter((clip) => primaryLane(clip)?.lane === selectedLane),
     [timeline.clips, selectedLane],
@@ -88,13 +102,14 @@ export function useVfxEditorController() {
   const effectiveAudioUrl = importedAudioUrl ?? loaded?.audioUrl ?? null;
   const baseState = draft.params.shader_states?.playing;
   const selectedLaneMeta = laneMeta(selectedLane);
+  const leadInDuration = leadInSeconds(timeline);
   const selectedClipBeatValue = selectedClip?.length_beats ?? 0;
   const selectedClipBeatOption =
     clipLengthOptions.find((option) => Math.abs(option.beats - selectedClipBeatValue) < 0.0001)?.beats.toString() ?? "";
   const totalDurationSeconds =
     typeof audioDuration === "number" && Number.isFinite(audioDuration) && audioDuration > 0
-      ? audioDuration
-      : (totalTimelineBeats * 60) / timeline.bpm;
+      ? audioDuration + leadInDuration
+      : leadInDuration + (totalTimelineBeats * 60) / timeline.bpm;
 
   useEffect(() => {
     setSelectedPointIndex(selectedShape?.points.length ? 0 : null);
@@ -108,26 +123,156 @@ export function useVfxEditorController() {
     };
   }, [importedAudioUrl]);
 
-  useEffect(() => {
-    setAudioReady(!effectiveAudioUrl);
-    setPlayPending(false);
-    setAudioDuration(null);
-    if (audioRef.current) {
-      audioRef.current.pause();
+  function clampTransportTime(nextTime: number): number {
+    return Math.max(0, Math.min(totalDurationSeconds, nextTime));
+  }
+
+  function stopTransportFrame() {
+    if (transportFrameRef.current != null) {
+      cancelAnimationFrame(transportFrameRef.current);
+      transportFrameRef.current = null;
     }
+  }
+
+  function syncAudioToTransport(nextTime: number, forceCurrentTime = false) {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const targetAudioTime = audioTimeFromTransportTime(nextTime, timeline);
+    if (forceCurrentTime || !isPlaying || !audioStartedRef.current || nextTime < leadInDuration) {
+      if (Math.abs(audio.currentTime - targetAudioTime) > 0.05) {
+        audio.currentTime = targetAudioTime;
+      }
+    }
+    if (nextTime < leadInDuration && !audio.paused) {
+      audio.pause();
+    }
+  }
+
+  function pausePlayback() {
+    stopTransportFrame();
+    const audio = audioRef.current;
+    const nextTime =
+      audio && audioStartedRef.current ? transportTimeFromAudioTime(audio.currentTime, timeline) : playbackTimeRef.current;
+    if (audio && !audio.paused) {
+      audio.pause();
+    }
+    audioStartedRef.current = false;
+    audioStartPendingRef.current = false;
+    playbackTimeRef.current = clampTransportTime(nextTime);
+    syncAudioToTransport(playbackTimeRef.current, true);
+    setIsPlaying(false);
+    setPlayPending(false);
+  }
+
+  function stopPlayback(nextTime = 0) {
+    stopTransportFrame();
+    const audio = audioRef.current;
+    if (audio && !audio.paused) {
+      audio.pause();
+    }
+    audioStartedRef.current = false;
+    audioStartPendingRef.current = false;
+    playbackTimeRef.current = clampTransportTime(nextTime);
+    syncAudioToTransport(playbackTimeRef.current, true);
+    setIsPlaying(false);
+    setPlayPending(false);
+  }
+
+  async function startAudioAtTransportTime(nextTime: number): Promise<boolean> {
+    const audio = audioRef.current;
+    if (!audio || audioStartedRef.current || audioStartPendingRef.current) {
+      return false;
+    }
+    audioStartPendingRef.current = true;
+    const targetAudioTime = audioTimeFromTransportTime(nextTime, timeline);
+    if (Math.abs(audio.currentTime - targetAudioTime) > 0.05) {
+      audio.currentTime = targetAudioTime;
+    }
+    try {
+      await audio.play();
+      audioStartPendingRef.current = false;
+      audioStartedRef.current = true;
+      return true;
+    } catch (error) {
+      audioStartPendingRef.current = false;
+      pausePlayback();
+      const message = error instanceof Error ? error.message : "browser blocked playback or transport failed";
+      setStatus(message, "error");
+      toast.error("Playback failed.", {
+        description: message,
+      });
+      return false;
+    }
+  }
+
+  function runTransportFrame(now: number) {
+    let nextTime = transportOriginTimeRef.current + (now - transportStartedAtRef.current) / 1000;
+    const audio = audioRef.current;
+    if (audio && audioStartedRef.current && !audio.paused && !audio.ended) {
+      nextTime = transportTimeFromAudioTime(audio.currentTime, timeline);
+    }
+    nextTime = clampTransportTime(nextTime);
+    playbackTimeRef.current = nextTime;
+    if (nextTime >= totalDurationSeconds - 1 / 60) {
+      stopPlayback(0);
+      return;
+    }
+    if (nextTime >= leadInDuration && !audioStartedRef.current && !audioStartPendingRef.current) {
+      void startAudioAtTransportTime(nextTime);
+    }
+    transportFrameRef.current = requestAnimationFrame(runTransportFrame);
+  }
+
+  async function startPlayback(startTime = playbackTimeRef.current) {
+    const normalizedStart = clampTransportTime(startTime >= totalDurationSeconds ? 0 : startTime);
+    stopTransportFrame();
+    playbackTimeRef.current = normalizedStart;
+    syncAudioToTransport(normalizedStart, true);
+    audioStartedRef.current = false;
+    setIsPlaying(true);
+    setPlayPending(false);
+    transportOriginTimeRef.current = normalizedStart;
+    transportStartedAtRef.current = performance.now();
+    if (normalizedStart >= leadInDuration) {
+      const started = await startAudioAtTransportTime(normalizedStart);
+      if (!started) {
+        return;
+      }
+      const audio = audioRef.current;
+      if (audio) {
+        playbackTimeRef.current = clampTransportTime(transportTimeFromAudioTime(audio.currentTime, timeline));
+        transportOriginTimeRef.current = playbackTimeRef.current;
+        transportStartedAtRef.current = performance.now();
+      }
+    }
+    transportFrameRef.current = requestAnimationFrame(runTransportFrame);
+  }
+
+  useEffect(() => {
+    stopPlayback(0);
+    setAudioReady(!effectiveAudioUrl);
+    setAudioDuration(null);
   }, [effectiveAudioUrl]);
 
   useEffect(() => {
-    if (!playPending || !previewReady || !audioReady || !audioRef.current) return;
+    if (!playPending || !previewReady || !audioReady) return;
     const run = async () => {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      if (!audioRef.current) return;
-      void audioRef.current.play();
-      setPlayPending(false);
+      void startPlayback();
     };
     void run();
   }, [audioReady, playPending, previewReady]);
+
+  useEffect(() => {
+    if (isPlaying) {
+      return;
+    }
+    playbackTimeRef.current = clampTransportTime(playbackTimeRef.current);
+    syncAudioToTransport(playbackTimeRef.current, true);
+  }, [isPlaying, leadInDuration, totalDurationSeconds]);
+
+  useEffect(() => () => stopTransportFrame(), []);
 
   useEffect(() => {
     const next = selectedPlacementIndices.filter((index) => index >= 0 && index < timeline.arrangement.length);
@@ -167,8 +312,7 @@ export function useVfxEditorController() {
   }
 
   function currentBeat(): number {
-    const audio = audioRef.current;
-    return Math.max(0, audio ? audio.currentTime : playbackTimeRef.current) * timeline.bpm / 60;
+    return Math.max(minPlacementBeat, songBeatFromTransportTime(playbackTimeRef.current, timeline));
   }
 
   function setPlacementSelection(indices: number[], anchor: number | null = indices[0] ?? null) {
@@ -235,8 +379,7 @@ export function useVfxEditorController() {
     setSelectedClipId(nextTimeline.clips[0]?.id ?? null);
     clearPlacementSelection();
     setSelectedLane(visibleLane(primaryLane(nextTimeline.clips[0])?.lane));
-    playbackTimeRef.current = 0;
-    setIsPlaying(false);
+    stopPlayback(0);
     setImportedAudioUrl(null);
     setStatus(options.status, "success");
   }
@@ -284,8 +427,7 @@ export function useVfxEditorController() {
     setSelectedLane("motion_rate");
     setSelectedClipId(timelineFromConfig(visualizer).clips[0]?.id ?? null);
     clearPlacementSelection();
-    playbackTimeRef.current = 0;
-    setIsPlaying(false);
+    stopPlayback(0);
     setImportedAudioUrl(null);
     setStatus("Started a new visualizer draft.", "success");
   }
@@ -360,13 +502,33 @@ export function useVfxEditorController() {
     });
   }
 
-  function seekToBeat(beat: number) {
-    const nextBeat = Math.max(0, Math.min(totalTimelineBeats, beat));
-    const nextTime = (nextBeat * 60) / timeline.bpm;
-    playbackTimeRef.current = nextTime;
-    if (audioRef.current) {
-      audioRef.current.currentTime = nextTime;
+  function seekToTime(nextTime: number) {
+    const clampedTime = clampTransportTime(nextTime);
+    playbackTimeRef.current = clampedTime;
+    transportOriginTimeRef.current = clampedTime;
+    transportStartedAtRef.current = performance.now();
+    syncAudioToTransport(clampedTime, true);
+    if (!isPlaying) {
+      audioStartedRef.current = false;
+      audioStartPendingRef.current = false;
+      return;
     }
+    if (clampedTime < leadInDuration) {
+      audioStartedRef.current = false;
+      audioStartPendingRef.current = false;
+      return;
+    }
+    const audio = audioRef.current;
+    if (audio && !audio.paused) {
+      audioStartedRef.current = true;
+      return;
+    }
+    void startAudioAtTransportTime(clampedTime);
+  }
+
+  function seekToBeat(displayBeat: number) {
+    const nextBeat = Math.max(0, Math.min(totalVisibleBeats, displayBeat));
+    seekToTime(transportTimeFromDisplayBeat(nextBeat, timeline));
   }
 
   function selectPlacement(
@@ -395,10 +557,9 @@ export function useVfxEditorController() {
   }
 
   function handleTogglePlayback() {
-    if (!audioRef.current) return;
-    if (!audioRef.current.paused) {
-      audioRef.current.pause();
-      setPlayPending(false);
+    if (!effectiveAudioUrl) return;
+    if (isPlaying) {
+      pausePlayback();
       return;
     }
     if (!previewReady || !audioReady) {
@@ -406,7 +567,7 @@ export function useVfxEditorController() {
       setStatus("Preparing preview and audio before playback.");
       return;
     }
-    void audioRef.current.play();
+    void startPlayback();
   }
 
   function addClip() {
@@ -476,7 +637,7 @@ export function useVfxEditorController() {
     }
     updateDraft((current) => {
       const nextTimeline = timelineFromConfig(current);
-      nextTimeline.arrangement.push(createPlacement(selectedClip, snapBeatToGrid(beat, totalTimelineBeats)));
+      nextTimeline.arrangement.push(createPlacement(selectedClip, snapBeatToGrid(beat, totalTimelineBeats, minPlacementBeat)));
       current.timeline = nextTimeline;
       setSinglePlacementSelection(nextTimeline.arrangement.length - 1);
       setSelectedLane(primary.lane);
@@ -590,7 +751,7 @@ export function useVfxEditorController() {
           continue;
         }
         nextTimeline.arrangement.push({
-          ...createPlacement(clip, snapBeatToGrid(atBeat + entry.offsetBeats, totalTimelineBeats)),
+          ...createPlacement(clip, snapBeatToGrid(atBeat + entry.offsetBeats, totalTimelineBeats, minPlacementBeat)),
           repeats: entry.repeats,
         });
         pastedIndices.push(nextTimeline.arrangement.length - 1);
@@ -655,6 +816,18 @@ export function useVfxEditorController() {
     });
   }
 
+  function changeClipHoldAfter(value: boolean) {
+    if (!selectedClip) return;
+    updateDraft((current) => {
+      const nextTimeline = timelineFromConfig(current);
+      const clip = nextTimeline.clips.find((candidate) => candidate.id === selectedClip.id);
+      if (!clip) return current;
+      clip.hold_after = value;
+      current.timeline = nextTimeline;
+      return current;
+    });
+  }
+
   function changeTimelineBpm(value: number) {
     updateDraft((current) => {
       const nextTimeline = timelineFromConfig(current);
@@ -677,6 +850,15 @@ export function useVfxEditorController() {
     updateDraft((current) => {
       const nextTimeline = timelineFromConfig(current);
       nextTimeline.beats_per_measure = Math.max(1, Math.round(value));
+      current.timeline = nextTimeline;
+      return current;
+    });
+  }
+
+  function changeTimelineLeadInBars(value: number) {
+    updateDraft((current) => {
+      const nextTimeline = timelineFromConfig(current);
+      nextTimeline.lead_in_bars = Math.max(0, Math.round(value));
       current.timeline = nextTimeline;
       return current;
     });
@@ -761,16 +943,16 @@ export function useVfxEditorController() {
       updatePlacementAtIndex,
       placeSelectedClipAtBeat,
       seekToBeat,
+      seekToTime,
       copySelectedPlacements,
       pasteCopiedPlacements,
       deleteSelectedPlacements,
       addPlacement,
+      stopPlayback,
       handleTogglePlayback,
       setPreviewReady,
       setAudioReady,
       setAudioDuration,
-      setIsPlaying,
-      setPlayPending,
     },
     clipState: {
       laneClips,
@@ -793,9 +975,11 @@ export function useVfxEditorController() {
       updateSelectedClipBeatValue,
       changeClipMin,
       changeClipMax,
+      changeClipHoldAfter,
       changeTimelineBpm,
       changeTimelineMeasures,
       changeTimelineBeatsPerMeasure,
+      changeTimelineLeadInBars,
     },
     shapeState: {
       selectedPointIndex,

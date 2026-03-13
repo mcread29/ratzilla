@@ -1,6 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ClipPlacement, LaneId, TrackVisualizerConfig } from "../../types";
-import { IndexedTimelinePlacement, LANE_ORDER, buildTimelineIndex, totalBeats } from "../../vfx";
+import {
+  IndexedTimelinePlacement,
+  LANE_ORDER,
+  buildTimelineIndex,
+  displayBeatFromTransportTime,
+  leadInBeats,
+  songBeatFromDisplayBeat,
+  totalBeats,
+  totalDisplayBeats,
+} from "../../vfx";
 import {
   RULER_HEIGHT,
   TIMELINE_LABEL_WIDTH,
@@ -73,16 +82,19 @@ export function ArrangementGrid({
   const [scrollTop, setScrollTop] = useState(0);
   const [scrollRegionWidth, setScrollRegionWidth] = useState(0);
   const [displayTime] = usePlaybackDisplayTime(audioRef, playbackTimeRef, isPlaying);
+  const leadInBeatOffset = leadInBeats(timeline);
+  const minSongBeat = -leadInBeatOffset;
   const totalTimelineBeats = totalBeats(timeline);
-  const currentBeat = Math.max(0, displayTime) * timeline.bpm / 60;
+  const totalVisibleBeats = totalDisplayBeats(timeline);
+  const currentDisplayBeat = displayBeatFromTransportTime(displayTime, timeline);
   const visibleTimelineWidth = Math.max(1, scrollRegionWidth - TIMELINE_LABEL_WIDTH);
   const maxScrollLeft = Math.max(0, timelineWidth - visibleTimelineWidth);
   const visibleStartBeat = timelineZoom <= 0 ? 0 : scrollLeft / timelineZoom;
-  const visibleBeatSpan = timelineZoom <= 0 ? totalTimelineBeats : Math.min(totalTimelineBeats, visibleTimelineWidth / timelineZoom);
-  const visibleEndBeat = Math.min(totalTimelineBeats, visibleStartBeat + visibleBeatSpan);
-  const overviewPxPerBeat = totalTimelineBeats <= 0 ? 0 : visibleTimelineWidth / totalTimelineBeats;
-  const scrollbarThumbWidth = totalTimelineBeats <= 0 ? visibleTimelineWidth : visibleBeatSpan * overviewPxPerBeat;
-  const scrollbarThumbLeft = totalTimelineBeats <= 0 ? 0 : visibleStartBeat * overviewPxPerBeat;
+  const visibleBeatSpan = timelineZoom <= 0 ? totalVisibleBeats : Math.min(totalVisibleBeats, visibleTimelineWidth / timelineZoom);
+  const visibleEndBeat = Math.min(totalVisibleBeats, visibleStartBeat + visibleBeatSpan);
+  const overviewPxPerBeat = totalVisibleBeats <= 0 ? 0 : visibleTimelineWidth / totalVisibleBeats;
+  const scrollbarThumbWidth = totalVisibleBeats <= 0 ? visibleTimelineWidth : visibleBeatSpan * overviewPxPerBeat;
+  const scrollbarThumbLeft = totalVisibleBeats <= 0 ? 0 : visibleStartBeat * overviewPxPerBeat;
 
   useLayoutEffect(() => {
     const element = arrangementRef.current;
@@ -109,7 +121,7 @@ export function ArrangementGrid({
     setScrollLeft((current) => Math.min(current, maxScrollLeft));
   }, [maxScrollLeft]);
 
-  function arrangementBeatFromPointer(clientX: number): number {
+  function displayBeatFromPointer(clientX: number): number {
     if (!arrangementRef.current) return 0;
     const rect = arrangementRef.current.getBoundingClientRect();
     return pxToBeat(clientX - rect.left + scrollLeft - TIMELINE_LABEL_WIDTH, timelineZoom);
@@ -123,24 +135,24 @@ export function ArrangementGrid({
     if (overviewPxPerBeat <= 0) {
       return 0;
     }
-    return Math.max(0, Math.min(totalTimelineBeats, offset / overviewPxPerBeat));
+    return Math.max(0, Math.min(totalVisibleBeats, offset / overviewPxPerBeat));
   }
 
   function applyViewport(startBeat: number, endBeat: number) {
-    const minVisibleBeats = Math.min(totalTimelineBeats, visibleTimelineWidth / maxTimelineZoom);
-    const maxVisibleBeats = Math.min(totalTimelineBeats, visibleTimelineWidth / Math.max(minTimelineZoom, 0.0001));
+    const minVisibleBeats = Math.min(totalVisibleBeats, visibleTimelineWidth / maxTimelineZoom);
+    const maxVisibleBeats = Math.min(totalVisibleBeats, visibleTimelineWidth / Math.max(minTimelineZoom, 0.0001));
     const spanBeats = Math.max(minVisibleBeats, Math.min(maxVisibleBeats, endBeat - startBeat));
-    const maxStartBeat = Math.max(0, totalTimelineBeats - spanBeats);
+    const maxStartBeat = Math.max(0, totalVisibleBeats - spanBeats);
     const clampedStartBeat = Math.max(0, Math.min(maxStartBeat, startBeat));
     const nextZoom = Math.max(minTimelineZoom, Math.min(maxTimelineZoom, visibleTimelineWidth / Math.max(spanBeats, 0.0001)));
     onTimelineZoomChange(nextZoom);
     setScrollLeft(clampedStartBeat * nextZoom);
   }
 
-  function snapPlacementStart(beat: number, placementIndex: number): number {
+  function snapPlacementStart(songBeat: number, placementIndex: number): number {
     const thresholdBeats = pxToBeat(TIMELINE_SNAP_THRESHOLD_PX, timelineZoom);
-    const clamped = clampBeat(beat, totalTimelineBeats);
-    let snapped = snapBeatToGrid(clamped, totalTimelineBeats);
+    const clamped = clampBeat(songBeat, totalTimelineBeats, minSongBeat);
+    let snapped = snapBeatToGrid(clamped, totalTimelineBeats, minSongBeat);
     let closestDistance = thresholdBeats;
 
     for (const entry of indexedPlacements) {
@@ -159,7 +171,7 @@ export function ArrangementGrid({
       }
     }
 
-    return clampBeat(snapped, totalTimelineBeats);
+    return clampBeat(snapped, totalTimelineBeats, minSongBeat);
   }
 
   function commitPreviewPlacement() {
@@ -205,7 +217,7 @@ export function ArrangementGrid({
           visibleBeatSpan={visibleBeatSpan}
           visibleStartBeat={visibleStartBeat}
           visibleEndBeat={visibleEndBeat}
-          totalTimelineBeats={totalTimelineBeats}
+          totalTimelineBeats={totalVisibleBeats}
           scrollbarThumbWidth={scrollbarThumbWidth}
           scrollbarThumbLeft={scrollbarThumbLeft}
           scrollbarDragRef={scrollbarDragRef}
@@ -227,24 +239,25 @@ export function ArrangementGrid({
           }}
           onPointerMove={(event) => {
             if (!dragState) return;
-            const beat = arrangementBeatFromPointer(event.clientX);
+            const displayBeat = displayBeatFromPointer(event.clientX);
             if (dragState.kind === "scrub") {
-              onSeekToBeat(snapPlaybackBeat(beat, totalTimelineBeats));
+              onSeekToBeat(snapPlaybackBeat(displayBeat, totalVisibleBeats));
               return;
             }
             const sourceEntry = indexedPlacements.find((entry) => entry.placementIndex === dragState.placementIndex);
             if (!sourceEntry) return;
+            const songBeat = songBeatFromDisplayBeat(displayBeat, timeline);
             if (dragState.kind === "move") {
               setPreviewPlacement({
                 placement: {
                   ...sourceEntry.placement,
-                  start_beat: snapPlacementStart(beat - dragState.offsetBeats, dragState.placementIndex),
+                  start_beat: snapPlacementStart(songBeat - dragState.offsetBeats, dragState.placementIndex),
                 },
                 placementIndex: dragState.placementIndex,
               });
               return;
             }
-            const widthBeats = Math.max(sourceEntry.clip.length_beats, beat - sourceEntry.placement.start_beat);
+            const widthBeats = Math.max(sourceEntry.clip.length_beats, songBeat - sourceEntry.placement.start_beat);
             setPreviewPlacement({
               placement: {
                 ...sourceEntry.placement,
@@ -258,8 +271,9 @@ export function ArrangementGrid({
         >
           <div className="arrangement-surface">
             <ArrangementRuler
-              totalTimelineBeats={totalTimelineBeats}
+              totalTimelineBeats={totalVisibleBeats}
               beatsPerMeasure={timeline.beats_per_measure}
+              leadInBars={timeline.lead_in_bars ?? 0}
               timelineWidth={timelineWidth}
               timelineZoom={timelineZoom}
               scrollLeft={scrollLeft}
@@ -267,7 +281,7 @@ export function ArrangementGrid({
                 event.preventDefault();
                 onResetSelection();
                 setDragState({ kind: "scrub" });
-                onSeekToBeat(snapPlaybackBeat(arrangementBeatFromPointer(event.clientX), totalTimelineBeats));
+                onSeekToBeat(snapPlaybackBeat(displayBeatFromPointer(event.clientX), totalVisibleBeats));
               }}
             />
             {EDITOR_LANES.map((lane) => {
@@ -287,22 +301,25 @@ export function ArrangementGrid({
                   timelineZoom={timelineZoom}
                   timelineTool={timelineTool}
                   totalTimelineBeats={totalTimelineBeats}
-                  currentBeat={currentBeat}
+                  currentBeat={currentDisplayBeat}
+                  leadInBeatOffset={leadInBeatOffset}
                   selectedPlacementSet={selectedPlacementSet}
                   onBackgroundPointerDown={(laneValue, event) => {
                     if (event.target !== event.currentTarget) {
                       return;
                     }
                     event.preventDefault();
-                    const beat = arrangementBeatFromPointer(event.clientX);
+                    const displayBeat = displayBeatFromPointer(event.clientX);
                     if (timelineTool === "pencil") {
-                      onPlaceSelectedClipAtBeat(beat);
+                      onPlaceSelectedClipAtBeat(
+                        clampBeat(songBeatFromDisplayBeat(displayBeat, timeline), totalTimelineBeats, minSongBeat),
+                      );
                       return;
                     }
                     onSelectLane(laneValue);
                     onResetSelection();
                     setDragState({ kind: "scrub" });
-                    onSeekToBeat(snapPlaybackBeat(beat, totalTimelineBeats));
+                    onSeekToBeat(snapPlaybackBeat(displayBeat, totalVisibleBeats));
                   }}
                   onPlacementPointerDown={(entry, laneValue, beatAtCursor, hitEdge, event) => {
                     onSelectPlacement(entry.placementIndex, laneValue, entry.clip.id, event);

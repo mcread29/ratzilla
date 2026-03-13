@@ -9,12 +9,14 @@ export function ArrangementPanel({
   bpm,
   measures,
   beatsPerMeasure,
+  leadInBars,
   timelineTool,
   hasSelectedClip,
   selectedPlacementCount,
   onChangeBpm,
   onChangeMeasures,
   onChangeBeatsPerMeasure,
+  onChangeLeadInBars,
   onChangeTimelineTool,
   onAddPlacement,
   onCopyPlacements,
@@ -25,12 +27,14 @@ export function ArrangementPanel({
   bpm: number;
   measures: number;
   beatsPerMeasure: number;
+  leadInBars: number;
   timelineTool: TimelineTool;
   hasSelectedClip: boolean;
   selectedPlacementCount: number;
   onChangeBpm: (value: number) => void;
   onChangeMeasures: (value: number) => void;
   onChangeBeatsPerMeasure: (value: number) => void;
+  onChangeLeadInBars: (value: number) => void;
   onChangeTimelineTool: (tool: TimelineTool) => void;
   onAddPlacement: () => void;
   onCopyPlacements: () => void;
@@ -66,12 +70,14 @@ export function ArrangementPanel({
         bpm={bpm}
         measures={measures}
         beatsPerMeasure={beatsPerMeasure}
+        leadInBars={leadInBars}
         timelineTool={timelineTool}
         hasSelectedClip={hasSelectedClip}
         selectedPlacementCount={selectedPlacementCount}
         onChangeBpm={onChangeBpm}
         onChangeMeasures={onChangeMeasures}
         onChangeBeatsPerMeasure={onChangeBeatsPerMeasure}
+        onChangeLeadInBars={onChangeLeadInBars}
         onChangeTimelineTool={onChangeTimelineTool}
         onAddPlacement={onAddPlacement}
         onCopyPlacements={onCopyPlacements}

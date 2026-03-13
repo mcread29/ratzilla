@@ -15,6 +15,7 @@ export function ArrangementTrackRow({
   timelineTool,
   totalTimelineBeats,
   currentBeat,
+  leadInBeatOffset,
   selectedPlacementSet,
   onBackgroundPointerDown,
   onPlacementPointerDown,
@@ -28,6 +29,7 @@ export function ArrangementTrackRow({
   timelineTool: "select" | "pencil";
   totalTimelineBeats: number;
   currentBeat: number;
+  leadInBeatOffset: number;
   selectedPlacementSet: Set<number>;
   onBackgroundPointerDown: (lane: LaneId, event: React.PointerEvent<HTMLDivElement>) => void;
   onPlacementPointerDown: (
@@ -54,12 +56,12 @@ export function ArrangementTrackRow({
       >
         {lanePlacements.map((entry) => {
           const placement = entry.placement;
-          const left = beatToPx(placement.start_beat, timelineZoom);
+          const left = beatToPx(placement.start_beat + leadInBeatOffset, timelineZoom);
           const width = beatToPx(entry.clip.length_beats * placement.repeats, timelineZoom);
           const isSelected = selectedPlacementSet.has(entry.placementIndex);
           const isActive =
-            currentBeat >= placement.start_beat &&
-            currentBeat < placement.start_beat + entry.clip.length_beats * placement.repeats;
+            currentBeat >= placement.start_beat + leadInBeatOffset &&
+            currentBeat < placement.start_beat + leadInBeatOffset + entry.clip.length_beats * placement.repeats;
           return (
             <PlacementBlock
               key={`${entry.placement.clip_id}-${entry.placementIndex}`}

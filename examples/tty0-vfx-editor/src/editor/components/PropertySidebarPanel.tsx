@@ -83,6 +83,7 @@ export function PropertySidebarPanel({
             <Label>
               Base Value
               <Input
+                className="no-spinner-input"
                 type="number"
                 step={0.01}
                 value={Number(baseState[selectedLane])}

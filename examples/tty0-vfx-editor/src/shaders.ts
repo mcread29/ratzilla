@@ -65,7 +65,7 @@ void main() {
   float density = clamp((u_lattice_density - 2.0) / 10.0, 0.0, 1.0);
   float spacing_px = mix(GRID_SPACING_MAX_PX, GRID_SPACING_MIN_PX, density);
   float base_radius_px = spacing_px * u_dot_size;
-  vec2 motion_px = u_time * u_motion_rate * 60.0;
+  vec2 motion_px = u_motion_rate * 60.0;
   vec2 base_sample_px = frag_px;
   base_sample_px += motion_px;
   vec2 sphere_offset = frag_px - center;

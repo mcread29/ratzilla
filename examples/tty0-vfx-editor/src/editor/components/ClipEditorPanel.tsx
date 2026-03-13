@@ -16,6 +16,7 @@ export function ClipEditorPanel({
   onChangeClipBeatValue,
   onChangeClipMin,
   onChangeClipMax,
+  onChangeClipHoldAfter,
 }: {
   selectedClip: ChromaticBulgeGridClip | null;
   selectedShape: { interpolation: "linear"; points: LfoPoint[] } | null;
@@ -29,6 +30,7 @@ export function ClipEditorPanel({
   onChangeClipBeatValue: (value: number) => void;
   onChangeClipMin: (value: number) => void;
   onChangeClipMax: (value: number) => void;
+  onChangeClipHoldAfter: (value: boolean) => void;
 }) {
   return (
     <Card className="panel clip-editor-panel">
@@ -48,6 +50,7 @@ export function ClipEditorPanel({
               onChangeBeatValue={onChangeClipBeatValue}
               onChangeMin={onChangeClipMin}
               onChangeMax={onChangeClipMax}
+              onChangeHoldAfter={onChangeClipHoldAfter}
             />
           }
         />

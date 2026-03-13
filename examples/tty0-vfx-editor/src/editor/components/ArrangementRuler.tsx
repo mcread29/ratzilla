@@ -4,6 +4,7 @@ import { beatToPx } from "../utils/timelineMath";
 export function ArrangementRuler({
   totalTimelineBeats,
   beatsPerMeasure,
+  leadInBars,
   timelineWidth,
   timelineZoom,
   scrollLeft,
@@ -11,6 +12,7 @@ export function ArrangementRuler({
 }: {
   totalTimelineBeats: number;
   beatsPerMeasure: number;
+  leadInBars: number;
   timelineWidth: number;
   timelineZoom: number;
   scrollLeft: number;
@@ -28,13 +30,15 @@ export function ArrangementRuler({
       >
         {Array.from({ length: Math.ceil(totalTimelineBeats) + 1 }, (_, beat) => {
           const isBar = beat % beatsPerMeasure === 0;
+          const barIndex = beat / beatsPerMeasure;
+          const barLabel = barIndex - leadInBars + 1;
           return (
             <div
               key={beat}
               className={`ruler-mark ${isBar ? "bar" : ""}`}
               style={{ left: beatToPx(beat, timelineZoom) }}
             >
-              {isBar && beat < totalTimelineBeats ? <span>{beat / beatsPerMeasure + 1}</span> : null}
+              {isBar && beat < totalTimelineBeats ? <span>{barLabel}</span> : null}
             </div>
           );
         })}

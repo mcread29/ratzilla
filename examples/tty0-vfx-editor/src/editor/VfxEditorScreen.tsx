@@ -67,12 +67,14 @@ export function VfxEditorScreen() {
       bpm={arrangementState.timeline.bpm}
       measures={arrangementState.timeline.measures}
       beatsPerMeasure={arrangementState.timeline.beats_per_measure}
+      leadInBars={arrangementState.timeline.lead_in_bars ?? 0}
       timelineTool={arrangementState.timelineTool}
       hasSelectedClip={clipState.hasSelectedClip}
       selectedPlacementCount={selectionState.selectedPlacementIndices.length}
       onChangeBpm={clipActions.changeTimelineBpm}
       onChangeMeasures={clipActions.changeTimelineMeasures}
       onChangeBeatsPerMeasure={clipActions.changeTimelineBeatsPerMeasure}
+      onChangeLeadInBars={clipActions.changeTimelineLeadInBars}
       onChangeTimelineTool={arrangementActions.setTimelineTool}
       onAddPlacement={arrangementActions.addPlacement}
       onCopyPlacements={arrangementActions.copySelectedPlacements}
@@ -106,18 +108,9 @@ export function VfxEditorScreen() {
         dirty: documentState.dirty,
         effectiveAudioUrl: documentState.effectiveAudioUrl,
         isPlaying: arrangementState.isPlaying,
-        onSeekToTime: (nextTime) => {
-          previewState.playbackTimeRef.current = nextTime;
-          if (previewState.audioRef.current) {
-            previewState.audioRef.current.currentTime = nextTime;
-          }
-        },
-        onStop: () => {
-          if (!previewState.audioRef.current) return;
-          previewState.audioRef.current.pause();
-          previewState.audioRef.current.currentTime = 0;
-          previewState.playbackTimeRef.current = 0;
-        },
+        leadInBars: arrangementState.timeline.lead_in_bars ?? 0,
+        onSeekToTime: arrangementActions.seekToTime,
+        onStop: () => arrangementActions.stopPlayback(0),
         onTogglePlayback: arrangementActions.handleTogglePlayback,
         playPending: arrangementState.playPending,
         playbackTimeRef: previewState.playbackTimeRef,
@@ -162,6 +155,7 @@ export function VfxEditorScreen() {
       onChangeClipBeatValue={clipActions.updateSelectedClipBeatValue}
       onChangeClipMin={clipActions.changeClipMin}
       onChangeClipMax={clipActions.changeClipMax}
+      onChangeClipHoldAfter={clipActions.changeClipHoldAfter}
     />
   );
 
@@ -190,30 +184,21 @@ export function VfxEditorScreen() {
           const duration = previewState.audioRef.current?.duration;
           arrangementActions.setAudioDuration(typeof duration === "number" && Number.isFinite(duration) ? duration : null);
         }}
-        onPlay={() => arrangementActions.setIsPlaying(true)}
-        onPause={() => {
-          arrangementActions.setIsPlaying(false);
-          previewState.playbackTimeRef.current = previewState.audioRef.current?.currentTime ?? previewState.playbackTimeRef.current;
-        }}
-        onEnded={() => {
-          arrangementActions.setIsPlaying(false);
-          previewState.playbackTimeRef.current = 0;
-        }}
       />
       <main className={desktopLayout ? "workspace-resizable" : "workspace"}>
         {desktopLayout ? (
           <ResizablePanelGroup orientation="horizontal" className="resizable-shell">
-            <ResizablePanel defaultSize="74%" minSize="55%" className="resizable-panel-frame">
+            <ResizablePanel defaultSize="60%" minSize="55%" className="resizable-panel-frame">
               <ResizablePanelGroup orientation="vertical" className="resizable-shell">
                 <ResizablePanel defaultSize="50%" minSize="30%" maxSize="50%" className="resizable-panel-frame">
                   <section className="workspace-row workspace-row-resizable">
                     <ResizablePanelGroup orientation="horizontal" className="resizable-shell">
-                      <ResizablePanel defaultSize="28%" minSize="16%" className="timeline-sidebar">
+                      <ResizablePanel defaultSize="16%" minSize="16%" className="timeline-sidebar">
                         {sessionPanel}
                         {propertyPanel}
                       </ResizablePanel>
                       <ResizableHandle withHandle />
-                      <ResizablePanel defaultSize="72%" minSize="40%" className="resizable-panel-frame">
+                      <ResizablePanel defaultSize="84%" minSize="40%" className="resizable-panel-frame">
                         {arrangementPanel}
                       </ResizablePanel>
                     </ResizablePanelGroup>
@@ -223,11 +208,11 @@ export function VfxEditorScreen() {
                 <ResizablePanel defaultSize="50%" minSize="50%" className="resizable-panel-frame">
                   <section className="workspace-row workspace-row-resizable">
                     <ResizablePanelGroup orientation="horizontal" className="resizable-shell">
-                      <ResizablePanel defaultSize="26%" minSize="16%" className="resizable-panel-frame">
+                      <ResizablePanel defaultSize="16%" minSize="16%" className="resizable-panel-frame">
                         {clipLibraryPanel}
                       </ResizablePanel>
                       <ResizableHandle withHandle />
-                      <ResizablePanel defaultSize="74%" minSize="34%" className="resizable-panel-frame">
+                      <ResizablePanel defaultSize="84%" minSize="34%" className="resizable-panel-frame">
                         {clipEditorPanel}
                       </ResizablePanel>
                     </ResizablePanelGroup>
@@ -236,7 +221,7 @@ export function VfxEditorScreen() {
               </ResizablePanelGroup>
             </ResizablePanel>
             <ResizableHandle withHandle />
-            <ResizablePanel defaultSize="26%" minSize="18%" maxSize="40%" className="resizable-panel-frame">
+            <ResizablePanel defaultSize="40%" minSize="18%" maxSize="40%" className="resizable-panel-frame">
               {previewPanel}
             </ResizablePanel>
           </ResizablePanelGroup>

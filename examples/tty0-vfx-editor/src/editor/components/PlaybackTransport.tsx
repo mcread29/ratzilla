@@ -10,6 +10,7 @@ export function PlaybackTransport({
   dirty,
   effectiveAudioUrl,
   isPlaying,
+  leadInBars,
   onSeekToTime,
   onStop,
   onTogglePlayback,
@@ -23,6 +24,7 @@ export function PlaybackTransport({
   dirty: boolean;
   effectiveAudioUrl: string | null;
   isPlaying: boolean;
+  leadInBars: number;
   onSeekToTime: (time: number) => void;
   onStop: () => void;
   onTogglePlayback: () => void;
@@ -32,7 +34,7 @@ export function PlaybackTransport({
   totalDurationSeconds: number;
 }) {
   const [displayTime, setDisplayTime] = usePlaybackDisplayTime(audioRef, playbackTimeRef, isPlaying);
-  const currentBeat = Math.max(0, displayTime) * timelineBpm / 60;
+  const displayBeat = Math.max(0, displayTime) * timelineBpm / 60;
 
   return (
     <div className="timeline-footer">
@@ -89,13 +91,17 @@ export function PlaybackTransport({
         </div>
         <div className="transport-stat">
           <span>Measure</span>
-          <strong>{formatMeasurePosition(currentBeat, beatsPerMeasure)}</strong>
+          <strong>{formatMeasurePosition(displayBeat, beatsPerMeasure)}</strong>
         </div>
         <div className="transport-stat">
           <span>Time</span>
           <strong>
             {formatDuration(displayTime)} / {formatDuration(totalDurationSeconds)}
           </strong>
+        </div>
+        <div className="transport-stat">
+          <span>Lead-In</span>
+          <strong>{leadInBars} bar{leadInBars === 1 ? "" : "s"}</strong>
         </div>
         <div className="transport-stat">
           <span>State</span>

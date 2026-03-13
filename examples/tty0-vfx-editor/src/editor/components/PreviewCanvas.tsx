@@ -1,8 +1,16 @@
 import { useEffect, useRef } from "react";
 import { FRAGMENT_SHADER, VERTEX_SHADER } from "../../shaders";
 import { TrackVisualizerConfig } from "../../types";
-import { buildTimelineIndex, resolveNormalizedChromaticBulgeGrid } from "../../vfx";
+import { buildTimelineIndex, resolveNormalizedChromaticBulgeGrid, timelineFromConfig } from "../../vfx";
 import { createProgram, setUniform1f, setUniform2f, setUniform3f } from "../preview/gl";
+
+type MotionState = {
+  offsetX: number;
+  offsetY: number;
+  rateX: number;
+  rateY: number;
+  time: number;
+};
 
 export function PreviewCanvas({
   config,
@@ -19,13 +27,16 @@ export function PreviewCanvas({
   onReady: () => void;
   timelineIndex: ReturnType<typeof buildTimelineIndex>;
 }) {
+  void audioRef;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const configRef = useRef(config);
   const isPlayingRef = useRef(isPlaying);
   const timelineIndexRef = useRef(timelineIndex);
+  const motionStateRef = useRef<MotionState | null>(null);
 
   useEffect(() => {
     configRef.current = config;
+    motionStateRef.current = null;
   }, [config]);
 
   useEffect(() => {
@@ -34,6 +45,7 @@ export function PreviewCanvas({
 
   useEffect(() => {
     timelineIndexRef.current = timelineIndex;
+    motionStateRef.current = null;
   }, [timelineIndex]);
 
   useEffect(() => {
@@ -70,9 +82,9 @@ export function PreviewCanvas({
     let frame = 0;
     let announcedReady = false;
     const render = () => {
-      const audio = audioRef.current;
-      const currentTime = audio ? audio.currentTime : playbackTimeRef.current;
-      const currentIsPlaying = audio ? !audio.paused && !audio.ended : isPlayingRef.current;
+      const timeline = timelineFromConfig(configRef.current);
+      const currentTime = playbackTimeRef.current;
+      const currentIsPlaying = isPlayingRef.current;
       const currentUniforms = resolveNormalizedChromaticBulgeGrid(
         configRef.current,
         {
@@ -83,6 +95,23 @@ export function PreviewCanvas({
         },
         timelineIndexRef.current,
       ).uniforms;
+      const motionState = resolveMotionState(
+        currentTime,
+        currentUniforms.motion_rate,
+        currentUniforms.motion_rate_y,
+        (time) =>
+          resolveNormalizedChromaticBulgeGrid(
+            configRef.current,
+            {
+              currentTimeSecs: time,
+              visualTimeSecs: time,
+              isPlaying: isPlayingRef.current,
+              timelinePreview: true,
+            },
+            timelineIndexRef.current,
+          ).uniforms,
+        motionStateRef,
+      );
       const dpr = window.devicePixelRatio || 1;
       const width = Math.max(1, Math.floor(canvas.clientWidth * dpr));
       const height = Math.max(1, Math.floor(canvas.clientHeight * dpr));
@@ -95,7 +124,7 @@ export function PreviewCanvas({
       gl.clear(gl.COLOR_BUFFER_BIT);
       setUniform2f(gl, uniforms.u_resolution, width, height);
       setUniform1f(gl, uniforms.u_time, currentTime);
-      setUniform2f(gl, uniforms.u_motion_rate, currentUniforms.motion_rate, currentUniforms.motion_rate_y);
+      setUniform2f(gl, uniforms.u_motion_rate, motionState.offsetX, motionState.offsetY);
       setUniform1f(gl, uniforms.u_lattice_density, currentUniforms.lattice_density);
       setUniform1f(gl, uniforms.u_circle_radius, currentUniforms.circle_radius);
       setUniform1f(gl, uniforms.u_circle_falloff_start, currentUniforms.circle_falloff_start);
@@ -128,4 +157,78 @@ export function PreviewCanvas({
   }, [audioRef, onReady, playbackTimeRef]);
 
   return <canvas ref={canvasRef} className="preview-canvas" />;
+}
+
+function resolveMotionState(
+  currentTime: number,
+  currentRateX: number,
+  currentRateY: number,
+  sampleUniformsAtTime: (time: number) => { motion_rate: number; motion_rate_y: number },
+  motionStateRef: { current: MotionState | null },
+): MotionState {
+  const safeTime = Math.max(0, currentTime);
+  const previous = motionStateRef.current;
+  if (!previous || safeTime < previous.time - 0.0001 || safeTime - previous.time > 0.25) {
+    const recomputed = recomputeMotionState(safeTime, currentRateX, currentRateY, sampleUniformsAtTime);
+    motionStateRef.current = recomputed;
+    return recomputed;
+  }
+  const delta = safeTime - previous.time;
+  if (delta <= 0.0001) {
+    const stationary = { ...previous, rateX: currentRateX, rateY: currentRateY, time: safeTime };
+    motionStateRef.current = stationary;
+    return stationary;
+  }
+  const next = {
+    offsetX: previous.offsetX + ((previous.rateX + currentRateX) * 0.5 * delta),
+    offsetY: previous.offsetY + ((previous.rateY + currentRateY) * 0.5 * delta),
+    rateX: currentRateX,
+    rateY: currentRateY,
+    time: safeTime,
+  };
+  motionStateRef.current = next;
+  return next;
+}
+
+function recomputeMotionState(
+  currentTime: number,
+  currentRateX: number,
+  currentRateY: number,
+  sampleUniformsAtTime: (time: number) => { motion_rate: number; motion_rate_y: number },
+): MotionState {
+  const safeTime = Math.max(0, currentTime);
+  if (safeTime <= 0.0001) {
+    return {
+      offsetX: 0,
+      offsetY: 0,
+      rateX: currentRateX,
+      rateY: currentRateY,
+      time: safeTime,
+    };
+  }
+
+  const steps = Math.min(2048, Math.max(1, Math.ceil(safeTime * 120)));
+  let offsetX = 0;
+  let offsetY = 0;
+  let previousTime = 0;
+  let previousUniforms = sampleUniformsAtTime(0);
+
+  for (let index = 1; index <= steps; index += 1) {
+    const sampleTime = (safeTime * index) / steps;
+    const uniforms =
+      index === steps ? { motion_rate: currentRateX, motion_rate_y: currentRateY } : sampleUniformsAtTime(sampleTime);
+    const delta = sampleTime - previousTime;
+    offsetX += ((previousUniforms.motion_rate + uniforms.motion_rate) * 0.5 * delta);
+    offsetY += ((previousUniforms.motion_rate_y + uniforms.motion_rate_y) * 0.5 * delta);
+    previousTime = sampleTime;
+    previousUniforms = uniforms;
+  }
+
+  return {
+    offsetX,
+    offsetY,
+    rateX: currentRateX,
+    rateY: currentRateY,
+    time: safeTime,
+  };
 }

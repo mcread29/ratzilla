@@ -14,6 +14,7 @@ export function ClipMetadataForm({
   onChangeBeatValue,
   onChangeMin,
   onChangeMax,
+  onChangeHoldAfter,
 }: {
   selectedClip: ChromaticBulgeGridClip;
   selectedClipBeatOption: string;
@@ -23,6 +24,7 @@ export function ClipMetadataForm({
   onChangeBeatValue: (value: number) => void;
   onChangeMin: (value: number) => void;
   onChangeMax: (value: number) => void;
+  onChangeHoldAfter: (value: boolean) => void;
 }) {
   return (
     <div className="step-list lfo-clip-fields">
@@ -66,6 +68,7 @@ export function ClipMetadataForm({
               </span>
               <Input
                 aria-label="Minimum value"
+                className="no-spinner-input"
                 type="number"
                 step={0.01}
                 value={selectedClip.source?.min ?? 0}
@@ -78,12 +81,22 @@ export function ClipMetadataForm({
               </span>
               <Input
                 aria-label="Maximum value"
+                className="no-spinner-input"
                 type="number"
                 step={0.01}
                 value={selectedClip.source?.max ?? 0}
                 onChange={(event) => onChangeMax(Number(event.target.value))}
               />
             </Label>
+            <label className="clip-toggle-field field-span-2">
+              <input
+                aria-label="Hold value after clip ends"
+                checked={selectedClip.hold_after === true}
+                onChange={(event) => onChangeHoldAfter(event.target.checked)}
+                type="checkbox"
+              />
+              <span>Hold value after end</span>
+            </label>
           </>
         )}
       </div>

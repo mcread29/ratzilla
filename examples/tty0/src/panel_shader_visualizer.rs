@@ -52,6 +52,7 @@ struct PanelShaderRuntime {
     resources: Option<RuntimeResources>,
     panel_size: Option<(i32, i32)>,
     active_record_id: Option<String>,
+    motion_accumulator: MotionAccumulator,
     disabled: bool,
 }
 
@@ -83,6 +84,13 @@ struct UniformSet {
     cold_color: [f32; 3],
     hot_color: [f32; 3],
     inner_alpha: f32,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct MotionAccumulator {
+    offset: (f32, f32),
+    last_rate: (f32, f32),
+    last_time_secs: Option<f32>,
 }
 
 struct RuntimeResources {
@@ -218,6 +226,7 @@ impl PanelShaderRuntime {
 
         if size_changed || record_changed {
             self.clear_feedback(gl)?;
+            self.reset_motion_accumulator();
         }
 
         let uniforms =
@@ -312,6 +321,7 @@ impl PanelShaderRuntime {
         gl: &glow::Context,
         uniforms: &UniformSet,
     ) -> Result<(), Error> {
+        let motion_offset = self.advance_motion_accumulator(uniforms.time, uniforms.motion_rate);
         let resources = self.resources_mut()?;
         unsafe {
             gl.bind_framebuffer(glow::FRAMEBUFFER, Some(resources.next_framebuffer));
@@ -337,8 +347,8 @@ impl PanelShaderRuntime {
             gl.uniform_1_f32(Some(&resources.scene_uniforms.time), uniforms.time);
             gl.uniform_2_f32(
                 Some(&resources.scene_uniforms.motion_rate),
-                uniforms.motion_rate.0,
-                uniforms.motion_rate.1,
+                motion_offset.0,
+                motion_offset.1,
             );
             gl.uniform_1_f32(
                 Some(&resources.scene_uniforms.lattice_density),
@@ -463,6 +473,37 @@ impl PanelShaderRuntime {
         self.resources
             .as_mut()
             .ok_or_else(|| gl_error("panel shader runtime resources are unavailable"))
+    }
+
+    fn reset_motion_accumulator(&mut self) {
+        self.motion_accumulator = MotionAccumulator::default();
+    }
+
+    fn advance_motion_accumulator(
+        &mut self,
+        time_secs: f32,
+        motion_rate: (f32, f32),
+    ) -> (f32, f32) {
+        let safe_time = time_secs.max(0.0);
+        let accumulator = &mut self.motion_accumulator;
+        match accumulator.last_time_secs {
+            None => {
+                accumulator.last_time_secs = Some(safe_time);
+                accumulator.last_rate = motion_rate;
+            }
+            Some(previous_time) => {
+                let delta = safe_time - previous_time;
+                if delta > 0.0001 && delta <= 0.25 {
+                    accumulator.offset.0 += (accumulator.last_rate.0 + motion_rate.0) * 0.5 * delta;
+                    accumulator.offset.1 += (accumulator.last_rate.1 + motion_rate.1) * 0.5 * delta;
+                } else if delta < -0.0001 || delta > 0.25 {
+                    accumulator.offset = (0.0, 0.0);
+                }
+                accumulator.last_time_secs = Some(safe_time);
+                accumulator.last_rate = motion_rate;
+            }
+        }
+        accumulator.offset
     }
 }
 

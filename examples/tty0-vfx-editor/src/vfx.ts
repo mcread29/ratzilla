@@ -144,6 +144,7 @@ export function defaultVisualizer(): TrackVisualizerConfig {
       bpm: 132,
       measures: 64,
       beats_per_measure: 4,
+      lead_in_bars: 0,
       clips: [
         {
           id: "clip_1",
@@ -215,10 +216,13 @@ export function normalizeTimeline(
   next.bpm = Math.max(1, Number.isFinite(next.bpm) ? next.bpm : 120);
   next.measures = Math.max(1, Math.round(next.measures || 1));
   next.beats_per_measure = Math.max(1, Math.round(next.beats_per_measure || 4));
+  next.lead_in_bars = Math.max(0, Math.round(next.lead_in_bars || 0));
   next.clips = (next.clips ?? []).map((clip, index) => normalizeClip(clip, index, base));
+  const minPlacementBeat = -next.lead_in_bars * next.beats_per_measure;
+  const maxPlacementBeat = next.measures * next.beats_per_measure;
   next.arrangement = (next.arrangement ?? []).map((placement) => ({
     clip_id: placement.clip_id,
-    start_beat: Math.max(0, placement.start_beat || 0),
+    start_beat: Math.max(minPlacementBeat, Math.min(maxPlacementBeat, placement.start_beat || 0)),
     track: Math.max(0, Math.round(placement.track || 0)),
     repeats: Math.max(1, Math.round(placement.repeats || 1)),
   }));
@@ -237,6 +241,7 @@ function normalizeClip(
     id: clip.id?.trim() || `clip_${index + 1}`,
     name: clip.name?.trim() || `Clip ${index + 1}`,
     length_beats: Math.max(0.25, clip.length_beats || 4),
+    hold_after: clip.hold_after === true,
     color: clampColor(clip.color ?? palette(index)),
     source,
     lanes: clip.lanes ?? {},
@@ -308,8 +313,7 @@ export function resolveNormalizedChromaticBulgeGrid(
   const next = config;
   const states = next.params.shader_states!;
   const timeline = next.timeline!;
-  const bpm = timeline.bpm || 120;
-  const currentBeat = Math.max(0, playback.currentTimeSecs) * bpm / 60;
+  const currentBeat = songBeatFromTransportTime(playback.currentTimeSecs, timeline);
   const base = playback.isPlaying ? states.playing : states.idle;
   if (!(playback.isPlaying || playback.timelinePreview)) {
     return { uniforms: clampState(base), currentBeat };
@@ -327,20 +331,25 @@ function resolveTimelineState(
   if (!active.length) return null;
   let state = structuredClone(base);
   for (const entry of active) {
-    state = applyClipToState(state, entry.clip, entry.localBeat, beat);
+    state = applyClipToState(state, entry.clip, entry.localBeat, entry.globalBeat);
   }
   return state;
 }
 
 function heldClipsAtBeat(timelineIndex: TimelineIndex, beat: number) {
-  const held = new Map<number, { clip: ChromaticBulgeGridClip; localBeat: number; startBeat: number }>();
+  const held = new Map<number, { clip: ChromaticBulgeGridClip; localBeat: number; startBeat: number; globalBeat: number }>();
   for (const { clip, endBeat: end, placement } of timelineIndex.placements) {
     if (beat < placement.start_beat) continue;
-    const localBeat =
-      beat < end ? ((beat - placement.start_beat) % clip.length_beats + clip.length_beats) % clip.length_beats : clip.length_beats;
+    const holdAfterEnd = beat >= end;
+    if (holdAfterEnd && !clip.hold_after) continue;
+    const heldBeat = Math.max(0, clip.length_beats - 0.0001);
+    const localBeat = holdAfterEnd
+      ? heldBeat
+      : ((beat - placement.start_beat) % clip.length_beats + clip.length_beats) % clip.length_beats;
+    const globalBeat = holdAfterEnd ? end - 0.0001 : beat;
     const existing = held.get(placement.track);
     if (!existing || placement.start_beat >= existing.startBeat) {
-      held.set(placement.track, { clip, localBeat, startBeat: placement.start_beat });
+      held.set(placement.track, { clip, localBeat, startBeat: placement.start_beat, globalBeat });
     }
   }
   return Array.from(held.values());
@@ -477,6 +486,79 @@ export function primaryLane(
 
 export function totalBeats(timeline: ChromaticBulgeGridClipTimeline): number {
   return timeline.measures * timeline.beats_per_measure;
+}
+
+export function leadInBars(timeline: ChromaticBulgeGridClipTimeline): number {
+  return Math.max(0, Math.round(timeline.lead_in_bars || 0));
+}
+
+export function leadInBeats(timeline: ChromaticBulgeGridClipTimeline): number {
+  return leadInBars(timeline) * timeline.beats_per_measure;
+}
+
+export function totalDisplayBeats(timeline: ChromaticBulgeGridClipTimeline): number {
+  return totalBeats(timeline) + leadInBeats(timeline);
+}
+
+export function displayBeatFromSongBeat(songBeat: number, timeline: ChromaticBulgeGridClipTimeline): number {
+  return Math.max(0, songBeat) + leadInBeats(timeline);
+}
+
+export function songBeatFromDisplayBeat(displayBeat: number, timeline: ChromaticBulgeGridClipTimeline): number {
+  return displayBeat - leadInBeats(timeline);
+}
+
+export function displayBeatFromTransportTime(
+  transportTimeSecs: number,
+  timeline: ChromaticBulgeGridClipTimeline,
+): number {
+  return Math.max(0, transportTimeSecs) * timeline.bpm / 60;
+}
+
+export function transportTimeFromDisplayBeat(
+  displayBeat: number,
+  timeline: ChromaticBulgeGridClipTimeline,
+): number {
+  return Math.max(0, displayBeat) * 60 / Math.max(1, timeline.bpm);
+}
+
+export function songBeatFromTransportTime(
+  transportTimeSecs: number,
+  timeline: ChromaticBulgeGridClipTimeline,
+): number {
+  return displayBeatFromTransportTime(transportTimeSecs, timeline) - leadInBeats(timeline);
+}
+
+export function transportTimeFromSongBeat(
+  songBeat: number,
+  timeline: ChromaticBulgeGridClipTimeline,
+): number {
+  return transportTimeFromDisplayBeat(displayBeatFromSongBeat(songBeat, timeline), timeline);
+}
+
+export function leadInSeconds(timeline: ChromaticBulgeGridClipTimeline): number {
+  return transportTimeFromDisplayBeat(leadInBeats(timeline), timeline);
+}
+
+export function songTimeFromTransportTime(
+  transportTimeSecs: number,
+  timeline: ChromaticBulgeGridClipTimeline,
+): number {
+  return transportTimeSecs - leadInSeconds(timeline);
+}
+
+export function audioTimeFromTransportTime(
+  transportTimeSecs: number,
+  timeline: ChromaticBulgeGridClipTimeline,
+): number {
+  return Math.max(0, transportTimeSecs - leadInSeconds(timeline));
+}
+
+export function transportTimeFromAudioTime(
+  audioTimeSecs: number,
+  timeline: ChromaticBulgeGridClipTimeline,
+): number {
+  return Math.max(0, audioTimeSecs) + leadInSeconds(timeline);
 }
 
 export function createPlacement(clip: ChromaticBulgeGridClip, startBeat: number): ClipPlacement {

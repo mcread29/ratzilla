@@ -5,19 +5,18 @@ export function usePlaybackDisplayTime(
   playbackTimeRef: { current: number },
   isPlaying: boolean,
 ) {
+  void audioRef;
   const [displayTime, setDisplayTime] = useState(playbackTimeRef.current);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    setDisplayTime(audio ? audio.currentTime : playbackTimeRef.current);
-  }, [audioRef, isPlaying, playbackTimeRef]);
+    setDisplayTime(playbackTimeRef.current);
+  }, [isPlaying, playbackTimeRef]);
 
   useEffect(() => {
     let frame = 0;
     let lastPublished = -1;
     const tick = () => {
-      const audio = audioRef.current;
-      const nextTime = audio ? audio.currentTime : playbackTimeRef.current;
+      const nextTime = playbackTimeRef.current;
       if (Math.abs(nextTime - lastPublished) >= 1 / 30) {
         lastPublished = nextTime;
         setDisplayTime(nextTime);
@@ -26,7 +25,7 @@ export function usePlaybackDisplayTime(
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [audioRef, isPlaying, playbackTimeRef]);
+  }, [isPlaying, playbackTimeRef]);
 
   return [displayTime, setDisplayTime] as const;
 }
