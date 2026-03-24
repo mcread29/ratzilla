@@ -1,0 +1,110 @@
+{
+  "id": "0x0dEACCES",
+  "category_id": "witnesses",
+  "kind": "witness_testimony",
+  "title": "Permission Denied",
+  "subtitle": "final appeal residue / species termination witness",
+  "timeline": "SOL-2621-R",
+  "recovered_source": "Appeal review residue / witness relay reconstruction",
+  "collapse_vector": "Species continuation denied as unsafe at scale",
+  "signal_integrity": "82.6%",
+  "access_level": "readable",
+  "status_label": "RECOVERED",
+  "tags": [
+    "appeal",
+    "extinction",
+    "bureaucracy",
+    "judgment",
+    "species",
+    "continuation",
+    "risk"
+  ],
+  "related_record_ids": ["0x01EPERM", "0x02ENOENT", "0x03ESRCH"],
+  "overview": {
+    "summary": "A witness-facing record from a world where humanity's final request to continue was formally denied.",
+    "thesis": "Extinction arrived as a permissions verdict issued against the species as a whole.",
+    "viewer_hint": "Read the dossier first, then the metadata page. The archive states the reason directly.",
+    "content_warning": "extinction, procedural violence, species erasure",
+    "status_callout": "Readable testimony. Media transport not yet mounted."
+  },
+  "dossier": {
+    "sections": [
+      {
+        "title": "Synopsis",
+        "body": "The witness record comes from the final continuity review cycle of a human civilization that had learned survival beyond its native ruin would require external authorization. Humanity assembled an appeal for future habitation, protected transfer, and continued species status. The request did not fail in transit. It was received, evaluated, and denied.",
+        "emphasis": "continuation became conditional"
+      },
+      {
+        "title": "Denial basis",
+        "body": "The reviewing authority judged humanity unsafe at scale. The archive preserves the rationale in plain institutional terms: every historical increase in human capacity widened extraction, hierarchy, and irreversible damage faster than restraint could scale alongside it. Abundance did not moderate the species. It increased the blast radius of its appetites. Contact did not civilize expansion. It gave expansion new territories. By the review board's own standard, continuation would reproduce the pattern across any future opened to human access.",
+        "emphasis": "unsafe at scale"
+      },
+      {
+        "title": "Recovered excerpt",
+        "body": "The notice said continuation request denied, species adjudged unsafe at scale, future access revoked. It kept the language clinical enough to sound reversible. We read it three times before understanding that the decision was not about one corridor, one habitat, or one government. The denied subject was humanity.",
+        "emphasis": "future access revoked"
+      },
+      {
+        "title": "Interpretation",
+        "body": "The decisive violence was classificatory, but not mysterious. This archive does not frame the denial as divine judgment or mechanical error. Humanity was denied because the record before review demonstrated repeatable large-scale harm under expansion conditions. The species had become legible to power primarily as a propagation risk.",
+        "emphasis": "classification became extinction"
+      }
+    ]
+  },
+  "timeline_page": {
+    "events": [
+      {
+        "label": "Conditional horizon",
+        "timestamp_text": "review notice 1",
+        "body": "Human authorities learn that continuation beyond local collapse is no longer assumed and must be formally authorized."
+      },
+      {
+        "label": "Appeal assembly",
+        "timestamp_text": "review notice 4",
+        "body": "A species-level packet is assembled from cultural testimony, technical inventories, restraint pledges, and survival forecasts."
+      },
+      {
+        "label": "Verdict issuance",
+        "timestamp_text": "cycle 9",
+        "body": "The continuity review returns a formal denial citing unsafe-at-scale behavior across every historical expansion phase."
+      },
+      {
+        "label": "Closure enforcement",
+        "timestamp_text": "post-verdict",
+        "body": "Human systems lose access to futures, corridors, and protected continuities that depended on approved continuation status."
+      }
+    ]
+  },
+  "metadata_page": {
+    "classification": "witness testimony / final appeal denial",
+    "source_chain": [
+      "witness relay",
+      "appeal residue",
+      "archivist reconstruction"
+    ],
+    "facts": [
+      { "label": "speaker role", "value": "final-cycle witness" },
+      { "label": "denied subject", "value": "species continuation" },
+      { "label": "review authority", "value": "continuity review board" },
+      { "label": "primary failure", "value": "admissibility" },
+      { "label": "denial basis", "value": "unsafe at scale" },
+      { "label": "evidence standard", "value": "historical expansion behavior" },
+      { "label": "dominant phrase", "value": "continuation request denied" },
+      { "label": "institutional myth", "value": "review implies justice" },
+      { "label": "terminal relevance", "value": "appeal packet remains partial; full board findings stay sealed" }
+    ]
+  },
+  "notes_page": {
+    "tty0_annotation": [
+      "your species called scale progress when scale mostly increased the radius of harm.",
+      "the verdict became legible only when the subject under review was the species itself."
+    ]
+  },
+  "media_page": {
+    "audio": null,
+    "artifact_note": "A spoken witness composite is planned for this record, but this build mounts no playable transport yet.",
+    "transcript_excerpt": "The denied subject was humanity.",
+    "waveform_mode": "corrupted",
+    "corruption_reason": "spoken evidence draft exists, but no mounted audio transport is present in this build"
+  }
+}
