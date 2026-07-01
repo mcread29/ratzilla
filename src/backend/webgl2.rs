@@ -8,7 +8,7 @@ use crate::{
     error::Error,
     event::{KeyEvent, MouseEvent},
     render::WebEventHandler,
-    CursorShape,
+    CellSized, CursorShape,
 };
 pub use beamterm_renderer::SelectionMode;
 use beamterm_renderer::{
@@ -28,7 +28,7 @@ use std::{
     mem::swap,
     rc::Rc,
 };
-use web_sys::{wasm_bindgen::JsCast, window, Element};
+use web_sys::{wasm_bindgen::JsCast, Element};
 
 pub use crate::backend::hooks::{RenderHook, RenderHookHandle};
 
@@ -210,7 +210,7 @@ impl WebGl2BackendOptions {
     /// Sets up a default mouse handler using [`WebGl2BackendOptions::on_hyperlink_click`].
     pub fn enable_hyperlinks(self) -> Self {
         self.on_hyperlink_click(|url| {
-            if let Some(w) = window() {
+            if let Ok(w) = get_window() {
                 w.open_with_url_and_target(url, "_blank")
                     .unwrap_or_default();
             }
@@ -396,7 +396,7 @@ impl WebGl2Backend {
 
         let render_hooks = std::mem::take(&mut options.render_hooks);
 
-        let mut backend = Self {
+        let backend = Self {
             beamterm,
             cursor_position: None,
             options,
@@ -409,9 +409,6 @@ impl WebGl2Backend {
             _user_key_handler: None,
             render_hooks,
         };
-
-        // Convert handler metrics from physical pixels to CSS pixels
-        backend.update_mouse_handler_metrics();
 
         Ok(backend)
     }
@@ -446,8 +443,6 @@ impl WebGl2Backend {
         // Reset hyperlink cursor state when canvas is resized
         self.cursor_over_hyperlink = false;
 
-        self.update_mouse_handler_metrics();
-
         Ok(())
     }
 
@@ -456,8 +451,13 @@ impl WebGl2Backend {
     ///
     /// For static atlases, this is the cell size from the atlas data.
     /// For dynamic atlases, this is measured from the rasterized font.
+    #[deprecated(
+        since = "0.4.0",
+        note = "Use cell_size_px instead, which returns physical pixel dimensions"
+    )]
     pub fn cell_size(&self) -> (i32, i32) {
-        self.beamterm.cell_size()
+        let (w, h) = self.cell_size_px();
+        (w as i32, h as i32)
     }
 
     /// Resizes the canvas and terminal grid to the specified logical pixel dimensions.
@@ -468,30 +468,7 @@ impl WebGl2Backend {
     pub fn set_size(&mut self, width: u32, height: u32) -> Result<(), Error> {
         self.beamterm.resize(width as i32, height as i32)?;
         self.cursor_over_hyperlink = false;
-        self.update_mouse_handler_metrics();
         Ok(())
-    }
-
-    /// Updates metrics on externally-managed mouse handlers after resize or DPR changes.
-    ///
-    /// Beamterm's `Terminal::resize()` only updates its own internal mouse handler.
-    /// The user and hyperlink handlers created by ratzilla need their metrics updated
-    /// separately.
-    fn update_mouse_handler_metrics(&mut self) {
-        let (cols, rows) = self.beamterm.terminal_size();
-        let (phys_w, phys_h) = self.beamterm.cell_size();
-        let dpr = window()
-            .map(|w| w.device_pixel_ratio() as f32)
-            .unwrap_or(1.0);
-        let cell_width = phys_w as f32 / dpr;
-        let cell_height = phys_h as f32 / dpr;
-
-        if let Some(handler) = &mut self._user_mouse_handler {
-            handler.update_metrics(cols, rows, cell_width, cell_height);
-        }
-        if let Some(handler) = &mut self._hyperlink_mouse_handler {
-            handler.update_metrics(cols, rows, cell_width, cell_height);
-        }
     }
 
     /// Checks if the canvas size matches the display size and resizes it if necessary.
@@ -551,11 +528,11 @@ impl WebGl2Backend {
             .dyn_into::<web_sys::WebGl2RenderingContext>()
             .map_err(|error| Error::from(web_sys::wasm_bindgen::JsValue::from(error)))?;
         let (canvas_width, canvas_height) = self.beamterm.canvas_size();
-        let (cell_width, cell_height) = self.beamterm.cell_size();
+        let cell_size = self.beamterm.cell_size();
         let context = RenderHookContext::new(BackendKind::WebGl2, canvas_width, canvas_height)
-            .with_cell_size(cell_width, cell_height)
+            .with_cell_size(cell_size.width, cell_size.height)
             .with_webgl2_context(&raw_gl)
-            .with_webgl_context(&gl);
+            .with_webgl_context(gl);
         run_pre_render_hooks(&self.render_hooks, context)
     }
 
@@ -573,11 +550,11 @@ impl WebGl2Backend {
             .dyn_into::<web_sys::WebGl2RenderingContext>()
             .map_err(|error| Error::from(web_sys::wasm_bindgen::JsValue::from(error)))?;
         let (canvas_width, canvas_height) = self.beamterm.canvas_size();
-        let (cell_width, cell_height) = self.beamterm.cell_size();
+        let cell_size = self.beamterm.cell_size();
         let context = RenderHookContext::new(BackendKind::WebGl2, canvas_width, canvas_height)
-            .with_cell_size(cell_width, cell_height)
+            .with_cell_size(cell_size.width, cell_size.height)
             .with_webgl2_context(&raw_gl)
-            .with_webgl_context(&gl);
+            .with_webgl_context(gl);
         run_post_render_hooks(&self.render_hooks, context)
     }
 
@@ -770,6 +747,17 @@ impl WebGl2Backend {
     }
 }
 
+impl CellSized for WebGl2Backend {
+    fn cell_size_px(&self) -> (f32, f32) {
+        let cs = self.beamterm.cell_size();
+        (cs.width as f32, cs.height as f32)
+    }
+
+    fn cell_size_css_px(&self) -> (f32, f32) {
+        self.beamterm.grid().borrow().css_cell_size()
+    }
+}
+
 impl Backend for WebGl2Backend {
     type Error = IoError;
 
@@ -830,16 +818,16 @@ impl Backend for WebGl2Backend {
     }
 
     fn size(&self) -> IoResult<Size> {
-        let (w, h) = self.beamterm.terminal_size();
-        Ok(Size::new(w, h))
+        let ts = self.beamterm.terminal_size();
+        Ok(Size::new(ts.cols, ts.rows))
     }
 
     fn window_size(&mut self) -> IoResult<WindowSize> {
-        let (cols, rows) = self.beamterm.terminal_size();
+        let ts = self.beamterm.terminal_size();
         let (w, h) = self.beamterm.canvas_size();
 
         Ok(WindowSize {
-            columns_rows: Size::new(cols, rows),
+            columns_rows: Size::new(ts.cols, ts.rows),
             pixels: Size::new(w as _, h as _),
         })
     }
@@ -993,10 +981,6 @@ impl WebEventHandler for WebGl2Backend {
         )?;
 
         self._user_mouse_handler = Some(mouse_handler);
-
-        // TerminalMouseHandler is constructed with physical pixel metrics;
-        // convert to CSS pixels so coordinate translation is correct on HiDPI.
-        self.update_mouse_handler_metrics();
 
         Ok(())
     }

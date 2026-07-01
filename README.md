@@ -270,6 +270,8 @@ On `WebGl2Backend`, `CanvasImage` renders through textured quads in a render hoo
 - <https://alertangel.github.io/> - Website for AlertAngel: A device to make monitoring the Elderly a breeze. ([source](https://github.com/AlertAngel/alertangel.github.io)) (WIP)
 - <https://sdr-geo-db.vercel.app/> - SDR contact logging database ([source](https://github.com/nuts-rice/sdr_geo_db))
 - <https://kana.rezoleo.fr> - Learn Kana in a terminal fashion ([source](https://github.com/benoitlx/kanash))
+- <https://shenoi.dev/twozero48> - A 2048 game ([source](https://github.com/de-sh/twozero48))
+- <https://inowattio.github.io/MTUI/> - Modbus Client ([source](https://github.com/inowattio/MTUI))
 
 ## Acknowledgements
 
@@ -282,7 +284,7 @@ Special thanks to:
 
 Lastly, thanks to [Ratatui] for providing the core UI components.
 
-[trunk]: https://trunkrs.dev
+[trunk]: https://github.com/trunk-rs/trunk
 [Ratatui]: https://ratatui.rs
 [`DomBackend`]: https://docs.rs/ratzilla/latest/ratzilla/struct.DomBackend.html
 [`CanvasBackend`]: https://docs.rs/ratzilla/latest/ratzilla/struct.CanvasBackend.html

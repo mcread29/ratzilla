@@ -14,7 +14,7 @@ use ratzilla::{
 
 fn main() -> io::Result<()> {
     let backend = DomBackend::new()?;
-    let terminal = Terminal::new(backend)?;
+    let mut terminal = Terminal::new(backend)?;
 
     let state = Rc::new(App::default());
 
