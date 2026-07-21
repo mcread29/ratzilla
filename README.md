@@ -217,6 +217,7 @@ There is a Vercel deployment template available for Ratzilla [here](https://verc
 
 - [Minimal](https://github.com/ratatui/ratzilla/tree/main/examples/minimal) ([Preview](https://ratatui.github.io/ratzilla/minimal))
 - [Canvas Image](https://github.com/ratatui/ratzilla/tree/main/examples/canvas_image)
+- [Canvas Video](https://github.com/ratatui/ratzilla/tree/main/examples/canvas_video)
 - [Demo](https://github.com/ratatui/ratzilla/tree/main/examples/demo) ([Preview](https://ratatui.github.io/ratzilla/demo))
 - [Pong](https://github.com/ratatui/ratzilla/tree/main/examples/pong) ([Preview](https://ratatui.github.io/ratzilla/pong))
 
@@ -227,7 +228,7 @@ use ratzilla::{
     backend::canvas::CanvasBackendOptions,
     ratatui::{style::Style, Terminal},
     widgets::{CanvasImage, CanvasImageLayer},
-    CanvasBackend,
+    CanvasBackend, WebRenderer,
 };
 
 fn main() -> std::io::Result<()> {
@@ -250,6 +251,57 @@ fn main() -> std::io::Result<()> {
 ```
 
 On `WebGl2Backend`, `CanvasImage` renders through textured quads in a render hook. Hook order controls composition: register the image hook before a post-processing hook if the image should receive that effect. Remote URLs on WebGL2 must be CORS-safe; data URLs and same-origin assets are the reliable default.
+
+### Canvas Video Widget
+
+`CanvasVideoLayer` retains one browser video element per application-defined ID. Register its hook on either pixel backend, keep a handle for controls, and render the widget each frame:
+
+```rust no_run
+use ratzilla::{
+    backend::webgl2::WebGl2BackendOptions,
+    ratatui::Terminal,
+    widgets::{CanvasVideo, CanvasVideoLayer, ImageFit, VideoPreload},
+    WebGl2Backend, WebRenderer,
+};
+
+fn main() -> std::io::Result<()> {
+    let videos = CanvasVideoLayer::new();
+    let player = videos.handle("intro");
+    let backend = WebGl2Backend::new_with_options(
+        WebGl2BackendOptions::new().with_render_hook(videos.render_hook()),
+    )?;
+    let mut terminal = Terminal::new(backend)?;
+
+    // Call `player.play().await` from a visitor-generated keyboard/mouse event.
+    terminal.draw_web(move |frame| {
+        frame.render_widget(
+            CanvasVideo::new(videos.clone(), "intro", "/media/intro.mp4")
+                .fit(ImageFit::Contain)
+                .preload(VideoPreload::Metadata)
+                .plays_inline(true),
+            frame.area(),
+        );
+    });
+    Ok(())
+}
+```
+
+For WebGL post-processing, hook order determines capture order. Register video before the post-processing hook so the terminal, video, and other graphics are in its framebuffer:
+
+```rust no_run
+# use ratzilla::backend::webgl2::WebGl2BackendOptions;
+# use ratzilla::widgets::CanvasVideoLayer;
+# use ratzilla::backend::hooks::RenderHook;
+# fn options(video_layer: CanvasVideoLayer, post_processing: impl RenderHook + 'static) {
+let options = WebGl2BackendOptions::new()
+    .with_render_hook(video_layer.render_hook())
+    .with_render_hook(post_processing);
+# }
+```
+
+Video sources must be direct browser-supported files such as MP4 or WebM. Same-origin files work by default; cross-origin files need a matching `VideoCrossOrigin` setting **and** correct CORS response headers or Canvas/WebGL uploads will fail. Browsers generally require audible playback to begin in a visitor interaction. Autoplay is disabled by default; explicitly configured muted autoplay may still be rejected, and `CanvasVideoHandle::play` returns that Promise rejection. YouTube, Vimeo, and other iframe players are not supported.
+
+Call `CanvasVideoLayer::release(id)` when an instance is no longer needed, or `clear()` to release all instances and cached textures. See [`examples/canvas_video`](examples/canvas_video) for keyboard controls and backend selection.
 
 - [Colors RGB](https://github.com/ratatui/ratzilla/tree/main/examples/colors_rgb) ([Preview](https://ratatui.github.io/ratzilla/colors_rgb))
 - [Animations](https://github.com/ratatui/ratzilla/tree/main/examples/animations) ([Preview](https://ratatui.github.io/ratzilla/animations))
